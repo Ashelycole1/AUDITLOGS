@@ -85,6 +85,12 @@ Updated at the end of every session and whenever work is paused (see `agent_work
   - Approvals inbox (`/status-requests`) and per-query history.
   - 317 tests passing, including the end-to-end import-to-Closed test, a test of every transition pair for every role, and IA isolation on every nested route.
 
+- 2026-10-17, **staging deployment prepared, not yet deployed** (DECISIONS 22, `deploy/STAGING.md`):
+  - `render.yaml` sets up the API on gunicorn plus Postgres, in Frankfurt, with staging settings.
+  - `frontend/vercel.json` forwards `/api` to Render, sends other paths to the single-page app, and sets strict security headers.
+  - "Dummy data only" banner, and production refuses to run on Render.
+  - 323 tests passing.
+
 ### Not done
 - Nothing is committed yet. The repo has no commits on `main`.
 - **Not run against PostgreSQL yet.** Docker and Postgres aren't installed on this machine. The Postgres trigger SQL, advisory lock, `docker-compose.dev.yml` and CI job are written but unexecuted. CI or a Docker machine will be the first real run.

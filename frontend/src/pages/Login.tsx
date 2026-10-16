@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
-import { Button, Label, Notice, Wordmark } from "../components";
+import { Button, Label, Notice, StagingBanner, Wordmark } from "../components";
 import { useStore } from "../store";
 import { Icon, type IconName } from "../icons";
 
@@ -55,6 +55,8 @@ export default function Login() {
   };
 
   return (
+    <>
+      <StagingBanner />
     <div className="grid min-h-dvh bg-white lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
       <section className="relative hidden flex-col justify-between overflow-hidden bg-spine px-10 py-10 text-spine-ink lg:flex xl:px-14">
         <Wordmark onSpine />
@@ -151,5 +153,6 @@ export default function Login() {
         </section>
       </div>
     </div>
+    </>
   );
 }

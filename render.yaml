@@ -1,0 +1,58 @@
+# Render Blueprint: STAGING backend for AuditLogs. DUMMY DATA ONLY.
+# Render is outside Uganda, so it may never hold real audit data (system.md 4.6, architecture.md 9).
+# Production runs on the server in Uganda with config.settings.prod, which refuses to start on Render.
+# Setup steps: deploy/STAGING.md
+
+databases:
+  - name: auditlogs-staging-db
+    plan: free
+    region: frankfurt
+    databaseName: auditlogs
+    user: auditlogs
+    postgresMajorVersion: "16"
+
+services:
+  - type: web
+    name: auditlogs-api
+    runtime: python
+    plan: free
+    region: frankfurt
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    # Migrations run before the server starts, so a failed migration stops the deploy.
+    startCommand: python manage.py migrate --noinput && python manage.py seed_dev_users --if-enabled && gunicorn config.wsgi --bind 0.0.0.0:$PORT --workers 2 --timeout 60 --access-logfile -
+    healthCheckPath: /api/v1/health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.13"
+      - key: DJANGO_SETTINGS_MODULE
+        value: config.settings.staging
+      - key: DATABASE_URL
+        fromDatabase:
+          name: auditlogs-staging-db
+          property: connectionString
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      # Fernet key. Generate locally (see deploy/STAGING.md) and paste it in the dashboard.
+      - key: EVIDENCE_ENCRYPTION_KEY
+        sync: false
+      - key: ALLOWED_HOSTS
+        value: auditlogs-api.onrender.com
+      # The Vercel address of the frontend, e.g. https://auditlogs.vercel.app
+      - key: CSRF_TRUSTED_ORIGINS
+        sync: false
+      # Dummy demo accounts. Set SEED_DEMO_USERS=true and choose DEV_SEED_PASSWORD (12+ characters).
+      - key: SEED_DEMO_USERS
+        value: "true"
+      - key: DEV_SEED_PASSWORD
+        sync: false
+      # Optional. Without SMTP_HOST, sign-in PINs appear in this service's log.
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: DEFAULT_FROM_EMAIL
+        sync: false

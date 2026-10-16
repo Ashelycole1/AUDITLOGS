@@ -7,3 +7,4 @@ argon2-cffi~=25.1
 psycopg[binary]~=3.2
 openpyxl~=3.1
 cryptography~=46.0
+gunicorn~=23.0

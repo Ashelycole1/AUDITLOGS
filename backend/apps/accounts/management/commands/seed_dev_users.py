@@ -21,11 +21,23 @@ DEMO_USERS = [
 
 
 class Command(BaseCommand):
-    help = "Create the dummy demo accounts for local development. Refuses to run in production."
+    help = "Create the dummy demo accounts for development and staging. Refuses to run in production."
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--if-enabled",
+            action="store_true",
+            help="Do nothing unless SEED_DEMO_USERS=true (used by the staging start command).",
+        )
 
     def handle(self, *args, **options):
         if settings.ENVIRONMENT == "prod":
-            raise CommandError("seed_dev_users is for development only.")
+            raise CommandError("seed_dev_users is for development and staging only.")
+        if options["if_enabled"] and os.environ.get("SEED_DEMO_USERS", "").lower() != "true":
+            return
+        if settings.ENVIRONMENT == "staging" and len(os.environ.get("DEV_SEED_PASSWORD", "")) < 12:
+            # On a hosted service the password must be chosen, never generated into a shared log.
+            raise CommandError("Set DEV_SEED_PASSWORD (12+ characters) before seeding staging.")
         # No password is written in the code. Use DEV_SEED_PASSWORD from .env, or a random one shown once here.
         password = os.environ.get("DEV_SEED_PASSWORD") or secrets.token_urlsafe(12)
         created = 0

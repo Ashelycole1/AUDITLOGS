@@ -97,3 +97,18 @@ Date, decision, reason. Newest last.
     - **Open:** a file write that happens before a failed transaction leaves an orphan encrypted file. It's harmless, but a cleanup job belongs with retention.
 
 21. **Reassignment is all-or-nothing in bulk** and needs a reason, as a first assignment doesn't. The old IA gets 404 at once, and the new IA sees the full history through `GET queries/{id}/history`.
+
+## 2026-10-17: Hosted staging (owner request)
+
+22. **Vercel and Render are a staging environment with dummy data only (owner request, architecture.md 9).**
+    - Both platforms are outside Uganda, so they may never hold real audit data (system.md 4.6).
+    - **Guardrails:**
+      - `config.settings.prod` refuses to start when Render's `RENDER` variable is present.
+      - Staging uses `config.settings.staging`: production security, but PINs may go to the service log.
+      - Every hosted page shows a "dummy data only" banner.
+      - `noindex` headers keep search engines out.
+    - Vercel forwards `/api/*` to Render, so cookies stay first-party and `SameSite=Lax`. There's no cross-site cookie or CORS setup.
+    - The region is Frankfurt, the closest Render region.
+    - Demo accounts are created at start-up only when `SEED_DEMO_USERS=true` and a chosen `DEV_SEED_PASSWORD` is set.
+    - Adds `gunicorn`, named in architecture.md 2.
+    - Not deployed or run here: gunicorn doesn't run on Windows. The first real check is the first Render deploy.
