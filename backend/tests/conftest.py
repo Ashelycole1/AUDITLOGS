@@ -70,3 +70,55 @@ def password_only_client(make_user):
         return client
 
     return _client
+
+
+@pytest.fixture(autouse=True)
+def import_dir(settings, tmp_path):
+    """Uploaded source files go to a throwaway folder in tests."""
+    settings.IMPORT_DIR = str(tmp_path / "imports")
+    return settings.IMPORT_DIR
+
+
+@pytest.fixture
+def make_batch(make_user):
+    from apps.imports.models import BatchStatus, ImportBatch
+
+    def _make(status: str = BatchStatus.CONFIRMED) -> ImportBatch:
+        return ImportBatch.objects.create(
+            imported_by=make_user("PIA"),
+            source_filename="final-queries.csv",
+            source_file_path="unused",
+            source_sha256="0" * 64,
+            status=status,
+        )
+
+    return _make
+
+
+@pytest.fixture
+def make_query(make_batch):
+    from datetime import date
+
+    from apps.queries.models import Query
+
+    batch_holder = {}
+
+    def _make(*, assignee=None, reference: str | None = None, **fields) -> Query:
+        batch = batch_holder.setdefault("batch", make_batch())
+        values = {
+            "reference": reference or f"IA/2026/{uuid.uuid4().hex[:6]}",
+            "batch": batch,
+            "title": "Stock count differences not investigated",
+            "description_original": "Differences from the June stock count were written off.",
+            "description_current": "Differences from the June stock count were written off.",
+            "risk_rating_original": "Medium",
+            "risk_rating_current": "Medium",
+            "deadline": date(2030, 1, 31),
+            "responsible_officer": "Stores Supervisor",
+            "department": "Stores",
+            "current_assignee": assignee,
+            **fields,
+        }
+        return Query.objects.create(**values)
+
+    return _make

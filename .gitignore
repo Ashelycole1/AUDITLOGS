@@ -12,5 +12,6 @@ __pycache__/
 # Local databases and files (dummy data only, but never committed)
 backend/dev.sqlite3
 backend/media/
+backend/var/
 evidence/
 backups/

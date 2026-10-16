@@ -4,9 +4,13 @@ from rest_framework.routers import SimpleRouter
 from apps.accounts.views import CsrfView, LoginView, LogoutView, MeView, MfaResendView, MfaView, UserViewSet
 from apps.auditlog.views import AuditLogListView, VerifyChainView
 from apps.core.views import HealthView
+from apps.imports.views import ImportBatchViewSet
+from apps.queries.views import QueryViewSet
 
 router = SimpleRouter(trailing_slash=False)
 router.register("users", UserViewSet, basename="users")
+router.register("imports", ImportBatchViewSet, basename="imports")
+router.register("queries", QueryViewSet, basename="queries")
 
 api = [
     path("health", HealthView.as_view(), name="health"),

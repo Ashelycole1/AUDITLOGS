@@ -61,6 +61,8 @@ INSTALLED_APPS = [
     "apps.core",
     "apps.accounts",
     "apps.auditlog",
+    "apps.imports",
+    "apps.queries",
 ]
 
 MIDDLEWARE = [
@@ -149,6 +151,14 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {"login": "10/min", "export": "10/hour"},
     "UNAUTHENTICATED_USER": None,
 }
+
+# Imports (design.md 4). Source files are kept outside any web root with their SHA-256.
+IMPORT_DIR = env("IMPORT_DIR", str(BASE_DIR / "var" / "imports"))
+IMPORT_MAX_BYTES = 10 * 1024 * 1024
+IMPORT_MAX_ROWS = 5000
+# Extra header names accepted per field until the client's template is final (system.md 9),
+# e.g. {"reference": ["query ref", "ref no"]}.
+IMPORT_HEADER_ALIASES: dict[str, list[str]] = {}
 
 LANGUAGE_CODE = "en-gb"
 TIME_ZONE = "UTC"  # Stored in UTC; the frontend displays Africa/Kampala.

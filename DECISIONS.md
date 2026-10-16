@@ -56,3 +56,22 @@ Date, decision, reason. Newest last.
     - Rewriting the published history is the owner's call.
 
 14. **Commits carry the owner as the only author (owner).** No AI co-author or attribution lines.
+
+## 2026-10-16: Query scoping and import
+
+15. **`for_user` scoping is enforced by a test, not by convention.**
+    - Models holding audit content are listed in `apps/core/scoping.py`. Views reach them only through `ScopedQuerysetMixin`.
+    - `tests/test_scoping.py` fails if a view sets a plain `queryset` on such a model, or overrides `get_queryset` without calling `super()`.
+    - IA requests for someone else's query get 404, not 403, so the response doesn't reveal that the query exists.
+    - CEO is in scope for all queries but reaches only summary endpoints, which choose the fields (design.md 6).
+    - ICT sees no queries until the break-glass grant exists.
+
+16. **Import rules.**
+    - Headers are matched through `IMPORT_HEADER_ALIASES` until the client's template is final.
+    - Dates are read as YYYY-MM-DD or DD/MM/YYYY, and Excel date cells are read directly.
+    - Risk ratings are matched without regard to case.
+    - A deadline before the import date is a warning, not a block (design.md 13).
+    - References are re-checked inside the confirm transaction, so two previews of the same file can't both create queries.
+    - The limits are 10 MB and 5,000 rows.
+    - PDF and Word are refused with a message for now. The lower-reliability fallback comes later.
+    - **Open:** import source files are stored as plain files outside the web root. Encrypting them at rest, like evidence, comes with the evidence task. That needs `cryptography`, which architecture.md names.

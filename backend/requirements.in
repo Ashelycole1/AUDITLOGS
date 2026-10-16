@@ -5,3 +5,4 @@ django-otp~=1.6.0
 django-axes~=8.0
 argon2-cffi~=25.1
 psycopg[binary]~=3.2
+openpyxl~=3.1

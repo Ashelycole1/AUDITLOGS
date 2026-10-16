@@ -59,6 +59,22 @@ Updated at the end of every session and whenever work is paused (see `agent_work
     - Ruff and black are clean.
     - Smoke-tested over HTTP with `runserver`.
 
+- 2026-10-16 (later), **owner decisions:**
+  - MFA is now a **one-time PIN emailed** through the client SMTP server, replacing TOTP and QR codes. It's valid for 5 minutes, works once, and can be resent up to 3 times.
+  - **No secrets in the repo.** Dev and test passwords and the dev key are generated or come from `.env`, and CI uses a passwordless throwaway Postgres.
+  - **Commits carry only the owner as author.**
+  - Committed as `8fb504e` and `78c9124`, not pushed.
+- 2026-10-16, **Phase 2.2 and 2.4:**
+  - **Query models** (`apps/queries`: Query, QueryRevision, Assignment):
+    - The original wording, original risk and reference can't be changed, and queries can't be deleted (model and queryset guards).
+    - `for_user` scoping is enforced by `tests/test_scoping.py`.
+    - Endpoints: `GET /queries` (filters: status, risk, department, assignee, overdue, search) and `GET /queries/{id}`.
+  - **Import** (`apps/imports`):
+    - Upload CSV or xlsx, then validate. Per-row errors and warnings appear in the preview.
+    - Confirm creates every query in one transaction, re-checking references, with an `import.confirm` entry plus a `query.create` entry per query. Cancel is the other option.
+    - The source file is kept with its SHA-256. PIA only.
+  - 183 tests passing on SQLite, lint clean.
+
 ### Not done
 - Nothing is committed yet. The repo has no commits on `main`.
 - **Not run against PostgreSQL yet.** Docker and Postgres aren't installed on this machine. The Postgres trigger SQL, advisory lock, `docker-compose.dev.yml` and CI job are written but unexecuted. CI or a Docker machine will be the first real run.
@@ -71,10 +87,10 @@ Updated at the end of every session and whenever work is paused (see `agent_work
 - The frontend dev server (http://localhost:5173) was stopped automatically on 2026-10-16 because the machine ran low on memory. Restart it with `npm run dev` in `frontend/` when needed.
 
 ### Next (proposed)
-1. Owner: confirm the extra dependencies listed in `DECISIONS.md` item 2, and approve the first commit.
-2. Phase 2.2: permission framework for query data (`for_user` scoping, plus a test that fails if a ViewSet skips it).
-3. Phase 2.4: import (upload, parse, validate, preview, confirm, cancel). This needs `openpyxl`, which is named in system.md.
-4. Wire the frontend sign-in to `/api/v1/auth/*` as the first piece of real integration.
+1. Owner: confirm the extra dependencies in `DECISIONS.md` item 2 (`openpyxl` is named in system.md).
+2. Phase 3: assignment and reassignment, follow-up and encrypted evidence, the workflow service (transitions, propose, approve or return, no self-approval), and direct CIA changes with revisions.
+3. Wire the frontend to the API, starting with sign-in (password, then PIN) and import.
+4. First run against PostgreSQL (CI or a machine with Docker).
 
 ### Open questions (system.md section 9, still unanswered)
 - Is the organisation a public body?
