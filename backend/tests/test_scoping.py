@@ -102,3 +102,40 @@ def test_no_view_reads_audit_content_without_for_user():
                 assert "super().get_queryset()" in inspect.getsource(
                     override
                 ), f"{cls.__name__} bypasses for_user"
+
+
+def test_ceo_summary_has_no_assignee_wording_or_evidence(client_for, make_user, make_query):
+    make_query(assignee=make_user("IA"))
+    row = client_for("CEO").get(reverse("dashboard-queries")).json()[0]
+    assert set(row) == {
+        "id",
+        "reference",
+        "title",
+        "risk_rating_current",
+        "status",
+        "deadline",
+        "responsible_officer",
+        "department",
+        "imported_at",
+        "closed_at",
+    }
+
+
+def test_cia_activity_lists_only_direct_cia_changes(client_for, make_query):
+    cia = client_for("CIA")
+    query = make_query()
+    url = reverse("queries-detail", kwargs={"pk": query.pk})
+    cia.patch(url, {"title": "Clearer title", "reason": "Wording agreed with the PIA"}, format="json")
+    note = {"kind": "Note", "body": "Not a direct change."}
+    cia.post(reverse("queries-activities", kwargs={"pk": query.pk}), note, format="json")
+    rows = client_for("CEO").get(reverse("dashboard-cia-activity")).json()
+    assert [r["action"] for r in rows] == ["query.edit"]
+    assert rows[0]["reference"] == query.reference
+
+
+def test_auditor_list_shows_active_ias_only(client_for, make_user):
+    active = make_user("IA")
+    make_user("IA", active=False)
+    make_user("PIA")
+    ids = [a["id"] for a in client_for("CIA").get(reverse("auditors")).json()]
+    assert ids == [str(active.pk)]

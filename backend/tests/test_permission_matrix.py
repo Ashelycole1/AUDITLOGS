@@ -51,6 +51,9 @@ MATRIX = [
     ("status-requests-list", "get", None, {"CIA"}),
     ("status-requests-approve", "post", "request", {"CIA"}),
     ("status-requests-reject", "post", "request", {"CIA"}),
+    ("auditors", "get", None, {"CIA"}),
+    ("dashboard-queries", "get", None, {"CEO"}),
+    ("dashboard-cia-activity", "get", None, {"CEO"}),
 ]
 
 # Reachable without signing in. Each says nothing about data.

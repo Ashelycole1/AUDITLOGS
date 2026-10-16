@@ -1,12 +1,21 @@
 from django.urls import include, path
 from rest_framework.routers import SimpleRouter
 
-from apps.accounts.views import CsrfView, LoginView, LogoutView, MeView, MfaResendView, MfaView, UserViewSet
+from apps.accounts.views import (
+    AuditorListView,
+    CsrfView,
+    LoginView,
+    LogoutView,
+    MeView,
+    MfaResendView,
+    MfaView,
+    UserViewSet,
+)
 from apps.auditlog.views import AuditLogListView, VerifyChainView
 from apps.core.views import HealthView
 from apps.followup.views import EvidenceDownloadView
 from apps.imports.views import ImportBatchViewSet
-from apps.queries.views import QueryViewSet
+from apps.queries.views import CeoDashboardQueriesView, CiaActivityView, QueryViewSet
 from apps.workflow.views import StatusRequestViewSet
 
 router = SimpleRouter(trailing_slash=False)
@@ -25,6 +34,9 @@ api = [
     path("auth/me", MeView.as_view(), name="auth-me"),
     path("audit-log", AuditLogListView.as_view(), name="audit-log"),
     path("audit-log/verify", VerifyChainView.as_view(), name="audit-log-verify"),
+    path("auditors", AuditorListView.as_view(), name="auditors"),
+    path("dashboard/queries", CeoDashboardQueriesView.as_view(), name="dashboard-queries"),
+    path("dashboard/cia-activity", CiaActivityView.as_view(), name="dashboard-cia-activity"),
     path("evidence/<uuid:pk>/download", EvidenceDownloadView.as_view(), name="evidence-download"),
     *router.urls,
 ]

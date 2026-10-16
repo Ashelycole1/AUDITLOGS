@@ -294,3 +294,13 @@ class UserViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.Gen
         reason = self._reasoned(request, user, "enable")
         user = services.set_active(actor=request.user, user=user, active=True, reason=reason, ip=self._ip())
         return Response(UserSerializer(user).data)
+
+
+class AuditorListView(APIView):
+    """Active Internal Auditors, for the assign and reassign choices of the CIA."""
+
+    allowed_roles = ("CIA",)
+
+    def get(self, request):
+        auditors = User.objects.filter(role=Role.IA, is_active=True).order_by("full_name")
+        return Response([{"id": str(u.pk), "full_name": u.full_name} for u in auditors])

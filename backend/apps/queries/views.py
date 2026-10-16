@@ -1,6 +1,6 @@
 from django.db.models import Q
 from django.utils import timezone
-from rest_framework import mixins, serializers, status, viewsets
+from rest_framework import generics, mixins, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import JSONParser, MultiPartParser
@@ -22,6 +22,7 @@ from .models import Query, QueryRevision, Risk, Status
 class QueryListSerializer(serializers.ModelSerializer):
     assignee_name = serializers.CharField(source="current_assignee.full_name", default=None, read_only=True)
     batch_filename = serializers.CharField(source="batch.source_filename", read_only=True)
+    imported_at = serializers.DateTimeField(source="batch.confirmed_at", read_only=True)
 
     class Meta:
         model = Query
@@ -38,20 +39,80 @@ class QueryListSerializer(serializers.ModelSerializer):
             "assignee_name",
             "batch",
             "batch_filename",
+            "imported_at",
             "closed_at",
+            "description_current",
+            "risk_rating_original",
         ]
         read_only_fields = fields
 
 
+def _request_summary(item) -> dict | None:
+    if item is None:
+        return None
+    return {
+        "id": str(item.pk),
+        "proposed_by": str(item.proposed_by_id),
+        "proposed_by_name": item.proposed_by.full_name,
+        "proposed_reason": item.proposed_reason,
+        "decision": item.decision,
+        "decided_by": str(item.decided_by_id) if item.decided_by_id else None,
+        "decided_by_name": item.decided_by.full_name if item.decided_by_id else None,
+        "decision_reason": item.decision_reason,
+        "decided_at": item.decided_at,
+        "created_at": item.created_at,
+    }
+
+
 class QueryDetailSerializer(QueryListSerializer):
+    pending_request = serializers.SerializerMethodField()
+    last_decision = serializers.SerializerMethodField()
+
     class Meta(QueryListSerializer.Meta):
         fields = [
             *QueryListSerializer.Meta.fields,
             "description_original",
-            "description_current",
-            "risk_rating_original",
+            "pending_request",
+            "last_decision",
             "created_at",
             "updated_at",
+        ]
+        read_only_fields = fields
+
+    def get_pending_request(self, obj) -> dict | None:
+        """The proposal waiting for the CIA, so the IA sees it is with the CIA."""
+        pending = obj.status_requests.filter(decision="Pending").select_related("proposed_by").first()
+        return _request_summary(pending)
+
+    def get_last_decision(self, obj) -> dict | None:
+        """The latest decision, so a returned query shows the reason given."""
+        decided = (
+            obj.status_requests.exclude(decision="Pending")
+            .select_related("proposed_by", "decided_by")
+            .order_by("-decided_at")
+            .first()
+        )
+        return _request_summary(decided)
+
+
+class CeoQuerySerializer(serializers.ModelSerializer):
+    """The fields the CEO may see (design.md 6): no assignee, no wording, no evidence or responses."""
+
+    imported_at = serializers.DateTimeField(source="batch.confirmed_at", read_only=True)
+
+    class Meta:
+        model = Query
+        fields = [
+            "id",
+            "reference",
+            "title",
+            "risk_rating_current",
+            "status",
+            "deadline",
+            "responsible_officer",
+            "department",
+            "imported_at",
+            "closed_at",
         ]
         read_only_fields = fields
 
@@ -316,3 +377,61 @@ class QueryViewSet(
             ip=self._ip(),
         )
         return self._detail(query)
+
+
+class CeoDashboardQueriesView(ScopedQuerysetMixin, generics.ListAPIView):
+    """Read-only summary for the CEO dashboard (design.md 6). Summary fields only."""
+
+    allowed_roles = ("CEO",)
+    scoped_model = Query
+    serializer_class = CeoQuerySerializer
+    pagination_class = None
+
+    def get_queryset(self):
+        return super().get_queryset().select_related("batch")
+
+
+# Direct CIA changes shown to the CEO (design.md 11): the control on the person who edits and approves.
+CIA_ACTIVITY_ACTIONS = ("status.direct", "query.edit", "query.reassign", "status.approve")
+
+
+class CiaActivitySerializer(serializers.ModelSerializer):
+    actor_name = serializers.CharField(source="actor.full_name", default=None, read_only=True)
+    reference = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AuditLog
+        fields = [
+            "seq",
+            "timestamp",
+            "actor",
+            "actor_name",
+            "action",
+            "object_id",
+            "reference",
+            "old_value",
+            "new_value",
+            "reason",
+        ]
+        read_only_fields = fields
+
+    def get_reference(self, obj) -> str:
+        return self.context["references"].get(obj.object_id, "")
+
+
+class CiaActivityView(generics.ListAPIView):
+    allowed_roles = ("CEO",)
+    serializer_class = CiaActivitySerializer
+    pagination_class = None
+
+    def get_queryset(self):
+        return (
+            AuditLog.objects.filter(actor_role="CIA", action__in=CIA_ACTIVITY_ACTIONS, object_type="Query")
+            .select_related("actor")
+            .order_by("-seq")
+        )
+
+    def get_serializer_context(self):
+        ids = list(self.get_queryset().values_list("object_id", flat=True))
+        refs = dict(Query.objects.filter(pk__in=ids).values_list("pk", "reference"))
+        return {**super().get_serializer_context(), "references": {str(k): v for k, v in refs.items()}}
