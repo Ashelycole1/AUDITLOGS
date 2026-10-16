@@ -1,4 +1,5 @@
 import os
+import secrets
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
@@ -25,7 +26,8 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if settings.ENVIRONMENT == "prod":
             raise CommandError("seed_dev_users is for development only.")
-        password = os.environ.get("DEV_SEED_PASSWORD", "demo-password-2026")
+        # No password is written in the code. Use DEV_SEED_PASSWORD from .env, or a random one shown once here.
+        password = os.environ.get("DEV_SEED_PASSWORD") or secrets.token_urlsafe(12)
         created = 0
         with transaction.atomic():
             for email, name, role in DEMO_USERS:
@@ -41,6 +43,9 @@ class Command(BaseCommand):
                     reason="Development seed data",
                 )
                 created += 1
-        self.stdout.write(
-            self.style.SUCCESS(f"Created {created} demo accounts. Each sets up MFA on first sign-in.")
-        )
+        self.stdout.write(self.style.SUCCESS(f"Created {created} demo accounts."))
+        if created and not os.environ.get("DEV_SEED_PASSWORD"):
+            self.stdout.write(
+                f"Their password is {password} (random; set DEV_SEED_PASSWORD in .env to choose one)."
+            )
+        self.stdout.write("Sign-in PINs are printed in the runserver terminal in development.")
