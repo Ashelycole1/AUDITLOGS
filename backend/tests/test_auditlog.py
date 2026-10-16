@@ -29,7 +29,7 @@ def drop_triggers() -> None:
     """Simulate someone with database superuser rights, who can get past the triggers."""
     with connection.cursor() as cursor:
         if connection.vendor == "postgresql":
-            cursor.execute("ALTER TABLE auditlog_auditlog DISABLE TRIGGER auditlog_no_update_delete")
+            cursor.execute("SET LOCAL session_replication_role = 'replica'")
         else:
             cursor.execute("DROP TRIGGER auditlog_no_update")
             cursor.execute("DROP TRIGGER auditlog_no_delete")
