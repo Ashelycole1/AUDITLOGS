@@ -1,0 +1,7 @@
+# Runtime: the locked stack in system.md section 5, plus the drivers it needs.
+django~=5.2.0
+djangorestframework~=3.16.0
+django-otp~=1.6.0
+django-axes~=8.0
+argon2-cffi~=25.1
+psycopg[binary]~=3.2

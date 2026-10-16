@@ -1,0 +1,39 @@
+# Local development: one command starts the database and the API.
+#   docker compose -f docker-compose.dev.yml up --build
+# Then, once:  docker compose -f docker-compose.dev.yml exec api python manage.py seed_dev_users
+# Dummy data only (system.md 4.10). The production compose file comes with the deployment task.
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: auditlogs
+      POSTGRES_USER: auditlogs
+      POSTGRES_PASSWORD: auditlogs-dev-only
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U auditlogs -d auditlogs"]
+      interval: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ./backend
+      args:
+        INSTALL_DEV: "true"
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.dev
+      DATABASE_URL: postgres://auditlogs:auditlogs-dev-only@db:5432/auditlogs
+      ALLOWED_HOSTS: localhost,127.0.0.1
+    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:

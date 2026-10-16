@@ -1,0 +1,16 @@
+# Secrets and local config
+.env
+*.env.local
+
+# Python
+backend/.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# Local databases and files (dummy data only, but never committed)
+backend/dev.sqlite3
+backend/media/
+evidence/
+backups/

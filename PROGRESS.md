@@ -35,19 +35,46 @@ Updated at the end of every session and whenever work is paused (see `agent_work
   - The charts are an in-house kit in `src/charts.tsx`, with no chart library. Each has a hover tooltip, keyboard focus and a table view. Colours were checked with the dataviz palette validator.
   - Trend figures are rebuilt from batch confirm, deadline and `closedAt` dates. Reopened queries lose their earlier closure, so history is approximate until the backend stores status history.
 
+- 2026-10-16: **Backend started: Phase 1 setup and Phase 2.1.** See `backend/README.md` and `DECISIONS.md`.
+  - **Project setup:**
+    - `backend/` uses Django 5.2 LTS, DRF and Python 3.12, with pinned requirements.
+    - Settings are split into `base`/`dev`/`test`/`prod`. The production start-up check refuses DEBUG, the dev secret key, non-Postgres databases, wildcard hosts and insecure cookies.
+    - Also added: `docker-compose.dev.yml` (Postgres 16 + api), `backend/Dockerfile`, `.env.example`, `.gitignore`, CI (`.github/workflows/ci.yml`: ruff, black, migration check, pytest on Postgres, frontend build), and ruff/black/pytest config.
+  - **Accounts (`apps/accounts`):**
+    - Email user with role and acting-CIA expiry. No superuser and no admin site.
+    - Argon2 passwords, minimum 12 characters.
+    - Two-step sign-in: password, then TOTP. First sign-in enrols the authenticator.
+    - Axes lockout after 5 failures for 15 minutes, with case-insensitive email.
+    - 30-minute idle session, CSRF on login.
+    - ICT account management: create, edit and role change, disable/enable, reset MFA. Reasons are required and ICT can't act on its own account.
+    - `seed_dev_users` creates the 7 dummy accounts.
+  - **Core (`apps/core`):** default-deny `RoleRequired` permission (views declare `allowed_roles`), reason validator, health endpoint.
+  - **Audit log (`apps/auditlog`):**
+    - Hash-chained, append-only entries, written under an advisory lock in Postgres.
+    - Triggers block UPDATE/DELETE/TRUNCATE in Postgres and UPDATE/DELETE in SQLite.
+    - `verify_audit_chain` command, CIA log list with filters, and a verify endpoint (CIA and ICT, counts only).
+    - `deploy/db_grants.sql` revokes UPDATE/DELETE/TRUNCATE from the app role.
+  - **Tests:**
+    - 118 passing on SQLite. They include the full permission matrix (every route × role, anonymous, and password-without-MFA), plus tamper tests where an edited or removed entry breaks verification.
+    - Ruff and black are clean.
+    - Smoke-tested over HTTP with `runserver`.
+
 ### Not done
 - Nothing is committed yet. The repo has no commits on `main`.
-- No backend, Docker Compose, CI, or tests.
-- The prototype doesn't use TanStack Query or an API client yet. It will need these when the backend exists.
-- `DECISIONS.md` hasn't been created.
+- **Not run against PostgreSQL yet.** Docker and Postgres aren't installed on this machine. The Postgres trigger SQL, advisory lock, `docker-compose.dev.yml` and CI job are written but unexecuted. CI or a Docker machine will be the first real run.
+- The frontend still uses its in-browser store. It isn't wired to the API yet; that needs an API client and TanStack Query.
+- MFA enrolment shows a secret and `otpauth://` URI but no QR code. That needs either a frontend dependency or an in-house encoder (owner to decide).
+- Acting-CIA grant endpoint, one-time enrolment links and email are not built. Real client IP from Nginx is still to come.
+- Pre-commit hooks and dummy query fixtures are not set up.
 
 ### In flight
-- 2026-10-16: the prototype was started locally (`npm run dev` at http://localhost:5173) for the owner to review. Claude Code then stopped the server because the machine ran low on memory, so it needs restarting before the review. **Waiting for the owner's feedback before going further.**
+- The frontend dev server (http://localhost:5173) was stopped automatically on 2026-10-16 because the machine ran low on memory. Restart it with `npm run dev` in `frontend/` when needed.
 
-### Next (proposed, awaiting owner go-ahead)
-1. Make the first commit of the specs and the prototype.
-2. Phase 1 setup: `backend/` Django skeleton (config with base/dev/prod settings, `apps/` stubs), `docker-compose.dev.yml` (db, api), `.env.example`, ruff/black, pytest, and dummy fixtures.
-3. Phase 2.1: users, roles, Argon2, MFA, lockout, session timeout, with permission tests per role.
+### Next (proposed)
+1. Owner: confirm the extra dependencies listed in `DECISIONS.md` item 2, and approve the first commit.
+2. Phase 2.2: permission framework for query data (`for_user` scoping, plus a test that fails if a ViewSet skips it).
+3. Phase 2.4: import (upload, parse, validate, preview, confirm, cancel). This needs `openpyxl`, which is named in system.md.
+4. Wire the frontend sign-in to `/api/v1/auth/*` as the first piece of real integration.
 
 ### Open questions (system.md section 9, still unanswered)
 - Is the organisation a public body?
