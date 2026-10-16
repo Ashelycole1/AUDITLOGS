@@ -47,7 +47,9 @@ If Render gives the service a different address (for example because the name is
 
 1. In Vercel, choose **Add New, then Project**, and import the same repository.
 2. Set **Root Directory** to `frontend`. The framework (Vite), the build command and `dist` come from `frontend/vercel.json`.
-3. Under **Environment Variables**, add `VITE_DEPLOY_ENV` = `staging`.
+3. Under **Environment Variables**, add two variables:
+   - `VITE_DEPLOY_ENV` = `staging`, which shows the "dummy data only" banner;
+   - `VITE_DATA_SOURCE` = `api`, which makes the screens use the Render backend. Without it, the site runs the in-browser demo.
 4. Deploy, then copy the address (e.g. `https://auditlogs.vercel.app`) into `CSRF_TRUSTED_ORIGINS` on Render and redeploy the backend.
 
 `frontend/vercel.json` also sets the security headers:

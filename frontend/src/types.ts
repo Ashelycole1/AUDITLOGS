@@ -44,6 +44,10 @@ export interface Query {
   department: string;
   currentAssignee: string | null;
   closedAt: string | null;
+  /** When the batch was confirmed (API). The demo works it out from its batches. */
+  importedAt?: string | null;
+  /** Name of the imported file (API). */
+  batchFilename?: string;
 }
 
 export type EditableField = "title" | "descriptionCurrent" | "riskRatingCurrent" | "deadline";
@@ -90,6 +94,9 @@ export interface StatusChangeRequest {
   decisionReason: string | null;
   decidedAt: string | null;
   createdAt: string;
+  /** Counts supplied by the API's approvals inbox. */
+  responses?: number;
+  evidenceFiles?: number;
 }
 
 export interface AuditEntry {
@@ -127,4 +134,5 @@ export interface ImportRow {
   responsibleOfficer: string;
   department: string;
   errors: string[];
+  warnings?: string[];
 }

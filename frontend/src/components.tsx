@@ -188,13 +188,14 @@ export function ReasonDialog({
   confirmLabel: string;
   danger?: boolean;
   optional?: boolean;
-  onConfirm: (reason: string) => string | null;
+  onConfirm: (reason: string) => string | null | Promise<string | null>;
   onClose: () => void;
   children?: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const id = useId();
 
   useEffect(() => {
@@ -208,11 +209,14 @@ export function ReasonDialog({
     if (!open && d.open) d.close();
   }, [open]);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (busy) return;
     const pre = optional && reason.trim() === "" ? null : reasonError(reason);
     if (pre) return setError(pre);
-    const err = onConfirm(reason.trim());
+    setBusy(true);
+    const err = await onConfirm(reason.trim());
+    setBusy(false);
     if (err) setError(err);
     else onClose();
   };
@@ -241,7 +245,7 @@ export function ReasonDialog({
         {error && <div className="mt-3"><Notice tone="error">{error}</Notice></div>}
         <div className="mt-6 grid grid-cols-2 gap-3">
           <Button type="button" kind="secondary" onClick={onClose}>Cancel</Button>
-          <Button type="submit" kind={danger ? "danger" : "primary"} className={danger ? "!bg-[#d92d20] !text-white !border-[#d92d20] hover:!bg-[#b42318]" : ""}>{confirmLabel}</Button>
+          <Button type="submit" disabled={busy} kind={danger ? "danger" : "primary"} className={danger ? "!bg-[#d92d20] !text-white !border-[#d92d20] hover:!bg-[#b42318]" : ""}>{confirmLabel}</Button>
         </div>
       </form>
     </dialog>

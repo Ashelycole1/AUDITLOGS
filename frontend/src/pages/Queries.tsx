@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Button, Empty, Label, Notice, PageHeader, Panel, ReasonDialog, Ref, RiskTag, StatusBadge, Table, cx } from "../components";
 import { STATUSES, daysOverdue, fmtDate } from "../lib/rules";
-import { useMe, useStore } from "../store";
+import { useMe, useStore } from "../storeTypes";
 import type { Query, Risk, Status } from "../types";
 
 export default function QueriesPage() {
@@ -51,13 +51,11 @@ export default function QueriesPage() {
   };
   const selectable = rows.filter((q) => !q.currentAssignee);
 
-  const runBulk = (reason: string): string | null => {
-    const errors: string[] = [];
-    selected.forEach((id) => {
-      const r = assign(id, bulkTo, reason);
-      if (!r.ok) errors.push(r.error);
-    });
-    if (errors.length) return errors[0];
+  const runBulk = async (reason: string): Promise<string | null> => {
+    for (const id of selected) {
+      const r = await assign(id, bulkTo, reason);
+      if (!r.ok) return r.error;
+    }
     setFlash(`Assigned ${selected.size} ${selected.size === 1 ? "query" : "queries"} to ${userName(bulkTo)}.`);
     setSelected(new Set());
     return null;

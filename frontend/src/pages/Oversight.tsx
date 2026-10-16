@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button, Empty, PageHeader, Panel, Ref, Table, cx } from "../components";
 import { fmtDateTime } from "../lib/rules";
-import { useStore } from "../store";
+import { useStore } from "../storeTypes";
 
 const CIA_ACTIONS: Record<string, string> = {
   "status.direct": "Changed status without a proposal",

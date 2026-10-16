@@ -4,7 +4,7 @@ import { CRITICAL, ChartCard, Columns, GOOD, Heatmap, LegendKey, Meter, SERIES, 
 import { Avatar, Empty, PageHeader, Ref, RiskTag, StatusBadge, cx } from "../components";
 import { Icon, type IconName } from "../icons";
 import { STATUSES, daysOverdue, dueWithin, fmtDate, fmtDateTime } from "../lib/rules";
-import { useMe, useStore } from "../store";
+import { useMe, useStore } from "../storeTypes";
 import type { Query, Risk, Status } from "../types";
 import { ACTION_LABEL } from "./Cia";
 
@@ -36,7 +36,7 @@ export default function DashboardPage() {
   const departments = [...new Set(visibleQueries.map((q) => q.department))].sort();
   // The filters above the charts scope every number on the page, so they always agree.
   const qs = useMemo(() => visibleQueries.filter((q) => (!dept || q.department === dept) && (!risk || q.riskRatingCurrent === risk)), [visibleQueries, dept, risk]);
-  const importedAt = (q: Query) => new Date(state.batches.find((b) => b.id === q.batchId)?.confirmedAt ?? 0).getTime();
+  const importedAt = (q: Query) => new Date(q.importedAt ?? state.batches.find((b) => b.id === q.batchId)?.confirmedAt ?? 0).getTime();
 
   // Daily open and overdue counts, rebuilt from import, deadline and closure dates.
   const trend = useMemo(() => {
@@ -76,7 +76,7 @@ export default function DashboardPage() {
       : "Where every audit query stands, what is late and what needs a decision.";
 
   const fourth: Tile = isCia
-    ? { icon: "approvals", label: "Awaiting your decision", value: pending.length, note: pending.length ? `Oldest waiting ${Math.floor((Date.now() - new Date(pending.reduce((a, r) => (r.createdAt < a ? r.createdAt : a), pending[0].createdAt)).getTime()) / DAY)} days` : "Nothing waiting", to: "/approvals", tone: pending.length ? "warn" : undefined }
+    ? { icon: "approvals", label: "Awaiting your decision", value: pending.length, note: pending.length ? waitingNote(pending.reduce((a, r) => (r.createdAt < a ? r.createdAt : a), pending[0].createdAt)) : "Nothing waiting", to: "/approvals", tone: pending.length ? "warn" : undefined }
     : isIa
       ? { icon: "alert", label: "Returned to you", value: qs.filter((q) => q.status === "Returned").length, note: "Read the CIA's reason and continue", to: "/queries", tone: qs.some((q) => q.status === "Returned") ? "danger" : undefined }
       : { icon: "clock", label: "Due in the next 7 days", value: dueSoon.length, note: dueSoon[0] ? `Next: ${fmtDate(dueSoon[0].deadline)}` : "Nothing due this week", tone: dueSoon.length ? "warn" : undefined };
@@ -296,6 +296,11 @@ export default function DashboardPage() {
   );
 }
 
+function waitingNote(oldest: string): string {
+  const days = Math.floor((Date.now() - new Date(oldest).getTime()) / DAY);
+  return days < 1 ? "Oldest waiting since today" : `Oldest waiting ${days} ${days === 1 ? "day" : "days"}`;
+}
+
 type Tile = { icon: IconName; label: string; value: number | string; note?: ReactNode; spark?: ReactNode; to?: string; tone?: "danger" | "warn" };
 
 function KpiTile({ icon, label, value, note, spark, to, tone }: Tile) {
@@ -320,8 +325,9 @@ function KpiTile({ icon, label, value, note, spark, to, tone }: Tile) {
 }
 
 function Delta({ value, days, upIsBad }: { value: number; days: number; upIsBad: boolean }) {
+  const period = days === 1 ? "1 day" : `${days} days`;
   if (days < 1) return <span className="text-muted">No earlier data yet</span>;
-  if (value === 0) return <span className="text-muted">No change in {days} days</span>;
+  if (value === 0) return <span className="text-muted">No change in {period}</span>;
   const bad = upIsBad ? value > 0 : false;
   const good = upIsBad ? value < 0 : false;
   return (
@@ -329,7 +335,7 @@ function Delta({ value, days, upIsBad }: { value: number; days: number; upIsBad:
       <span className={cx("font-semibold", bad && "text-danger", good && "text-good", !bad && !good && "text-ink")}>
         {value > 0 ? "Up" : "Down"} {Math.abs(value)}
       </span>{" "}
-      in {days} days
+      in {period}
     </span>
   );
 }

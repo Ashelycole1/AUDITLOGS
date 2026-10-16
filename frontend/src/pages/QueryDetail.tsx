@@ -1,8 +1,8 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Button, Empty, Label, Notice, Panel, ReasonDialog, RiskTag, StatusBadge, StatusMark, StatusRail, cx } from "../components";
 import { EVIDENCE_MAX_BYTES, EVIDENCE_TYPES, STATUSES, daysOverdue, fmtBytes, fmtDate, fmtDateTime, isAllowedTransition } from "../lib/rules";
-import { useMe, useStore } from "../store";
+import { useMe, useStore } from "../storeTypes";
 import type { EditableField, FollowUpActivity, Query, Status } from "../types";
 
 const FIELD_LABEL: Record<EditableField, string> = {
@@ -32,7 +32,11 @@ export default function QueryDetail() {
 
 function Workspace({ q }: { q: Query }) {
   const me = useMe();
-  const { state, userName } = useStore();
+  const { state, userName, loadQuery } = useStore();
+  // API: fetch follow-up, evidence, revisions and history for this query. The demo already holds them.
+  useEffect(() => {
+    loadQuery(q.id);
+  }, [q.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const late = daysOverdue(q);
   const isCia = me.role === "CIA";
   const isIa = me.role === "IA";
@@ -93,7 +97,7 @@ function Workspace({ q }: { q: Query }) {
                 {q.riskRatingCurrent !== q.riskRatingOriginal && <span className="block text-muted">Imported as {q.riskRatingOriginal}</span>}
               </dd>
               <dt className="text-muted">Source</dt>
-              <dd className="break-all">{batch?.sourceFilename}</dd>
+              <dd className="break-all">{batch?.sourceFilename ?? q.batchFilename}</dd>
             </dl>
           </Panel>
 
@@ -160,9 +164,9 @@ function FollowUp({ q }: { q: Query }) {
 
   const canWrite = (me.role === "CIA" || me.role === "IA") && q.status !== "Closed";
 
-  const save = (e: React.FormEvent) => {
+  const save = async (e: React.FormEvent) => {
     e.preventDefault();
-    const r = addActivity(q.id, kind, body);
+    const r = await addActivity(q.id, kind, body);
     if (!r.ok) return setError(r.error);
     setBody("");
     setError(null);
@@ -237,7 +241,7 @@ function FollowUp({ q }: { q: Query }) {
 
 function EvidencePanel({ q }: { q: Query }) {
   const me = useMe();
-  const { state, userName, addEvidence } = useStore();
+  const { state, userName, addEvidence, evidenceUrl } = useStore();
   const input = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -252,7 +256,7 @@ function EvidencePanel({ q }: { q: Query }) {
     if (f.size > EVIDENCE_MAX_BYTES) return setError(`${f.name} is ${fmtBytes(f.size)}. The limit is 20 MB.`);
     setBusy(true);
     const bytes = new Uint8Array(await f.arrayBuffer());
-    const r = addEvidence(q.id, { name: f.name, size: f.size, bytes });
+    const r = await addEvidence(q.id, { name: f.name, size: f.size, bytes, file: f });
     setBusy(false);
     if (!r.ok) setError(r.error);
     if (input.current) input.current.value = "";
@@ -274,7 +278,11 @@ function EvidencePanel({ q }: { q: Query }) {
           {files.map((f) => (
             <li key={f.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-3 first:pt-0 last:pb-0">
               <div className="min-w-0">
-                <p className="truncate font-medium">{f.originalFilename}</p>
+                {evidenceUrl(f.id) ? (
+                  <a href={evidenceUrl(f.id)!} className="block truncate font-medium text-lake hover:underline" download>{f.originalFilename}</a>
+                ) : (
+                  <p className="truncate font-medium">{f.originalFilename}</p>
+                )}
                 <p className="text-[0.8125rem] text-muted">
                   {fmtBytes(f.sizeBytes)}, uploaded by {userName(f.uploadedBy)} on {fmtDate(f.createdAt)}
                 </p>
@@ -319,7 +327,7 @@ function PendingRequest({ requestId }: { requestId: string }) {
         description="The query moves to Closed. The auditor can no longer add follow-up."
         confirmLabel="Approve closure"
         optional
-        onConfirm={(reason) => { const res = decide(r.id, true, reason); return res.ok ? null : res.error; }}
+        onConfirm={async (reason) => { const res = await decide(r.id, true, reason); return res.ok ? null : res.error; }}
         onClose={() => setDialog(null)}
       />
       <ReasonDialog
@@ -328,7 +336,7 @@ function PendingRequest({ requestId }: { requestId: string }) {
         description="Say what is still missing. The auditor sees this reason on the query and by email."
         confirmLabel="Return query"
         danger
-        onConfirm={(reason) => { const res = decide(r.id, false, reason); return res.ok ? null : res.error; }}
+        onConfirm={async (reason) => { const res = await decide(r.id, false, reason); return res.ok ? null : res.error; }}
         onClose={() => setDialog(null)}
       />
     </Panel>
@@ -370,7 +378,7 @@ function CiaActions({ q }: { q: Query }) {
         description={reassign ? "The new auditor sees the full history. The current auditor loses access straight away." : "The auditor gets an email with the reference and a link."}
         confirmLabel={reassign ? "Reassign" : "Assign"}
         optional={!reassign}
-        onConfirm={(reason) => { if (!assignee) return "Choose an auditor."; const r = assign(q.id, assignee, reason); return r.ok ? null : r.error; }}
+        onConfirm={async (reason) => { if (!assignee) return "Choose an auditor."; const r = await assign(q.id, assignee, reason); return r.ok ? null : r.error; }}
         onClose={() => setDialog(null)}
       >
         <div>
@@ -387,7 +395,7 @@ function CiaActions({ q }: { q: Query }) {
         title="Edit query"
         description="The original imported wording is kept. This edit is saved as a revision."
         confirmLabel="Save edit"
-        onConfirm={(reason) => { const r = editQuery(q.id, field, value, reason); return r.ok ? null : r.error; }}
+        onConfirm={async (reason) => { const r = await editQuery(q.id, field, value, reason); return r.ok ? null : r.error; }}
         onClose={() => setDialog(null)}
       >
         <div>
@@ -417,7 +425,7 @@ function CiaActions({ q }: { q: Query }) {
         title={q.status === "Closed" ? "Reopen query" : "Change status directly"}
         description="Use this to correct a mistake. It bypasses the auditor's proposal, so it is shown to the CEO."
         confirmLabel={q.status === "Closed" ? "Reopen" : "Change status"}
-        onConfirm={(reason) => { const r = setStatusDirect(q.id, to, reason); return r.ok ? null : r.error; }}
+        onConfirm={async (reason) => { const r = await setStatusDirect(q.id, to, reason); return r.ok ? null : r.error; }}
         onClose={() => setDialog(null)}
       >
         <div>
@@ -452,7 +460,7 @@ function Propose({ q, hasPending }: { q: Query; hasPending: boolean }) {
         title="Propose closure"
         description="Needs at least one management response or evidence file. You cannot approve your own proposal."
         confirmLabel="Send to the CIA"
-        onConfirm={(reason) => { const r = proposeClosure(q.id, reason); return r.ok ? null : r.error; }}
+        onConfirm={async (reason) => { const r = await proposeClosure(q.id, reason); return r.ok ? null : r.error; }}
         onClose={() => setOpen(false)}
       />
     </Panel>

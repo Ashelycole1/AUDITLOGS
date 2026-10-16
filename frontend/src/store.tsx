@@ -1,53 +1,20 @@
 // In-browser stand-in for the Django API so the screens can be reviewed before the backend exists.
 // Every rule here is also enforced server-side; the UI checks only shape what people are shown.
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { appendAudit, type NewAuditEntry } from "./lib/auditChain";
 import { isAllowedTransition, queriesFor, reasonError } from "./lib/rules";
 import { sha256 } from "./lib/sha256";
 import { seed, type State } from "./data/seed";
-import type { EditableField, FollowUpActivity, ImportRow, Query, Role, Status, User } from "./types";
+import type { Query, Role, Status, User } from "./types";
+import { ApiStoreProvider } from "./apiStore";
+import { fail, ok, StoreCtx, type Result, type Store } from "./storeTypes";
 
-type Result = { ok: true } | { ok: false; error: string };
-const ok: Result = { ok: true };
-const fail = (error: string): Result => ({ ok: false, error });
+export { useMe, useStore } from "./storeTypes";
 
 const LOCK_LIMIT = 5;
 const LOCK_MINUTES = 15;
 
-interface Store {
-  state: State;
-  me: User | null;
-  userName: (id: string | null) => string;
-  visibleQueries: Query[];
-  // auth
-  checkPassword: (email: string, password: string) => Result & { userId?: string; pin?: string };
-  completeMfa: (userId: string, code: string) => Result;
-  logout: (reason?: string) => void;
-  // PIA
-  confirmImport: (filename: string, fileHash: string, rows: ImportRow[]) => Result;
-  cancelImport: (filename: string, fileHash: string, rowCount: number) => void;
-  // CIA
-  editQuery: (queryId: string, field: EditableField, value: string, reason: string) => Result;
-  assign: (queryId: string, assigneeId: string, reason: string) => Result;
-  decide: (requestId: string, approve: boolean, reason: string) => Result;
-  setStatusDirect: (queryId: string, to: Status, reason: string) => Result;
-  exportQueries: (rows: Query[]) => void;
-  decideAccess: (requestId: string, approve: boolean, reason: string) => Result;
-  verifyLogged: (result: string) => void;
-  // CIA + IA
-  addActivity: (queryId: string, kind: FollowUpActivity["kind"], body: string) => Result;
-  addEvidence: (queryId: string, file: { name: string; size: number; bytes: Uint8Array }) => Result;
-  // IA
-  proposeClosure: (queryId: string, reason: string) => Result;
-  // ICT
-  createUser: (u: Pick<User, "email" | "fullName" | "role">) => Result;
-  setUserActive: (userId: string, active: boolean, reason: string) => Result;
-  requestAccess: (reason: string) => Result;
-}
-
-const Ctx = createContext<Store | null>(null);
-
-export function StoreProvider({ children }: { children: ReactNode }) {
+function DemoStoreProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<State>(seed);
   const [meId, setMeId] = useState<string | null>(null);
   const [failures, setFailures] = useState<Record<string, { count: number; lockedUntil: number }>>({});
@@ -82,12 +49,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     me ? queriesFor(me, state.queries).find((q) => q.id === queryId) : undefined;
 
   const store: Store = {
+    mode: "demo",
+    ready: true,
     state,
     me,
     userName,
     visibleQueries: me ? queriesFor(me, state.queries) : [],
 
-    checkPassword(email, password) {
+    async checkPassword(email, password) {
       const user = state.users.find((u) => u.email.toLowerCase() === email.trim().toLowerCase());
       const key = email.trim().toLowerCase();
       const f = failures[key];
@@ -108,7 +77,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return { ok: true, userId: user.id, pin };
     },
 
-    completeMfa(userId, code) {
+    async completeMfa(userId, code) {
       if (!/^\d{6}$/.test(code)) return fail("Enter the 6-digit code from the email.");
       const user = state.users.find((u) => u.id === userId)!;
       setFailures({ ...failures, [user.email]: { count: 0, lockedUntil: 0 } });
@@ -117,12 +86,33 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return ok;
     },
 
+    async resendPin() {
+      // Stands in for a fresh emailed PIN.
+      const pin = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000).padStart(6, "0");
+      return { ok: true, pin };
+    },
+
+    async loadQuery() {},
+    evidenceUrl: () => null,
+    async uploadImport() {
+      return fail("The demo reads files in the browser.");
+    },
+    async confirmBatch() {
+      return fail("The demo confirms in the browser.");
+    },
+    async cancelBatch() {
+      return fail("The demo cancels in the browser.");
+    },
+    async verifyOnServer() {
+      return null;
+    },
+
     logout(reason = "") {
       if (me) commit((s) => ({ next: s, log: [entry(me, { action: "auth.logout", objectType: "User", objectId: me.id, oldValue: null, newValue: null, reason })] }));
       setMeId(null);
     },
 
-    confirmImport(filename, fileHash, rows) {
+    async confirmImport(filename, fileHash, rows) {
       const r = requireRole("PIA");
       if (!r.ok) return r;
       if (rows.some((x) => x.errors.length)) return fail("Fix the highlighted rows before confirming.");
@@ -164,7 +154,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }));
     },
 
-    editQuery(queryId, field, value, reason) {
+    async editQuery(queryId, field, value, reason) {
       const r = requireRole("CIA");
       if (!r.ok) return r;
       const err = reasonError(reason);
@@ -185,7 +175,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return ok;
     },
 
-    assign(queryId, assigneeId, reason) {
+    async assign(queryId, assigneeId, reason) {
       const r = requireRole("CIA");
       if (!r.ok) return r;
       const q = scopedQuery(queryId);
@@ -210,7 +200,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return ok;
     },
 
-    decide(requestId, approve, reason) {
+    async decide(requestId, approve, reason) {
       const r = requireRole("CIA");
       if (!r.ok) return r;
       const req = state.requests.find((x) => x.id === requestId);
@@ -235,7 +225,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return ok;
     },
 
-    setStatusDirect(queryId, to, reason) {
+    async setStatusDirect(queryId, to, reason) {
       const r = requireRole("CIA");
       if (!r.ok) return r;
       const err = reasonError(reason);
@@ -259,8 +249,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return ok;
     },
 
-    exportQueries(rows) {
-      if (!me || me.role !== "CIA") return;
+    async exportQueries(rows) {
+      if (!me || me.role !== "CIA") return fail("Only the CIA can export.");
       const head = ["reference", "title", "risk", "status", "department", "responsible_officer", "deadline", "assignee"];
       const esc = (v: string) => `"${v.replace(/"/g, '""')}"`;
       const csv = [head.join(","), ...rows.map((q) => [q.reference, q.title, q.riskRatingCurrent, q.status, q.department, q.responsibleOfficer, q.deadline, userName(q.currentAssignee)].map(esc).join(","))].join("\n");
@@ -271,9 +261,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       a.click();
       URL.revokeObjectURL(url);
       commit((s) => ({ next: s, log: [entry(me, { action: "export.queries", objectType: "Query", objectId: "list", oldValue: null, newValue: { rows: rows.length }, reason: "" })] }));
+      return ok;
     },
 
-    decideAccess(requestId, approve, reason) {
+    async decideAccess(requestId, approve, reason) {
       const r = requireRole("CIA");
       if (!r.ok) return r;
       if (!approve) {
@@ -293,7 +284,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       commit((s) => ({ next: s, log: [entry(me, { action: "auditlog.verify", objectType: "AuditLog", objectId: "chain", oldValue: null, newValue: { result }, reason: "" })] }));
     },
 
-    addActivity(queryId, kind, body) {
+    async addActivity(queryId, kind, body) {
       const r = requireRole("CIA", "IA");
       if (!r.ok) return r;
       const q = scopedQuery(queryId);
@@ -318,7 +309,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return ok;
     },
 
-    addEvidence(queryId, file) {
+    async addEvidence(queryId, file) {
       const r = requireRole("CIA", "IA");
       if (!r.ok) return r;
       const q = scopedQuery(queryId);
@@ -333,7 +324,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return ok;
     },
 
-    proposeClosure(queryId, reason) {
+    async proposeClosure(queryId, reason) {
       const r = requireRole("IA");
       if (!r.ok) return r;
       const err = reasonError(reason);
@@ -356,7 +347,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return ok;
     },
 
-    createUser(u) {
+    async createUser(u) {
       const r = requireRole("ICT");
       if (!r.ok) return r;
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(u.email)) return fail("Enter a valid email address.");
@@ -370,7 +361,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return ok;
     },
 
-    setUserActive(userId, active, reason) {
+    async setUserActive(userId, active, reason) {
       const r = requireRole("ICT");
       if (!r.ok) return r;
       const err = reasonError(reason);
@@ -384,7 +375,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
 
 
-    requestAccess(reason) {
+    async requestAccess(reason) {
       const r = requireRole("ICT");
       if (!r.ok) return r;
       const err = reasonError(reason);
@@ -399,17 +390,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo(() => store, [state, meId, failures]); // eslint-disable-line react-hooks/exhaustive-deps
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>;
 }
 
-export function useStore(): Store {
-  const s = useContext(Ctx);
-  if (!s) throw new Error("useStore must be used inside StoreProvider");
-  return s;
-}
+// VITE_DATA_SOURCE=api talks to the Django API; otherwise the in-browser demo runs.
+export const DATA_SOURCE = import.meta.env.VITE_DATA_SOURCE === "api" ? "api" : "demo";
 
-export function useMe(): User {
-  const { me } = useStore();
-  if (!me) throw new Error("No signed-in user");
-  return me;
+export function StoreProvider({ children }: { children: ReactNode }) {
+  return DATA_SOURCE === "api" ? <ApiStoreProvider>{children}</ApiStoreProvider> : <DemoStoreProvider>{children}</DemoStoreProvider>;
 }

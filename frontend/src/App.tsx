@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { BrowserRouter, Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { Avatar, cx, StagingBanner, Wordmark } from "./components";
 import { Icon, type IconName } from "./icons";
-import { useStore } from "./store";
+import { useStore } from "./storeTypes";
 import type { Role } from "./types";
 import Login from "./pages/Login";
 import DashboardPage from "./pages/Dashboard";
@@ -55,7 +55,7 @@ const ROLE_NAME: Record<Role, string> = {
 const IDLE_MINUTES = 30;
 
 function Shell() {
-  const { me, logout, state } = useStore();
+  const { me, ready, logout, state } = useStore();
   const [now, setNow] = useState(Date.now());
   const [menu, setMenu] = useState(false);
   const [term, setTerm] = useState("");
@@ -81,6 +81,8 @@ function Shell() {
     };
   }, [logout]);
 
+  // Wait for the session check so a reload does not bounce a signed-in person to the sign-in page.
+  if (!ready) return <div className="grid min-h-dvh place-items-center text-sm text-muted" role="status">Loading</div>;
   if (!me) return <Navigate to="/login" replace />;
   const pending = state.requests.filter((r) => r.decision === "Pending").length;
   const today = new Intl.DateTimeFormat("en-UG", { timeZone: "Africa/Kampala", weekday: "short", day: "numeric", month: "short", year: "numeric" }).format(now);
@@ -178,13 +180,15 @@ function Shell() {
 }
 
 function RoleRoute({ roles }: { roles: Role[] }) {
-  const { me } = useStore();
+  const { me, ready } = useStore();
+  if (!ready) return null;
   if (!me) return <Navigate to="/login" replace />;
   return roles.includes(me.role) ? <Outlet /> : <Navigate to="/" replace />;
 }
 
 function Home() {
-  const { me } = useStore();
+  const { me, ready } = useStore();
+  if (!ready) return null;
   if (!me) return <Navigate to="/login" replace />;
   return <Navigate to={NAV[me.role][0].to} replace />;
 }

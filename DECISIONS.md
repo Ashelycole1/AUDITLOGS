@@ -112,3 +112,9 @@ Date, decision, reason. Newest last.
     - Demo accounts are created at start-up only when `SEED_DEMO_USERS=true` and a chosen `DEV_SEED_PASSWORD` is set.
     - Adds `gunicorn`, named in architecture.md 2.
     - Not deployed or run here: gunicorn doesn't run on Windows. The first real check is the first Render deploy.
+
+23. **The frontend has two data sources behind one store contract** (`src/storeTypes.ts`).
+    - `VITE_DATA_SOURCE=api` uses `src/apiStore.tsx`. Every read and change goes to the Django API, which enforces every rule.
+    - Without that setting, the in-browser demo runs, so the screens can still be reviewed with no backend.
+    - Store actions are asynchronous in both. The API store reloads what changed after each action, so the screen always shows the server's state.
+    - **Not connected yet,** because Phase 4 builds these on the server: CSV export (it must be produced and logged server-side, system.md 4.9), ICT access requests and decisions, and the breach register. In API mode they say so instead of pretending.

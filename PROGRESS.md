@@ -91,6 +91,11 @@ Updated at the end of every session and whenever work is paused (see `agent_work
   - "Dummy data only" banner, and production refuses to run on Render.
   - 323 tests passing.
 
+- 2026-10-17, **frontend connected to the API** (`VITE_DATA_SOURCE=api`, DECISIONS 23):
+  - **Connected:** sign-in with an emailed PIN, session restore and logout; queries with filters; query detail (follow-up, evidence uploads and download links, revisions, history, propose, CIA edit, assign and direct status); approvals; dashboards (including CEO summary fields and CIA activity); audit log with server-side chain verification; import with server preview, confirm and cancel; ICT user management.
+  - **New backend endpoints:** `/auditors`, `/dashboard/queries`, `/dashboard/cia-activity`, plus pending and last decision on query detail. 350 backend tests pass.
+  - **Checked end to end** on the local servers through the Vite proxy: PIA import, CIA assign, IA response, evidence and proposal, shown in the CIA approvals inbox, dashboard and audit log, and the IA query detail.
+
 ### Not done
 - Nothing is committed yet. The repo has no commits on `main`.
 - **Not run against PostgreSQL yet.** Docker and Postgres aren't installed on this machine. The Postgres trigger SQL, advisory lock, `docker-compose.dev.yml` and CI job are written but unexecuted. CI or a Docker machine will be the first real run.
@@ -104,7 +109,7 @@ Updated at the end of every session and whenever work is paused (see `agent_work
 
 ### Next (proposed)
 1. Owner: confirm the extra dependencies in `DECISIONS.md` item 2 (`openpyxl` is named in system.md).
-2. Wire the frontend to the API: sign-in (password, then PIN), then queries, import, follow-up and approvals.
+2. Owner: deploy staging (deploy/STAGING.md) and try it with the dummy accounts.
 3. Phase 4: dashboard and overdue endpoints (CEO summary fields), CIA Activity view, email notifications, compliance (retention, breach register, subject search and export, break-glass).
 4. First run against PostgreSQL (CI or a machine with Docker).
 

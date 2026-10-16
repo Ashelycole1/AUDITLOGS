@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
-import { Button, Label, Notice, StagingBanner, Wordmark } from "../components";
-import { useStore } from "../store";
+import { Button, IS_STAGING, Label, Notice, StagingBanner, Wordmark } from "../components";
+import { useStore } from "../storeTypes";
 import { Icon, type IconName } from "../icons";
 
 const FEATURES: { icon: IconName; title: string; body: string }[] = [
@@ -11,47 +11,80 @@ const FEATURES: { icon: IconName; title: string; body: string }[] = [
 ];
 
 export default function Login() {
-  const { me, state, checkPassword, completeMfa } = useStore();
+  const { me, ready, mode, state, checkPassword, completeMfa, resendPin } = useStore();
   const nav = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [pendingUser, setPendingUser] = useState<string | null>(null);
-  // Prototype stand-in for the emailed one-time PIN; the server sends the real one.
+  // Demo only: stands in for the emailed one-time PIN. In API mode the server emails the real one.
   const [pin, setPin] = useState<string | null>(null);
+  const [sentTo, setSentTo] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
+  if (!ready) return null;
   if (me) return <Navigate to="/" replace />;
 
-  const submitPassword = (e: React.FormEvent) => {
-    e.preventDefault();
-    const r = checkPassword(email, password);
-    if (!r.ok) return setError(r.error);
-    setError(null);
-    setCode("");
-    setPin(r.pin!);
-    setPendingUser(r.userId!);
-  };
-
-  const resend = () => {
-    const r = checkPassword(email, password);
-    if (r.ok) {
-      setPin(r.pin!);
-      setError(null);
+  const run = async (action: () => Promise<void>) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await action();
+    } finally {
+      setBusy(false);
     }
   };
 
-  const masked = (() => {
-    const [local, domain] = email.trim().split("@");
-    return local && domain ? `${local[0]}•••@${domain}` : "your work email";
-  })();
+  const submitPassword = (e: React.FormEvent) => {
+    e.preventDefault();
+    run(async () => {
+      const r = await checkPassword(email, password);
+      if (!r.ok) return setError(r.error);
+      setError(null);
+      setNotice(null);
+      setCode("");
+      setPin(r.pin ?? null);
+      setSentTo(r.sentTo ?? null);
+      setPendingUser(r.userId!);
+    });
+  };
+
+  const resend = () =>
+    run(async () => {
+      const r = await resendPin();
+      if (!r.ok) return setError(r.error);
+      setError(null);
+      if (r.pin) setPin(r.pin);
+      setNotice("A new code is on its way. Use the most recent email.");
+    });
+
+  const masked =
+    sentTo ??
+    (() => {
+      const [local, domain] = email.trim().split("@");
+      return local && domain ? `${local[0]}•••@${domain}` : "your work email";
+    })();
 
   const submitCode = (e: React.FormEvent) => {
     e.preventDefault();
-    if (code.trim() !== pin) return setError("That code is not correct or has expired. Check the latest email and try again.");
-    const r = completeMfa(pendingUser!, code.trim());
-    if (!r.ok) return setError(r.error);
-    nav("/", { replace: true });
+    run(async () => {
+      if (mode === "demo" && code.trim() !== pin) {
+        return setError("That code is not correct or has expired. Check the latest email and try again.");
+      }
+      const r = await completeMfa(pendingUser!, code.trim());
+      if (!r.ok) {
+        setError(r.error);
+        // The server ends a sign-in after too many wrong codes or when it expires: start again.
+        if (/expired|sign-in has expired/i.test(r.error)) {
+          setPendingUser(null);
+          setCode("");
+        }
+        return;
+      }
+      nav("/", { replace: true });
+    });
   };
 
   return (
@@ -76,7 +109,9 @@ export default function Login() {
             ))}
           </ul>
         </div>
-        <p className="text-sm text-spine-ink/80">Internal use only. All data is held in Uganda.</p>
+        <p className="text-sm text-spine-ink/80">
+          {IS_STAGING ? "Test copy on a hosted service outside Uganda. Dummy data only." : "Internal use only. All data is held in Uganda."}
+        </p>
       </section>
 
       <div className="flex flex-col items-center justify-center px-4 py-10 sm:px-8">
@@ -97,7 +132,7 @@ export default function Login() {
                 <input id="password" type="password" autoComplete="current-password" className="field" value={password} onChange={(e) => setPassword(e.target.value)} required />
               </div>
               {error && <Notice tone="error">{error}</Notice>}
-              <Button kind="primary" type="submit" className="min-h-11 w-full">Continue</Button>
+              <Button kind="primary" type="submit" disabled={busy} className="min-h-11 w-full">{busy ? "Checking" : "Continue"}</Button>
             </form>
           ) : (
             <form onSubmit={submitCode} className="space-y-4" noValidate>
@@ -118,18 +153,22 @@ export default function Login() {
                   autoFocus
                 />
               </div>
-              <Notice tone="info">Prototype only: the email would contain <span className="font-mono font-semibold">{pin}</span>.</Notice>
+              {mode === "demo" && pin && (
+                <Notice tone="info">Prototype only: the email would contain <span className="font-mono font-semibold">{pin}</span>.</Notice>
+              )}
+              {notice && <Notice tone="ok">{notice}</Notice>}
               {error && <Notice tone="error">{error}</Notice>}
-              <Button kind="primary" type="submit" className="min-h-11 w-full">Sign in</Button>
+              <Button kind="primary" type="submit" disabled={busy || code.length !== 6} className="min-h-11 w-full">{busy ? "Signing in" : "Sign in"}</Button>
               <button type="button" className="min-h-10 w-full text-sm font-medium text-lake hover:underline" onClick={resend}>
                 Send a new code
               </button>
-              <button type="button" className="min-h-10 w-full text-sm font-medium text-lake hover:underline" onClick={() => { setPendingUser(null); setPin(null); setCode(""); setError(null); }}>
+              <button type="button" className="min-h-10 w-full text-sm font-medium text-lake hover:underline" onClick={() => { setPendingUser(null); setPin(null); setNotice(null); setCode(""); setError(null); }}>
                 Use a different account
               </button>
             </form>
           )}
 
+          {mode === "demo" && (
           <details className="mt-8 border-t border-line pt-4 text-sm">
             <summary className="min-h-10 cursor-pointer content-center font-medium text-muted">Demo accounts (dummy data)</summary>
             <p className="mt-2 text-muted">
@@ -150,6 +189,7 @@ export default function Login() {
               ))}
             </ul>
           </details>
+          )}
         </section>
       </div>
     </div>

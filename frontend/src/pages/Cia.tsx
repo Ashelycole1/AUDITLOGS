@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Button, Check, Empty, Label, Notice, PageHeader, Panel, ReasonDialog, Ref, RiskTag, StatusBadge, Table, cx } from "../components";
 import { verifyChain } from "../lib/auditChain";
 import { STATUSES, daysOverdue, fmtDate, fmtDateTime } from "../lib/rules";
-import { useMe, useStore } from "../store";
+import { useMe, useStore } from "../storeTypes";
 import type { AuditEntry, StatusChangeRequest } from "../types";
 
 export function ApprovalsPage() {
@@ -42,8 +42,8 @@ function RequestCard({ r }: { r: StatusChangeRequest }) {
   const { state, userName, decide } = useStore();
   const [dialog, setDialog] = useState<"approve" | "reject" | null>(null);
   const q = state.queries.find((x) => x.id === r.queryId)!;
-  const responses = state.activities.filter((a) => a.queryId === q.id && a.kind === "ManagementResponse").length;
-  const files = state.evidence.filter((e) => e.queryId === q.id).length;
+  const responses = r.responses ?? state.activities.filter((a) => a.queryId === q.id && a.kind === "ManagementResponse").length;
+  const files = r.evidenceFiles ?? state.evidence.filter((e) => e.queryId === q.id).length;
   const own = r.proposedBy === me.id;
   const days = Math.floor((Date.now() - new Date(r.createdAt).getTime()) / 86_400_000);
 
@@ -86,7 +86,7 @@ function RequestCard({ r }: { r: StatusChangeRequest }) {
         description="The query moves to Closed and your decision is written to the audit log."
         confirmLabel="Approve closure"
         optional
-        onConfirm={(reason) => { const res = decide(r.id, true, reason); return res.ok ? null : res.error; }}
+        onConfirm={async (reason) => { const res = await decide(r.id, true, reason); return res.ok ? null : res.error; }}
         onClose={() => setDialog(null)}
       />
       <ReasonDialog
@@ -95,7 +95,7 @@ function RequestCard({ r }: { r: StatusChangeRequest }) {
         description="Say what is still missing. The auditor sees this reason on the query and by email."
         confirmLabel="Return to auditor"
         danger
-        onConfirm={(reason) => { const res = decide(r.id, false, reason); return res.ok ? null : res.error; }}
+        onConfirm={async (reason) => { const res = await decide(r.id, false, reason); return res.ok ? null : res.error; }}
         onClose={() => setDialog(null)}
       />
     </article>
@@ -177,7 +177,8 @@ function segmentTone(a: LinkState, b: LinkState | undefined, adjacent: boolean):
 }
 
 export function AuditLogPage() {
-  const { state, userName, verifyLogged } = useStore();
+  const { state, userName, verifyLogged, mode, verifyOnServer } = useStore();
+  const [verifyError, setVerifyError] = useState<string | null>(null);
   const [actor, setActor] = useState("");
   const [action, setAction] = useState("");
   const [object, setObject] = useState("");
@@ -210,8 +211,21 @@ export function AuditLogPage() {
   const brokenAt = result && !result.ok ? result.brokenAt : null;
 
   // The check itself is instant; the walk along the chain shows what it did, one link at a time.
-  const verify = () => {
-    const r = verifyChain(state.audit);
+  const verify = async () => {
+    let r: ReturnType<typeof verifyChain>;
+    setVerifyError(null);
+    if (mode === "api") {
+      // The server recomputes every fingerprint from the database and logs the check itself.
+      setRunning(true);
+      const s = await verifyOnServer();
+      if (!s) {
+        setRunning(false);
+        return setVerifyError("The check could not run. Try again, and tell ICT if it keeps failing.");
+      }
+      r = s.ok ? { ok: true, checked: s.checked } : { ok: false, brokenAt: s.brokenAt ?? 1 };
+    } else {
+      r = verifyChain(state.audit);
+    }
     const stop = r.ok ? total : r.brokenAt;
     const finish = () => {
       setCheckedTo(stop);
@@ -271,6 +285,7 @@ export function AuditLogPage() {
           <Button kind="primary" onClick={verify} disabled={running}>{running ? "Verifying" : result ? "Verify again" : "Verify chain"}</Button>
         </div>
 
+        {verifyError && <div className="mt-4"><Notice tone="error">{verifyError}</Notice></div>}
         {/* The whole chain, oldest first. Each link fills in as it is checked. */}
         <ol className="mt-6 flex flex-wrap items-center gap-y-3 pl-2" aria-hidden>
           {state.audit.map((e, i) => {
@@ -353,7 +368,7 @@ export function AuditLogPage() {
                   {ACTION_LABEL[e.action] ?? e.action}
                   <span className="block text-[0.8125rem] text-muted">{e.objectType}</span>
                 </td>
-                <td className="min-w-[12rem] max-w-[18rem] text-[0.8125rem] text-muted">{describeChange(e)}</td>
+                <td className="min-w-[12rem] max-w-[18rem] text-[0.8125rem] text-muted [overflow-wrap:anywhere]">{describeChange(e)}</td>
                 <td className="min-w-[12rem] max-w-[20rem] text-[0.8125rem]">{e.reason || <span className="text-faint">None</span>}</td>
                 <td className="whitespace-nowrap font-mono text-xs" title={`entry ${e.entryHash}\nprev ${e.prevHash}`}>
                   {/* Hovering a row lights up its seal and the fingerprint it is sealed to in the row below. */}
@@ -394,7 +409,7 @@ function LinkNode({ state }: { state: LinkState }) {
 
 export function ReportsPage() {
   const { visibleQueries, userName, exportQueries } = useStore();
-  const [flash, setFlash] = useState<string | null>(null);
+  const [flash, setFlash] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   const overdue = visibleQueries.filter((q) => daysOverdue(q) > 0).sort((a, b) => daysOverdue(b) - daysOverdue(a));
   const counts = STATUSES.map((s) => [s, visibleQueries.filter((q) => q.status === s).length] as const);
   const max = Math.max(...counts.map(([, n]) => n), 1);
@@ -405,9 +420,12 @@ export function ReportsPage() {
       <PageHeader
         title="Reports"
         lede="Where every query stands, and which are late. Only the CIA can export, and every export is written to the audit log."
-        actions={<Button kind="primary" onClick={() => { exportQueries(visibleQueries); setFlash(`Exported ${visibleQueries.length} queries as CSV. The export is recorded in the audit log.`); }}>Export all queries as CSV</Button>}
+        actions={<Button kind="primary" onClick={async () => {
+          const r = await exportQueries(visibleQueries);
+          setFlash(r.ok ? { tone: "ok", text: `Exported ${visibleQueries.length} queries as CSV. The export is recorded in the audit log.` } : { tone: "error", text: r.error });
+        }}>Export all queries as CSV</Button>}
       />
-      {flash && <div className="mb-4"><Notice tone="ok">{flash}</Notice></div>}
+      {flash && <div className="mb-4"><Notice tone={flash.tone}>{flash.text}</Notice></div>}
       <div className="grid gap-5 lg:grid-cols-[22rem_minmax(0,1fr)]">
         {/* A ledger with a total line under the accountant's double rule. */}
         <Panel title="By status">
@@ -580,7 +598,7 @@ export function CompliancePage() {
         confirmLabel={dialog?.approve ? "Approve for 2 hours" : "Refuse"}
         danger={!dialog?.approve}
         optional={dialog?.approve}
-        onConfirm={(reason) => { const r = decideAccess(dialog!.id, dialog!.approve, reason); return r.ok ? null : r.error; }}
+        onConfirm={async (reason) => { const r = await decideAccess(dialog!.id, dialog!.approve, reason); return r.ok ? null : r.error; }}
         onClose={() => setDialog(null)}
       />
     </>

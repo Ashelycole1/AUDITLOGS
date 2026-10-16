@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button, Check, Empty, Label, Notice, PageHeader, Panel, ReasonDialog, Table, cx } from "../components";
 import { fmtDateTime } from "../lib/rules";
-import { useMe, useStore } from "../store";
+import { useMe, useStore } from "../storeTypes";
 import type { Role } from "../types";
 
 const ROLES: Role[] = ["PIA", "CIA", "IA", "CEO", "ICT"];
@@ -22,9 +22,9 @@ export function UsersPage() {
   const [dialog, setDialog] = useState<{ kind: "toggle"; userId: string } | null>(null);
   const target = state.users.find((u) => u.id === dialog?.userId);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const r = createUser(form);
+    const r = await createUser(form);
     if (!r.ok) return setError(r.error);
     setError(null);
     setFlash(`Account created for ${form.fullName}. Sign-in codes go to their work email.`);
@@ -89,8 +89,8 @@ export function UsersPage() {
         description={target?.isActive ? "They are signed out and cannot sign in. Their history stays in the log." : "They can sign in again with their password and an emailed code."}
         confirmLabel={target?.isActive ? "Disable account" : "Enable account"}
         danger={dialog?.kind === "toggle" && target?.isActive}
-        onConfirm={(reason) => {
-          const r = setUserActive(dialog!.userId, !target!.isActive, reason);
+        onConfirm={async (reason) => {
+          const r = await setUserActive(dialog!.userId, !target!.isActive, reason);
           return r.ok ? null : r.error;
         }}
         onClose={() => setDialog(null)}
@@ -162,7 +162,7 @@ export function SystemPage() {
         title="Request access to audit content"
         description="The CIA approves or refuses. Access lasts 2 hours and everything you open is logged."
         confirmLabel="Send request"
-        onConfirm={(reason) => { const r = requestAccess(reason); return r.ok ? null : r.error; }}
+        onConfirm={async (reason) => { const r = await requestAccess(reason); return r.ok ? null : r.error; }}
         onClose={() => setOpen(false)}
       />
     </>

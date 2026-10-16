@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Button, Check, Empty, Notice, PageHeader, Panel, Ref, Table, cx } from "../components";
 import { fmtDateTime } from "../lib/rules";
 import { sha256 } from "../lib/sha256";
-import { useStore } from "../store";
+import { useStore } from "../storeTypes";
 import type { ImportRow } from "../types";
 
 // Column mapping is configurable until the client supplies a template (design.md 4, system.md open items).
@@ -77,13 +77,16 @@ function validate(text: string, existing: Set<string>): { rows: ImportRow[]; err
 }
 
 interface Preview {
+  /** Set when the server holds the preview (API mode). */
+  batchId?: string;
   filename: string;
   hash: string;
   rows: ImportRow[];
 }
 
 export function ImportPage() {
-  const { state, confirmImport, cancelImport } = useStore();
+  const { state, mode, confirmImport, cancelImport, uploadImport, confirmBatch, cancelBatch } = useStore();
+  const [busy, setBusy] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -102,8 +105,27 @@ export function ImportPage() {
     setPreview({ filename, hash: sha256(text), rows: res.rows });
   };
 
+  // API: the server reads and checks the file, Excel included, and keeps it encrypted with its fingerprint.
+  const uploadToServer = async (f: File) => {
+    setDone(null);
+    setBusy(true);
+    const r = await uploadImport(f);
+    setBusy(false);
+    if (input.current) input.current.value = "";
+    if (!r.ok) {
+      setPreview(null);
+      return setError(r.error);
+    }
+    setError(null);
+    setPreview(r.preview!);
+  };
+
+  const loadSample = () =>
+    mode === "api" ? uploadToServer(new File([SAMPLE], "sample-final-queries.csv", { type: "text/csv" })) : load("sample-final-queries.csv", SAMPLE);
+
   const onFile = async (f: File | undefined) => {
     if (!f) return;
+    if (mode === "api") return uploadToServer(f);
     const ext = f.name.split(".").pop()?.toLowerCase();
     if (ext === "xlsx") return setError("Excel files are read on the server. This preview reads CSV only; save the sheet as CSV or load the sample.");
     if (ext !== "csv") return setError("Upload the final queries as an Excel (.xlsx) or CSV file.");
@@ -148,8 +170,8 @@ export function ImportPage() {
             <p className="mt-1 text-sm text-muted">Excel or CSV. Nothing is imported until you confirm.</p>
             <input ref={input} id="import-file" type="file" accept=".csv,.xlsx" className="sr-only" onChange={(e) => onFile(e.target.files?.[0])} />
             <div className="mt-5 flex flex-wrap justify-center gap-2">
-              <Button kind="primary" onClick={() => input.current?.click()}>Choose file</Button>
-              <Button kind="secondary" onClick={() => load("sample-final-queries.csv", SAMPLE)}>Load sample file</Button>
+              <Button kind="primary" disabled={busy} onClick={() => input.current?.click()}>{busy ? "Checking the file" : "Choose file"}</Button>
+              <Button kind="secondary" disabled={busy} onClick={loadSample}>Load sample file</Button>
             </div>
             {error && <div className="mt-5 w-full max-w-lg text-left"><Notice tone="error">{error}</Notice></div>}
           </div>
@@ -206,7 +228,13 @@ export function ImportPage() {
                   <td className="whitespace-nowrap">{r.deadline}</td>
                   <td>{r.department}</td>
                   <td className="min-w-[12rem]">
-                    {r.errors.length ? <ul className="space-y-0.5 text-danger">{r.errors.map((e) => <li key={e}>{e}</li>)}</ul> : <span className="text-faint">None</span>}
+                    {r.errors.length ? (
+                      <ul className="space-y-0.5 text-danger">{r.errors.map((e) => <li key={e}>{e}</li>)}</ul>
+                    ) : r.warnings?.length ? (
+                      <ul className="space-y-0.5 text-warn">{r.warnings.map((w) => <li key={w}>{w}</li>)}</ul>
+                    ) : (
+                      <span className="text-faint">None</span>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -219,12 +247,25 @@ export function ImportPage() {
               {blocking ? `${blocking} ${blocking === 1 ? "line needs" : "lines need"} fixing before you can confirm.` : "Once confirmed, you cannot edit these queries."}
             </p>
             <div className="flex flex-wrap gap-2">
-              <Button kind="quiet" onClick={() => { cancelImport(preview.filename, preview.hash, preview.rows.length); setPreview(null); setProblemsOnly(false); }}>Cancel import</Button>
+              <Button
+                kind="quiet"
+                disabled={busy}
+                onClick={async () => {
+                  if (preview.batchId) await cancelBatch(preview.batchId);
+                  else cancelImport(preview.filename, preview.hash, preview.rows.length);
+                  setPreview(null);
+                  setProblemsOnly(false);
+                }}
+              >
+                Cancel import
+              </Button>
               <Button
                 kind="primary"
-                disabled={blocking > 0}
-                onClick={() => {
-                  const r = confirmImport(preview.filename, preview.hash, preview.rows);
+                disabled={blocking > 0 || busy}
+                onClick={async () => {
+                  setBusy(true);
+                  const r = preview.batchId ? await confirmBatch(preview.batchId) : await confirmImport(preview.filename, preview.hash, preview.rows);
+                  setBusy(false);
                   if (!r.ok) return setError(r.error);
                   setDone(`Imported ${preview.rows.length} queries from ${preview.filename}.`);
                   setPreview(null);
