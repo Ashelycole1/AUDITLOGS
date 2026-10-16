@@ -13,7 +13,13 @@ def scoped_models() -> set:
     return {apps.get_model(label) for label in SCOPED_MODEL_LABELS}
 
 
-SCOPED_MODEL_LABELS = ["queries.Query"]
+SCOPED_MODEL_LABELS = [
+    "queries.Query",
+    "queries.QueryRevision",
+    "followup.FollowUpActivity",
+    "followup.Evidence",
+    "workflow.StatusChangeRequest",
+]
 
 
 class ScopedQuerysetMixin:

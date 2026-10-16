@@ -73,10 +73,14 @@ def password_only_client(make_user):
 
 
 @pytest.fixture(autouse=True)
-def import_dir(settings, tmp_path):
-    """Uploaded source files go to a throwaway folder in tests."""
+def file_storage(settings, tmp_path):
+    """Uploaded files go to throwaway folders, encrypted with a key made for this test."""
+    from cryptography.fernet import Fernet
+
     settings.IMPORT_DIR = str(tmp_path / "imports")
-    return settings.IMPORT_DIR
+    settings.EVIDENCE_DIR = str(tmp_path / "evidence")
+    settings.FILE_ENCRYPTION_KEY = Fernet.generate_key()
+    return tmp_path
 
 
 @pytest.fixture

@@ -11,6 +11,7 @@ from django.urls import reverse
 from openpyxl import Workbook
 
 from apps.auditlog.models import AuditLog
+from apps.core.filestore import read_encrypted
 from apps.imports.models import ImportBatch
 from apps.queries.models import Query, Status
 
@@ -62,7 +63,8 @@ def test_source_file_is_kept_with_its_fingerprint(client_for):
     response = upload(client_for("PIA"), SimpleUploadedFile("q.csv", content))
     batch = ImportBatch.objects.get(pk=response.json()["id"])
     assert batch.source_sha256 == hashlib.sha256(content).hexdigest()
-    assert Path(batch.source_file_path).read_bytes() == content
+    assert content not in Path(batch.source_file_path).read_bytes()  # encrypted at rest
+    assert read_encrypted(batch.source_file_path, batch.source_sha256) == content
 
 
 def test_problems_are_listed_per_row_and_block_confirmation(client_for, make_query):

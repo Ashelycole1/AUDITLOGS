@@ -36,6 +36,21 @@ MATRIX = [
     ("queries-list", "get", None, {"PIA", "CIA", "IA"}),
     # An IA who is not the assignee gets 404 here, which the scoping tests check.
     ("queries-detail", "get", "query", {"PIA", "CIA", "IA"}),
+    ("queries-detail", "patch", "query", {"CIA"}),
+    ("queries-assign", "post", "query", {"CIA"}),
+    ("queries-bulk-assign", "post", None, {"CIA"}),
+    ("queries-revisions", "get", "query", {"PIA", "CIA", "IA"}),
+    ("queries-history", "get", "query", {"PIA", "CIA", "IA"}),
+    ("queries-activities", "get", "query", {"PIA", "CIA", "IA"}),
+    ("queries-activities", "post", "query", {"CIA", "IA"}),
+    ("queries-evidence", "get", "query", {"PIA", "CIA", "IA"}),
+    ("queries-evidence", "post", "query", {"CIA", "IA"}),
+    ("queries-propose-status", "post", "query", {"IA"}),
+    ("queries-change-status", "post", "query", {"CIA"}),
+    ("evidence-download", "get", "evidence", {"PIA", "CIA", "IA"}),
+    ("status-requests-list", "get", None, {"CIA"}),
+    ("status-requests-approve", "post", "request", {"CIA"}),
+    ("status-requests-reject", "post", "request", {"CIA"}),
 ]
 
 # Reachable without signing in. Each says nothing about data.
@@ -45,7 +60,41 @@ IDS = [f"{m[1]} {m[0]}" for m in MATRIX]
 
 
 @pytest.fixture
-def url_for(make_user, make_batch, make_query):
+def make_evidence(make_user):
+    from apps.followup.models import Evidence
+
+    def _make(query):
+        return Evidence.objects.create(
+            query=query,
+            uploaded_by=make_user("IA"),
+            original_filename="a.txt",
+            stored_path="missing",
+            sha256="0" * 64,
+            size_bytes=1,
+            content_type="text/plain",
+        )
+
+    return _make
+
+
+@pytest.fixture
+def make_request(make_user):
+    from apps.workflow.models import StatusChangeRequest
+
+    def _make(query):
+        return StatusChangeRequest.objects.create(
+            query=query,
+            from_status="In Progress",
+            to_status="Proposed for Closure",
+            proposed_by=make_user("IA"),
+            proposed_reason="Matrix test proposal",
+        )
+
+    return _make
+
+
+@pytest.fixture
+def url_for(make_user, make_batch, make_query, make_evidence, make_request):
     def _url(name: str, target: str | None) -> str:
         if target is None:
             return reverse(name)
@@ -53,6 +102,8 @@ def url_for(make_user, make_batch, make_query):
             "user": lambda: make_user("IA"),
             "batch": lambda: make_batch("Previewed"),
             "query": make_query,
+            "evidence": lambda: make_evidence(make_query()),
+            "request": lambda: make_request(make_query()),
         }[target]()
         return reverse(name, kwargs={"pk": obj.pk})
 

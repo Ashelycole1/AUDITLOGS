@@ -23,7 +23,9 @@ def is_fully_authenticated(user) -> bool:
 
 
 def roles_for(view, method: str) -> Iterable[str]:
-    roles = getattr(view, "allowed_roles", None)
+    # A viewset may narrow roles for one action, e.g. reading is wider than editing.
+    action_roles = getattr(view, "action_roles", None) or {}
+    roles = action_roles.get(getattr(view, "action", None), getattr(view, "allowed_roles", None))
     if roles is None:
         return ()
     if isinstance(roles, Mapping):

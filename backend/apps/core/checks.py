@@ -18,6 +18,8 @@ def production_problems() -> list[str]:
         problems.append("Session and CSRF cookies must be secure.")
     if not settings.EMAIL_HOST or settings.EMAIL_BACKEND != "django.core.mail.backends.smtp.EmailBackend":
         problems.append("SMTP_HOST is not set, so sign-in PINs cannot be sent.")
+    if not settings.FILE_ENCRYPTION_KEY:
+        problems.append("EVIDENCE_ENCRYPTION_KEY is not set, so evidence cannot be stored.")
     return problems
 
 

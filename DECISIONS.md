@@ -75,3 +75,25 @@ Date, decision, reason. Newest last.
     - The limits are 10 MB and 5,000 rows.
     - PDF and Word are refused with a message for now. The lower-reliability fallback comes later.
     - **Open:** import source files are stored as plain files outside the web root. Encrypting them at rest, like evidence, comes with the evidence task. That needs `cryptography`, which architecture.md names.
+
+## 2026-10-16: Core workflow (Phase 3)
+
+17. **The status is guarded at the model level.**
+    - `Query.save()` and `QuerySet.update()` refuse any status change unless it comes through `apps.workflow.services.transition`, which holds the design.md 5 table.
+    - A test walks every from/to pair for every role and checks only the table's moves pass.
+    - A CIA direct change may go to any status except Proposed, which only an auditor's proposal can create.
+    - A direct change needs a reason and is logged as `status.direct` for the CIA Activity view.
+    - A direct change is refused while a closure proposal is waiting.
+    - Assigned, In Progress and Returned need an auditor.
+
+18. **No self-approval is checked by person, not role.** Whoever proposed a closure can never decide it, including an IA who later holds acting-CIA rights.
+
+19. **Follow-up is append-only.** Notes, responses and evidence can't be edited or deleted (model and queryset guards). An auditor's first entry moves Assigned or Returned to In Progress. CIA entries don't change status.
+
+20. **Encryption at rest for evidence and import files.**
+    - Files use Fernet (`cryptography`, named in architecture.md) with `EVIDENCE_ENCRYPTION_KEY`, under random names outside the web root. This closes the open item in decision 16.
+    - Every download decrypts, checks the SHA-256, is logged as `evidence.download`, and is served as an attachment with `nosniff`. A file that fails the check is refused.
+    - In dev, the key lives in `backend/var/dev-file.key` (git-ignored). Production refuses to start without the variable.
+    - **Open:** a file write that happens before a failed transaction leaves an orphan encrypted file. It's harmless, but a cleanup job belongs with retention.
+
+21. **Reassignment is all-or-nothing in bulk** and needs a reason, as a first assignment doesn't. The old IA gets 404 at once, and the new IA sees the full history through `GET queries/{id}/history`.

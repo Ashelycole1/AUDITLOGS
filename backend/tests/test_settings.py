@@ -16,6 +16,7 @@ SAFE = {
     "CSRF_COOKIE_SECURE": True,
     "EMAIL_HOST": "mail.example.ug",
     "EMAIL_BACKEND": "django.core.mail.backends.smtp.EmailBackend",
+    "FILE_ENCRYPTION_KEY": b"k" * 44,
 }
 
 
@@ -31,6 +32,7 @@ def test_safe_production_settings_pass():
         {"DEBUG": True},
         {"SECRET_KEY_FROM_ENV": False},
         {"EMAIL_HOST": ""},
+        {"FILE_ENCRYPTION_KEY": None},
         {"DATABASES": {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": "x"}}},
         {"ALLOWED_HOSTS": ["*"]},
         {"SESSION_COOKIE_SECURE": False},

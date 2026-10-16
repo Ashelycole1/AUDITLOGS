@@ -1,7 +1,5 @@
 """Upload, preview, confirm and cancel (architecture.md 5.4). Every step writes its audit entry."""
 
-import hashlib
-import uuid
 from pathlib import Path
 
 from django.conf import settings
@@ -9,6 +7,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.auditlog.services import record
+from apps.core.filestore import save_encrypted, sha256
 from apps.queries.models import Query, Status
 
 from .models import BatchStatus, ImportBatch, ImportRow
@@ -19,15 +18,6 @@ ALLOWED_SUFFIXES = (".csv", ".xlsx")
 
 class ImportStateError(Exception):
     """The batch is not in a state where this step is allowed."""
-
-
-def _store_source(content: bytes, suffix: str) -> Path:
-    """Keep the source file under a random name, outside any web root."""
-    folder = Path(settings.IMPORT_DIR)
-    folder.mkdir(parents=True, exist_ok=True)
-    path = folder / f"{uuid.uuid4().hex}{suffix}"
-    path.write_bytes(content)
-    return path
 
 
 def existing_references() -> set[str]:
@@ -47,13 +37,13 @@ def upload(*, actor, filename: str, content: bytes, ip=None) -> ImportBatch:
         raise ImportFileError(f"The file is larger than {settings.IMPORT_MAX_BYTES // (1024 * 1024)} MB.")
 
     rows = validate(parse_rows(read_table(filename, content)), existing_references(), timezone.localdate())
-    digest = hashlib.sha256(content).hexdigest()
-    path = _store_source(content, suffix)
+    digest = sha256(content)
+    path = save_encrypted(content, settings.IMPORT_DIR)
     errors = sum(1 for r in rows if r.errors)
     batch = ImportBatch.objects.create(
         imported_by=actor,
         source_filename=Path(filename).name[:255],
-        source_file_path=str(path),
+        source_file_path=path,
         source_sha256=digest,
         row_count=len(rows),
         error_count=errors,

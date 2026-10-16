@@ -75,6 +75,16 @@ Updated at the end of every session and whenever work is paused (see `agent_work
     - The source file is kept with its SHA-256. PIA only.
   - 183 tests passing on SQLite, lint clean.
 
+- 2026-10-16, **Phase 3 (core workflow) done:**
+  - CIA edits with revisions, and the original is kept.
+  - Assign, reassign and bulk assign.
+  - Notes and management responses (append-only).
+  - Encrypted evidence upload and download, with the import source files now encrypted too.
+  - The workflow service with the design.md 5 table. Status changes outside it are refused by the model.
+  - Closure proposal, then approve or return, with no self-approval. Direct CIA changes need a reason and are flagged.
+  - Approvals inbox (`/status-requests`) and per-query history.
+  - 317 tests passing, including the end-to-end import-to-Closed test, a test of every transition pair for every role, and IA isolation on every nested route.
+
 ### Not done
 - Nothing is committed yet. The repo has no commits on `main`.
 - **Not run against PostgreSQL yet.** Docker and Postgres aren't installed on this machine. The Postgres trigger SQL, advisory lock, `docker-compose.dev.yml` and CI job are written but unexecuted. CI or a Docker machine will be the first real run.
@@ -88,8 +98,8 @@ Updated at the end of every session and whenever work is paused (see `agent_work
 
 ### Next (proposed)
 1. Owner: confirm the extra dependencies in `DECISIONS.md` item 2 (`openpyxl` is named in system.md).
-2. Phase 3: assignment and reassignment, follow-up and encrypted evidence, the workflow service (transitions, propose, approve or return, no self-approval), and direct CIA changes with revisions.
-3. Wire the frontend to the API, starting with sign-in (password, then PIN) and import.
+2. Wire the frontend to the API: sign-in (password, then PIN), then queries, import, follow-up and approvals.
+3. Phase 4: dashboard and overdue endpoints (CEO summary fields), CIA Activity view, email notifications, compliance (retention, breach register, subject search and export, break-glass).
 4. First run against PostgreSQL (CI or a machine with Docker).
 
 ### Open questions (system.md section 9, still unanswered)
