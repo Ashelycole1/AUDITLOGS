@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { Button, Empty, Label, Notice, PageHeader, Panel, ReasonDialog, Ref, RiskTag, StatusBadge, Table, cx } from "../components";
 import { STATUSES, daysOverdue, fmtDate } from "../lib/rules";
 import { useMe, useStore } from "../store";
@@ -12,7 +12,9 @@ export default function QueriesPage() {
   const [risk, setRisk] = useState<Risk | "">("");
   const [assignee, setAssignee] = useState("");
   const [overdueOnly, setOverdueOnly] = useState(false);
-  const [search, setSearch] = useState("");
+  const [params] = useSearchParams();
+  const [search, setSearch] = useState(params.get("q") ?? "");
+  useEffect(() => setSearch(params.get("q") ?? ""), [params]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkTo, setBulkTo] = useState("");
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -115,7 +117,7 @@ export default function QueriesPage() {
             </div>
           ) : <div className="hidden lg:block" />}
           <label className="flex items-center gap-2 pb-2 text-sm">
-            <input type="checkbox" className="size-4 accent-[#1f5741]" checked={overdueOnly} onChange={(e) => setOverdueOnly(e.target.checked)} />
+            <input type="checkbox" className="size-4 accent-[#256abf]" checked={overdueOnly} onChange={(e) => setOverdueOnly(e.target.checked)} />
             Overdue only
           </label>
         </div>
@@ -139,7 +141,7 @@ export default function QueriesPage() {
                 key="all"
                 type="checkbox"
                 aria-label="Select all unassigned"
-                className="size-4 accent-[#1f5741]"
+                className="size-4 accent-[#256abf]"
                 disabled={!selectable.length}
                 checked={selectable.length > 0 && selectable.every((q) => selected.has(q.id))}
                 onChange={(e) => setSelected(e.target.checked ? new Set(selectable.map((q) => q.id)) : new Set())}
@@ -185,7 +187,7 @@ function Row({ q, showAssignee, selectable, selected, onToggle, assigneeName }: 
       {selectable && (
         <td className="w-10">
           {!q.currentAssignee && (
-            <input type="checkbox" className="mt-1 size-4 accent-[#1f5741]" checked={selected} onChange={onToggle} aria-label={`Select ${q.reference}`} />
+            <input type="checkbox" className="mt-1 size-4 accent-[#256abf]" checked={selected} onChange={onToggle} aria-label={`Select ${q.reference}`} />
           )}
         </td>
       )}

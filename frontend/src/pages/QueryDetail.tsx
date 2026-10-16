@@ -46,9 +46,9 @@ function Workspace({ q }: { q: Query }) {
         <svg viewBox="0 0 16 16" className="size-3.5" aria-hidden><path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
         {isIa ? "My queries" : "Queries"}
       </Link>
-      <header className="mb-6 mt-2 border-b-[3px] border-double border-ink/60 pb-5">
-        <p className="font-mono text-[1.0625rem] font-medium text-lake">{q.reference}</p>
-        <h1 className="mt-1.5 max-w-[30ch] text-balance text-[2rem] font-semibold leading-[1.08] tracking-[-0.03em] sm:text-[2.5rem]">{q.title}</h1>
+      <header className="mb-6 mt-2">
+        <p className="font-mono text-sm text-lake-deep">{q.reference}</p>
+        <h1 className="mt-1 max-w-[40ch] text-balance text-2xl font-semibold leading-tight tracking-[-0.02em] sm:text-[1.75rem]">{q.title}</h1>
         <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2">
           <StatusBadge status={q.status} />
           <RiskTag risk={q.riskRatingCurrent} />
@@ -180,7 +180,7 @@ function FollowUp({ q }: { q: Query }) {
                 role="radio"
                 aria-checked={kind === k}
                 onClick={() => setKind(k)}
-                className={cx("min-h-9 rounded px-3 transition-colors", kind === k ? "bg-spine font-medium text-sheet" : "text-muted hover:text-ink")}
+                className={cx("min-h-9 rounded px-3 transition-colors", kind === k ? "bg-lake font-medium text-white" : "text-muted hover:text-ink")}
               >
                 {k === "Note" ? "Note" : "Management response"}
               </button>
@@ -211,7 +211,7 @@ function FollowUp({ q }: { q: Query }) {
                 {it.kind === "status" && it.status ? (
                   <StatusMark status={it.status} />
                 ) : it.kind === "response" ? (
-                  <span className="size-2.5 bg-spine" />
+                  <span className="size-2.5 rounded-sm bg-lake" />
                 ) : it.kind === "evidence" ? (
                   <span className="size-2.5 rotate-45 border-[1.5px] border-lake" />
                 ) : (
@@ -298,7 +298,7 @@ function PendingRequest({ requestId }: { requestId: string }) {
   const own = r.proposedBy === me.id;
 
   return (
-    <Panel title="Waiting for the CIA" className="ring-1 ring-warn/25">
+    <Panel title="Waiting for the CIA" className="!border-[#fedf89] !bg-warn-wash/40">
       <p className="text-sm text-muted">
         {userName(r.proposedBy)} proposed closure on {fmtDateTime(r.createdAt)}.
       </p>

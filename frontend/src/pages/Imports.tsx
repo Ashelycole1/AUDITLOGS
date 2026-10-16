@@ -164,7 +164,7 @@ export function ImportPage() {
           <p className="mt-2 text-[0.8125rem] text-muted">Risk is High, Medium or Low. Deadlines are written YYYY-MM-DD. The file and its fingerprint are kept with the batch.</p>
         </Panel>
       ) : (
-        <section className="sheet rounded-[10px]">
+        <section className="sheet rounded-xl">
           <header className="flex flex-wrap items-end justify-between gap-4 border-b border-line px-5 py-4 sm:px-6">
             <div className="min-w-0">
               <h2 className="truncate text-[1.0625rem] font-semibold">{preview.filename}</h2>
@@ -181,7 +181,7 @@ export function ImportPage() {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <Notice tone="error">Fix the lines marked with a cross in the file, then upload it again. The file is imported whole or not at all.</Notice>
                 <label className="flex min-h-10 items-center gap-2 text-sm">
-                  <input type="checkbox" className="size-4 accent-[#1f5741]" checked={problemsOnly} onChange={(e) => setProblemsOnly(e.target.checked)} />
+                  <input type="checkbox" className="size-4 accent-[#256abf]" checked={problemsOnly} onChange={(e) => setProblemsOnly(e.target.checked)} />
                   Show only lines with problems
                 </label>
               </div>

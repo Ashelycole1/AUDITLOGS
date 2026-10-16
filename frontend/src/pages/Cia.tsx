@@ -48,7 +48,7 @@ function RequestCard({ r }: { r: StatusChangeRequest }) {
   const days = Math.floor((Date.now() - new Date(r.createdAt).getTime()) / 86_400_000);
 
   return (
-    <article className="sheet overflow-hidden rounded-[10px]">
+    <article className="sheet overflow-hidden rounded-xl">
       <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2 border-b border-line px-5 py-4 sm:px-6">
         <div className="min-w-0 max-w-[60ch]">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1"><Ref>{q.reference}</Ref><RiskTag risk={q.riskRatingCurrent} /></div>
@@ -69,7 +69,7 @@ function RequestCard({ r }: { r: StatusChangeRequest }) {
         </ul>
       </div>
 
-      <footer className="flex flex-wrap items-center justify-end gap-2 border-t border-line bg-paper/40 px-5 py-3.5 sm:px-6">
+      <footer className="flex flex-wrap items-center justify-end gap-2 border-t border-line bg-subtle px-5 py-3.5 sm:px-6">
         {own ? (
           <p className="mr-auto text-sm text-muted">You cannot decide your own proposal. Another CIA must decide it.</p>
         ) : (
@@ -121,7 +121,7 @@ function DecidedRow({ r }: { r: StatusChangeRequest }) {
   );
 }
 
-const ACTION_LABEL: Record<string, string> = {
+export const ACTION_LABEL: Record<string, string> = {
   "auth.login": "Signed in",
   "auth.logout": "Signed out",
   "auth.login_failed": "Failed sign-in",
@@ -254,7 +254,7 @@ export function AuditLogPage() {
         lede="Every action in the system, in order. Entries cannot be edited or deleted. Each one is sealed with the fingerprint of the one before it, so changing any entry breaks every link after it."
       />
 
-      <section className={cx("sheet mb-6 rounded-[10px] p-5 sm:p-6", result && !result.ok && "!border-danger/50")}>
+      <section className={cx("sheet mb-6 rounded-xl p-5 sm:p-6", result && !result.ok && "!border-danger/50")}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-[58ch]" aria-live="polite">
             <h2 className={cx("text-[1.375rem] font-semibold tracking-[-0.02em]", result && !result.ok && "text-danger", result?.ok && "text-good")}>{verdict}</h2>
@@ -418,14 +418,14 @@ export function ReportsPage() {
                 <tr key={s} className="border-b border-line last:border-0">
                   <th scope="row" className="py-2.5 pr-3 text-left font-normal"><StatusBadge status={s} /></th>
                   <td className="w-24 py-2.5" aria-hidden>
-                    <div className="h-1.5 bg-ink/6"><div className="h-full bg-spine/70" style={{ width: `${(n / max) * 100}%` }} /></div>
+                    <div className="h-1.5 bg-ink/6"><div className="h-full bg-[#2a78d6] rounded-r-[3px]" style={{ width: `${(n / max) * 100}%` }} /></div>
                   </td>
                   <td className="w-10 py-2.5 text-right font-semibold">{n}</td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
-              <tr className="border-t-[3px] border-double border-ink/60">
+              <tr className="border-t border-rule">
                 <th scope="row" className="pt-2.5 text-left font-semibold">Total</th>
                 <td />
                 <td className="pt-2.5 text-right font-semibold">{visibleQueries.length}</td>

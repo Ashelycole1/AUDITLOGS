@@ -1,38 +1,46 @@
 import { useEffect, useState } from "react";
-import { BrowserRouter, Navigate, NavLink, Outlet, Route, Routes } from "react-router-dom";
-import { cx, Wordmark } from "./components";
+import { BrowserRouter, Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { Avatar, cx, Wordmark } from "./components";
+import { Icon, type IconName } from "./icons";
 import { useStore } from "./store";
 import type { Role } from "./types";
 import Login from "./pages/Login";
+import DashboardPage from "./pages/Dashboard";
 import QueriesPage from "./pages/Queries";
 import QueryDetail from "./pages/QueryDetail";
 import { ImportPage, BatchesPage } from "./pages/Imports";
 import { ApprovalsPage, AuditLogPage, ReportsPage, CompliancePage } from "./pages/Cia";
-import { OverviewPage, CiaActivityPage } from "./pages/Oversight";
+import { CiaActivityPage } from "./pages/Oversight";
 import { UsersPage, SystemPage } from "./pages/Ict";
 
-const NAV: Record<Role, { to: string; label: string }[]> = {
+type NavItem = { to: string; label: string; icon: IconName };
+
+const NAV: Record<Role, NavItem[]> = {
   PIA: [
-    { to: "/import", label: "Import" },
-    { to: "/batches", label: "Batches" },
-    { to: "/queries", label: "All queries" },
-    { to: "/overview", label: "Progress" },
+    { to: "/dashboard", label: "Dashboard", icon: "dashboard" },
+    { to: "/import", label: "Import", icon: "upload" },
+    { to: "/batches", label: "Batches", icon: "layers" },
+    { to: "/queries", label: "All queries", icon: "queries" },
   ],
   CIA: [
-    { to: "/queries", label: "Queries" },
-    { to: "/approvals", label: "Approvals" },
-    { to: "/audit-log", label: "Audit log" },
-    { to: "/reports", label: "Reports" },
-    { to: "/compliance", label: "Compliance" },
+    { to: "/dashboard", label: "Dashboard", icon: "dashboard" },
+    { to: "/queries", label: "Queries", icon: "queries" },
+    { to: "/approvals", label: "Approvals", icon: "approvals" },
+    { to: "/audit-log", label: "Audit log", icon: "chain" },
+    { to: "/reports", label: "Reports", icon: "reports" },
+    { to: "/compliance", label: "Compliance", icon: "compliance" },
   ],
-  IA: [{ to: "/queries", label: "My queries" }],
+  IA: [
+    { to: "/dashboard", label: "Dashboard", icon: "dashboard" },
+    { to: "/queries", label: "My queries", icon: "queries" },
+  ],
   CEO: [
-    { to: "/overview", label: "Overview" },
-    { to: "/cia-activity", label: "CIA activity" },
+    { to: "/dashboard", label: "Dashboard", icon: "dashboard" },
+    { to: "/cia-activity", label: "CIA activity", icon: "activity" },
   ],
   ICT: [
-    { to: "/users", label: "Users" },
-    { to: "/system", label: "System" },
+    { to: "/users", label: "Users", icon: "users" },
+    { to: "/system", label: "System", icon: "server" },
   ],
 };
 
@@ -49,6 +57,12 @@ const IDLE_MINUTES = 30;
 function Shell() {
   const { me, logout, state } = useStore();
   const [now, setNow] = useState(Date.now());
+  const [menu, setMenu] = useState(false);
+  const [term, setTerm] = useState("");
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => setMenu(false), [location.pathname]);
 
   // Session idle timeout (design.md 14). The server enforces the same limit.
   useEffect(() => {
@@ -69,52 +83,94 @@ function Shell() {
 
   if (!me) return <Navigate to="/login" replace />;
   const pending = state.requests.filter((r) => r.decision === "Pending").length;
-  const today = new Intl.DateTimeFormat("en-UG", { timeZone: "Africa/Kampala", weekday: "long", day: "numeric", month: "long" }).format(now);
+  const today = new Intl.DateTimeFormat("en-UG", { timeZone: "Africa/Kampala", weekday: "short", day: "numeric", month: "short", year: "numeric" }).format(now);
+  const canSearch = me.role === "PIA" || me.role === "CIA" || me.role === "IA";
 
-  // The binder: a green spine with an index tab per section. The open tab joins the page it belongs to.
-  return (
-    <div className="flex min-h-dvh flex-col lg:flex-row">
-      <aside className="flex shrink-0 flex-col bg-spine text-spine-ink lg:sticky lg:top-0 lg:h-dvh lg:w-60">
-        <div className="flex items-center justify-between gap-3 px-4 pt-4 sm:px-6 lg:block lg:px-6 lg:pt-7">
-          <Wordmark onSpine />
-          <button onClick={() => logout()} className="min-h-10 rounded-md px-2 text-sm font-medium text-sheet hover:bg-white/10 lg:hidden">Sign out</button>
-          <p className="hidden text-sm text-spine-ink/75 lg:mt-1.5 lg:block">{today}</p>
-        </div>
+  const search = (e: React.FormEvent) => {
+    e.preventDefault();
+    navigate(`/queries?q=${encodeURIComponent(term.trim())}`);
+  };
 
-        <nav aria-label="Main" className="mt-4 flex gap-1 overflow-x-auto px-3 sm:px-5 lg:mt-10 lg:flex-col lg:gap-1.5 lg:overflow-visible lg:pl-4 lg:pr-0">
-          {NAV[me.role].map((n) => (
-            <NavLink
-              key={n.to}
-              to={n.to}
-              className={({ isActive }) =>
-                cx(
-                  "flex min-h-11 shrink-0 items-center justify-between gap-3 px-3.5 text-[0.9375rem] transition-colors",
-                  "rounded-t-md lg:rounded-l-md lg:rounded-tr-none",
-                  isActive ? "bg-paper font-semibold text-ink" : "text-spine-ink hover:bg-white/8 hover:text-sheet",
-                )
-              }
-            >
-              {n.label}
-              {n.to === "/approvals" && pending > 0 && (
-                <span className="min-w-6 rounded-full bg-warn-wash px-1.5 text-center text-xs font-semibold leading-5 text-warn">{pending}</span>
-              )}
-            </NavLink>
-          ))}
-        </nav>
+  const nav = (
+    <nav aria-label="Main" className="mt-8 flex flex-col gap-1 px-3">
+      {NAV[me.role].map((n) => (
+        <NavLink
+          key={n.to}
+          to={n.to}
+          className={({ isActive }) =>
+            cx(
+              "flex min-h-10 items-center gap-3 rounded-lg px-3 text-[0.9375rem] font-medium transition-colors",
+              isActive ? "bg-white/10 text-white shadow-[inset_2px_0_0_#6da7ec]" : "text-spine-ink hover:bg-white/5 hover:text-white",
+            )
+          }
+        >
+          <Icon name={n.icon} className="size-5 shrink-0" />
+          <span className="flex-1">{n.label}</span>
+          {n.to === "/approvals" && pending > 0 && <span className="min-w-6 rounded-full bg-[#fdb022] px-1.5 text-center text-xs font-semibold leading-5 text-[#3c2a03]">{pending}</span>}
+        </NavLink>
+      ))}
+    </nav>
+  );
 
-        <div className="mt-auto hidden px-6 pb-7 lg:block">
-          <div className="border-t border-white/12 pt-4">
-            <p className="font-medium leading-tight text-sheet">{me.fullName}</p>
-            <p className="mt-0.5 text-sm text-spine-ink/75">{ROLE_NAME[me.role]}</p>
-            <button onClick={() => logout()} className="mt-3 text-sm font-medium text-sheet underline decoration-white/30 underline-offset-4 hover:decoration-white">Sign out</button>
+  const sidebar = (
+    <div className="flex h-full flex-col bg-spine">
+      <div className="flex items-center justify-between px-6 pt-6">
+        <Wordmark onSpine />
+        <button type="button" onClick={() => setMenu(false)} className="grid size-10 place-items-center rounded-lg text-spine-ink hover:bg-white/10 lg:hidden" aria-label="Close menu">
+          <Icon name="close" className="size-5" />
+        </button>
+      </div>
+      {nav}
+      <div className="mt-auto border-t border-white/10 p-4">
+        <div className="flex items-center gap-3 rounded-lg p-2">
+          <Avatar name={me.fullName} className="bg-white/10 text-white" />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold text-white">{me.fullName}</p>
+            <p className="truncate text-xs text-spine-ink">{ROLE_NAME[me.role]}</p>
           </div>
+          <button type="button" onClick={() => logout()} className="grid size-10 place-items-center rounded-lg text-spine-ink hover:bg-white/10 hover:text-white" aria-label="Sign out" title="Sign out">
+            <Icon name="logout" className="size-5" />
+          </button>
         </div>
-      </aside>
+      </div>
+    </div>
+  );
 
-      <main className="min-w-0 flex-1 px-4 pb-14 pt-7 sm:px-6 lg:px-10 lg:pt-10 xl:px-14">
-        <div className="mx-auto max-w-[1180px]">
-          <Outlet />
+  return (
+    <div className="min-h-dvh lg:pl-[17rem]">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[17rem] lg:block">{sidebar}</aside>
+      {menu && (
+        <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="Menu">
+          <button type="button" className="absolute inset-0 bg-[#0c111d]/60" aria-label="Close menu" onClick={() => setMenu(false)} />
+          <div className="relative h-full w-[17rem] max-w-[85vw]">{sidebar}</div>
         </div>
+      )}
+
+      <header className="sticky top-0 z-30 border-b border-line bg-white/90 backdrop-blur">
+        <div className="mx-auto flex h-16 max-w-[1320px] items-center gap-3 px-4 sm:px-6 lg:px-8">
+          <button type="button" onClick={() => setMenu(true)} className="grid size-10 place-items-center rounded-lg text-muted hover:bg-subtle lg:hidden" aria-label="Open menu">
+            <Icon name="menu" className="size-5" />
+          </button>
+          {canSearch ? (
+            <form onSubmit={search} role="search" className="relative w-full max-w-md">
+              <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 size-[18px] -translate-y-1/2 text-faint" />
+              <input
+                type="search"
+                aria-label="Search queries"
+                placeholder="Search queries by reference or wording"
+                className="field !min-h-10 !pl-10 !shadow-none"
+                value={term}
+                onChange={(e) => setTerm(e.target.value)}
+              />
+            </form>
+          ) : <div className="flex-1" />}
+          <p className="ml-auto hidden whitespace-nowrap text-sm text-muted md:block">{today}</p>
+          <span className="hidden rounded-full bg-lake-wash px-2.5 py-1 text-xs font-semibold text-lake-deep sm:inline">{me.role}</span>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-[1320px] px-4 pb-16 pt-8 sm:px-6 lg:px-8">
+        <Outlet />
       </main>
     </div>
   );
@@ -139,6 +195,10 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route element={<Shell />}>
           <Route index element={<Home />} />
+          <Route element={<RoleRoute roles={["PIA", "CIA", "IA", "CEO"]} />}>
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/overview" element={<Navigate to="/dashboard" replace />} />
+          </Route>
           <Route element={<RoleRoute roles={["PIA", "CIA", "IA"]} />}>
             <Route path="/queries" element={<QueriesPage />} />
             <Route path="/queries/:id" element={<QueryDetail />} />
@@ -152,9 +212,6 @@ export default function App() {
             <Route path="/audit-log" element={<AuditLogPage />} />
             <Route path="/reports" element={<ReportsPage />} />
             <Route path="/compliance" element={<CompliancePage />} />
-          </Route>
-          <Route element={<RoleRoute roles={["PIA", "CEO"]} />}>
-            <Route path="/overview" element={<OverviewPage />} />
           </Route>
           <Route element={<RoleRoute roles={["CEO"]} />}>
             <Route path="/cia-activity" element={<CiaActivityPage />} />

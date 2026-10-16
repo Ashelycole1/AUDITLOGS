@@ -2,6 +2,13 @@ import { useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { Button, Label, Notice, Wordmark } from "../components";
 import { DEMO_PASSWORD, useStore } from "../store";
+import { Icon, type IconName } from "../icons";
+
+const FEATURES: { icon: IconName; title: string; body: string }[] = [
+  { icon: "upload", title: "Imported once, then locked", body: "Final queries come straight from the PIA's file and cannot be changed without a recorded reason." },
+  { icon: "approvals", title: "Closed only with independent approval", body: "Auditors propose closure. The CIA decides, and nobody can approve their own proposal." },
+  { icon: "chain", title: "A log that cannot be edited", body: "Every action is sealed into a hash-chained audit log that can be verified at any time." },
+];
 
 export default function Login() {
   const { me, state, checkPassword, completeMfa } = useStore();
@@ -30,30 +37,36 @@ export default function Login() {
   };
 
   return (
-    <div className="grid min-h-dvh lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
-      {/* The binder cover. */}
-      <section className="relative flex flex-col justify-between overflow-hidden bg-spine px-6 py-8 text-spine-ink sm:px-10 lg:px-14 lg:py-12">
+    <div className="grid min-h-dvh bg-white lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+      <section className="relative hidden flex-col justify-between overflow-hidden bg-spine px-10 py-10 text-spine-ink lg:flex xl:px-14">
         <Wordmark onSpine />
-        <div className="mt-14 lg:mt-0">
-          <h1 className="max-w-[13ch] text-[2.5rem] font-semibold leading-[1.02] tracking-[-0.035em] text-sheet sm:text-[3.5rem] xl:text-[4rem]">
+        <div>
+          <h1 className="max-w-[18ch] text-balance text-[2.5rem] font-semibold leading-[1.1] tracking-[-0.025em] text-white xl:text-[2.875rem]">
             Every audit query, followed through to closure.
           </h1>
-          <p className="mt-6 max-w-[44ch] text-[1.0625rem] leading-relaxed text-spine-ink">
-            Imported once, assigned to an auditor, closed only with independent approval. Every change is sealed into a log
-            that cannot be edited.
-          </p>
-          <CoverChain />
+          <ul className="mt-10 max-w-md space-y-6">
+            {FEATURES.map((f) => (
+              <li key={f.title} className="flex gap-4">
+                <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-white/10 text-white"><Icon name={f.icon} className="size-5" /></span>
+                <span>
+                  <span className="block font-semibold text-white">{f.title}</span>
+                  <span className="mt-0.5 block text-sm leading-relaxed">{f.body}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
-        <p className="mt-14 text-sm text-spine-ink/70 lg:mt-0">Internal use only. Data is held in Uganda.</p>
+        <p className="text-sm text-spine-ink/80">Internal use only. All data is held in Uganda.</p>
       </section>
 
-      <div className="flex items-center justify-center px-4 py-10 sm:px-8">
-        <section className="sheet w-full max-w-[26rem] rounded-[10px] p-6 sm:p-8">
+      <div className="flex flex-col items-center justify-center px-4 py-10 sm:px-8">
+        <div className="mb-8 w-full max-w-[24rem] lg:hidden"><Wordmark /></div>
+        <section className="w-full max-w-[24rem]">
           {!pendingUser ? (
             <form onSubmit={submitPassword} className="space-y-4" noValidate>
               <div>
-                <h2 className="border-b-[3px] border-double border-ink/50 pb-3 text-2xl font-semibold tracking-[-0.02em]">Sign in</h2>
-                <p className="mt-3 text-sm text-muted">Use your work email. You will be asked for an authenticator code next.</p>
+                <h2 className="text-[1.75rem] font-semibold tracking-[-0.02em]">Sign in</h2>
+                <p className="mt-2 text-muted">Use your work email. You will be asked for an authenticator code next.</p>
               </div>
               <div>
                 <Label htmlFor="email">Email</Label>
@@ -69,8 +82,8 @@ export default function Login() {
           ) : (
             <form onSubmit={submitCode} className="space-y-4" noValidate>
               <div>
-                <h2 className="border-b-[3px] border-double border-ink/50 pb-3 text-2xl font-semibold tracking-[-0.02em]">Enter your code</h2>
-                <p className="mt-3 text-sm text-muted">Open your authenticator app and enter the 6-digit code for AuditLogs.</p>
+                <h2 className="text-[1.75rem] font-semibold tracking-[-0.02em]">Enter your code</h2>
+                <p className="mt-2 text-muted">Open your authenticator app and enter the 6-digit code for AuditLogs.</p>
               </div>
               <div>
                 <Label htmlFor="code">Authenticator code</Label>
@@ -104,7 +117,7 @@ export default function Login() {
                   <button
                     type="button"
                     onClick={() => { setEmail(u.email); setPassword(DEMO_PASSWORD); setPendingUser(null); setError(null); }}
-                    className="flex min-h-10 w-full items-center justify-between gap-3 rounded-md px-2 text-left hover:bg-paper"
+                    className="flex min-h-10 w-full items-center justify-between gap-3 rounded-md px-2 text-left hover:bg-subtle"
                   >
                     <span>{u.fullName}</span>
                     <span className="text-muted">{u.role}</span>
@@ -116,28 +129,5 @@ export default function Login() {
         </section>
       </div>
     </div>
-  );
-}
-
-// Interlocked links, the last one closed: the chain every entry is sealed into.
-function CoverChain() {
-  const links = 9;
-  return (
-    <svg viewBox={`0 0 ${links * 30 + 14} 28`} className="mt-10 h-7 w-auto max-w-full" aria-hidden>
-      {Array.from({ length: links }, (_, i) => (
-        <rect
-          key={i}
-          x={1 + i * 30}
-          y={i % 2 ? 6 : 2}
-          width={42}
-          height={i % 2 ? 16 : 24}
-          rx={i % 2 ? 8 : 12}
-          fill={i === links - 1 ? "#cfdfd4" : "none"}
-          stroke="#cfdfd4"
-          strokeOpacity={0.35 + (i / links) * 0.65}
-          strokeWidth={2}
-        />
-      ))}
-    </svg>
   );
 }

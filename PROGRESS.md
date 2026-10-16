@@ -26,6 +26,15 @@ Updated at the end of every session and whenever work is paused (see `agent_work
   - CIA activity: counts that work as filters. A missing reason is flagged only where a reason is required.
   - Users and System: marks for account, MFA and health status, and full role names.
 
+- 2026-10-16: third redesign, because the owner found the working-paper look not professional enough. The new direction is a professional finance-dashboard style.
+  - Navy sidebar with icons, a top bar with query search, white cards on a cool grey page, and pill status badges. Inline icons live in `src/icons.tsx`, so there's no icon package.
+  - New **Dashboard** (`src/pages/Dashboard.tsx`) is the home page for PIA, CIA, IA and CEO, and replaces Overview/Progress. `/overview` redirects to it.
+    - **Headline tiles:** open, overdue, closure rate, plus one per role. They have sparklines and 30-day changes.
+    - **Charts:** open/overdue trend, status, overdue aging, risk × status heatmap, progress by department, and (CIA only) auditor workload.
+    - **Lists:** "Needs attention" and recent activity.
+  - The charts are an in-house kit in `src/charts.tsx`, with no chart library. Each has a hover tooltip, keyboard focus and a table view. Colours were checked with the dataviz palette validator.
+  - Trend figures are rebuilt from batch confirm, deadline and `closedAt` dates. Reopened queries lose their earlier closure, so history is approximate until the backend stores status history.
+
 ### Not done
 - Nothing is committed yet. The repo has no commits on `main`.
 - No backend, Docker Compose, CI, or tests.
