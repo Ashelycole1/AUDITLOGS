@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { Button, Label, Notice, Wordmark } from "../components";
-import { DEMO_PASSWORD, useStore } from "../store";
+import { useStore } from "../store";
 import { Icon, type IconName } from "../icons";
 
 const FEATURES: { icon: IconName; title: string; body: string }[] = [
@@ -17,6 +17,8 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [pendingUser, setPendingUser] = useState<string | null>(null);
+  // Prototype stand-in for the emailed one-time PIN; the server sends the real one.
+  const [pin, setPin] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   if (me) return <Navigate to="/" replace />;
@@ -26,11 +28,27 @@ export default function Login() {
     const r = checkPassword(email, password);
     if (!r.ok) return setError(r.error);
     setError(null);
+    setCode("");
+    setPin(r.pin!);
     setPendingUser(r.userId!);
   };
 
+  const resend = () => {
+    const r = checkPassword(email, password);
+    if (r.ok) {
+      setPin(r.pin!);
+      setError(null);
+    }
+  };
+
+  const masked = (() => {
+    const [local, domain] = email.trim().split("@");
+    return local && domain ? `${local[0]}•••@${domain}` : "your work email";
+  })();
+
   const submitCode = (e: React.FormEvent) => {
     e.preventDefault();
+    if (code.trim() !== pin) return setError("That code is not correct or has expired. Check the latest email and try again.");
     const r = completeMfa(pendingUser!, code.trim());
     if (!r.ok) return setError(r.error);
     nav("/", { replace: true });
@@ -66,7 +84,7 @@ export default function Login() {
             <form onSubmit={submitPassword} className="space-y-4" noValidate>
               <div>
                 <h2 className="text-[1.75rem] font-semibold tracking-[-0.02em]">Sign in</h2>
-                <p className="mt-2 text-muted">Use your work email. You will be asked for an authenticator code next.</p>
+                <p className="mt-2 text-muted">Use your work email. We will then email you a one-time code.</p>
               </div>
               <div>
                 <Label htmlFor="email">Email</Label>
@@ -82,11 +100,11 @@ export default function Login() {
           ) : (
             <form onSubmit={submitCode} className="space-y-4" noValidate>
               <div>
-                <h2 className="text-[1.75rem] font-semibold tracking-[-0.02em]">Enter your code</h2>
-                <p className="mt-2 text-muted">Open your authenticator app and enter the 6-digit code for AuditLogs.</p>
+                <h2 className="text-[1.75rem] font-semibold tracking-[-0.02em]">Check your email</h2>
+                <p className="mt-2 text-muted">We sent a 6-digit code to {masked}. It works once and expires in 5 minutes.</p>
               </div>
               <div>
-                <Label htmlFor="code">Authenticator code</Label>
+                <Label htmlFor="code">Sign-in code</Label>
                 <input
                   id="code"
                   inputMode="numeric"
@@ -98,9 +116,13 @@ export default function Login() {
                   autoFocus
                 />
               </div>
+              <Notice tone="info">Prototype only: the email would contain <span className="font-mono font-semibold">{pin}</span>.</Notice>
               {error && <Notice tone="error">{error}</Notice>}
               <Button kind="primary" type="submit" className="min-h-11 w-full">Sign in</Button>
-              <button type="button" className="min-h-10 w-full text-sm font-medium text-lake hover:underline" onClick={() => { setPendingUser(null); setCode(""); setError(null); }}>
+              <button type="button" className="min-h-10 w-full text-sm font-medium text-lake hover:underline" onClick={resend}>
+                Send a new code
+              </button>
+              <button type="button" className="min-h-10 w-full text-sm font-medium text-lake hover:underline" onClick={() => { setPendingUser(null); setPin(null); setCode(""); setError(null); }}>
                 Use a different account
               </button>
             </form>
@@ -109,14 +131,14 @@ export default function Login() {
           <details className="mt-8 border-t border-line pt-4 text-sm">
             <summary className="min-h-10 cursor-pointer content-center font-medium text-muted">Demo accounts (dummy data)</summary>
             <p className="mt-2 text-muted">
-              Password <span className="font-mono text-ink">{DEMO_PASSWORD}</span>, any 6-digit code.
+              Prototype only: pick an account and type any password. The code is shown on screen instead of emailed.
             </p>
             <ul className="mt-2 space-y-1">
               {state.users.filter((u) => u.isActive).map((u) => (
                 <li key={u.id}>
                   <button
                     type="button"
-                    onClick={() => { setEmail(u.email); setPassword(DEMO_PASSWORD); setPendingUser(null); setError(null); }}
+                    onClick={() => { setEmail(u.email); setPendingUser(null); setPin(null); setError(null); }}
                     className="flex min-h-10 w-full items-center justify-between gap-3 rounded-md px-2 text-left hover:bg-subtle"
                   >
                     <span>{u.fullName}</span>

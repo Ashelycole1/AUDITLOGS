@@ -13,7 +13,6 @@ const fail = (error: string): Result => ({ ok: false, error });
 
 const LOCK_LIMIT = 5;
 const LOCK_MINUTES = 15;
-export const DEMO_PASSWORD = "demo-password";
 
 interface Store {
   state: State;
@@ -21,7 +20,7 @@ interface Store {
   userName: (id: string | null) => string;
   visibleQueries: Query[];
   // auth
-  checkPassword: (email: string, password: string) => Result & { userId?: string };
+  checkPassword: (email: string, password: string) => Result & { userId?: string; pin?: string };
   completeMfa: (userId: string, code: string) => Result;
   logout: (reason?: string) => void;
   // PIA
@@ -43,7 +42,6 @@ interface Store {
   // ICT
   createUser: (u: Pick<User, "email" | "fullName" | "role">) => Result;
   setUserActive: (userId: string, active: boolean, reason: string) => Result;
-  resetMfa: (userId: string, reason: string) => Result;
   requestAccess: (reason: string) => Result;
 }
 
@@ -97,22 +95,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const mins = Math.ceil((f.lockedUntil - Date.now()) / 60_000);
         return fail(`This account is locked after ${LOCK_LIMIT} failed attempts. Try again in ${mins} minutes or contact ICT.`);
       }
-      if (!user || !user.isActive || password !== DEMO_PASSWORD) {
+      // Prototype only: any password is accepted for the dummy accounts. The real check is on the server.
+      if (!user || !user.isActive || password.length === 0) {
         const count = (f?.count ?? 0) + 1;
         setFailures({ ...failures, [key]: { count, lockedUntil: count >= LOCK_LIMIT ? Date.now() + LOCK_MINUTES * 60_000 : 0 } });
         commit((s) => ({ next: s, log: [entry(null, { action: "auth.login_failed", objectType: "User", objectId: user?.id ?? "unknown", oldValue: null, newValue: { attempt: count }, reason: "" })] }));
         const left = LOCK_LIMIT - count;
         return fail(left > 0 ? `Email or password is incorrect. ${left} attempts left before the account locks.` : `This account is now locked for ${LOCK_MINUTES} minutes.`);
       }
-      return { ok: true, userId: user.id };
+      // Stands in for the one-time PIN the server emails. Random, never stored in the code.
+      const pin = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000).padStart(6, "0");
+      return { ok: true, userId: user.id, pin };
     },
 
     completeMfa(userId, code) {
-      if (!/^\d{6}$/.test(code)) return fail("Enter the 6-digit code from your authenticator app.");
+      if (!/^\d{6}$/.test(code)) return fail("Enter the 6-digit code from the email.");
       const user = state.users.find((u) => u.id === userId)!;
       setFailures({ ...failures, [user.email]: { count: 0, lockedUntil: 0 } });
       setMeId(userId);
-      commit((s) => ({ next: s, log: [entry(user, { action: "auth.login", objectType: "User", objectId: user.id, oldValue: null, newValue: { mfa: "totp" }, reason: "" })] }));
+      commit((s) => ({ next: s, log: [entry(user, { action: "auth.login", objectType: "User", objectId: user.id, oldValue: null, newValue: { mfa: "email_pin" }, reason: "" })] }));
       return ok;
     },
 
@@ -363,7 +364,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (u.fullName.trim().length < 3) return fail("Enter the person's full name.");
       const id = crypto.randomUUID();
       commit((s) => ({
-        next: { ...s, users: [...s.users, { id, email: u.email.trim(), fullName: u.fullName.trim(), role: u.role, isActive: true, mfaEnabled: false }] },
+        next: { ...s, users: [...s.users, { id, email: u.email.trim(), fullName: u.fullName.trim(), role: u.role, isActive: true }] },
         log: [entry(me, { action: "user.create", objectType: "User", objectId: id, oldValue: null, newValue: { email: u.email, role: u.role }, reason: "" })],
       }));
       return ok;
@@ -382,17 +383,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return ok;
     },
 
-    resetMfa(userId, reason) {
-      const r = requireRole("ICT");
-      if (!r.ok) return r;
-      const err = reasonError(reason);
-      if (err) return fail(err);
-      commit((s) => ({
-        next: { ...s, users: s.users.map((x) => (x.id === userId ? { ...x, mfaEnabled: false } : x)) },
-        log: [entry(me, { action: "user.reset_mfa", objectType: "User", objectId: userId, oldValue: { mfaEnabled: true }, newValue: { mfaEnabled: false }, reason })],
-      }));
-      return ok;
-    },
 
     requestAccess(reason) {
       const r = requireRole("ICT");

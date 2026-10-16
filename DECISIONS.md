@@ -16,12 +16,9 @@ Date, decision, reason. Newest last.
 
 3. **Session cookies, not tokens.** The SPA uses Django sessions with CSRF protection. Login and MFA endpoints check CSRF explicitly. Sessions give the 30-minute idle timeout and server-side logout for free, and keep tokens out of browser storage.
 
-4. **Two-step sign-in.** A correct password only marks the session as pending, for 5 minutes. The session is signed in after a valid TOTP code. A password-only session is refused by every endpoint (tested). Five wrong codes end the pending sign-in.
+4. **Two-step sign-in.** A correct password only marks the session as pending, for 5 minutes. The session is signed in after a valid one-time PIN (decision 12). A password-only session is refused by every endpoint (tested). Five wrong codes end the pending sign-in.
 
-5. **First sign-in enrols MFA.** A user with no confirmed authenticator gets a TOTP secret after the password step. The device counts only once a code from it is accepted.
-   - **Known risk:** someone who learns a new user's password before that user's first sign-in could enrol their own authenticator.
-   - **Planned fix, with the email task:** ICT-issued one-time enrolment links.
-   - The API returns the `otpauth://` URI and secret. Drawing a QR code needs either a new frontend dependency or a small in-house encoder. Owner to choose.
+5. ~~First sign-in enrols a TOTP authenticator.~~ Replaced by decision 12.
 
 6. **Lockout is per account, not per IP.** Axes locks after 5 failures for 15 minutes, counting email case variants together. IP lockout stays off while Nginx is the only client, because every request would share one IP. DRF rate limits cover bursts.
 
@@ -40,3 +37,22 @@ Date, decision, reason. Newest last.
 10. **SQLite for local runs without Docker.** If `DATABASE_URL` is unset, dev uses `backend/dev.sqlite3` and tests use in-memory SQLite. CI runs the same tests against PostgreSQL 16. Production refuses to start on anything but PostgreSQL.
 
 11. **Client IP in the log is REMOTE_ADDR for now.** The real client address will be taken from a header only Nginx can set. That will be decided in the deployment task.
+
+## 2026-10-16: Owner decisions after the first push
+
+12. **MFA is a one-time PIN by email, not an authenticator app (owner).**
+    - After the password step, the server emails a 6-digit PIN through the client's own SMTP server.
+    - The PIN is valid for 5 minutes and works once. One resend is allowed per minute, three in all. Five wrong PINs end the attempt, and django-otp adds growing delays.
+    - The email contains only the PIN.
+    - This uses django-otp's built-in email plugin, so there's no new dependency.
+    - **Trade-off:** the second factor is only as strong as the user's mailbox. Whoever controls a work email can complete a sign-in if they also have the password. ICT alone can change an account's email (logged as `user.email_change`) and can't change its own.
+    - SMS would need a Ugandan SMS provider and owner approval.
+    - Production refuses to start without SMTP configured.
+
+13. **No password or secret is written in the repository (owner).**
+    - The dev secret key, the dev database password, the demo-account password and the test password are now generated or read from `.env`.
+    - CI uses a passwordless throwaway Postgres.
+    - The earlier commits still contain dev-only dummy values: `demo-password`, `demo-password-2026`, `auditlogs-dev-only`, `ci-only`, `correct-horse-battery-2026` and a dev key string. None was ever a real credential.
+    - Rewriting the published history is the owner's call.
+
+14. **Commits carry the owner as the only author (owner).** No AI co-author or attribution lines.

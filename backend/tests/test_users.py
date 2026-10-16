@@ -2,7 +2,6 @@
 
 import pytest
 from django.urls import reverse
-from django_otp.plugins.otp_totp.models import TOTPDevice
 
 from apps.accounts.models import User
 from apps.auditlog.models import AuditLog
@@ -97,15 +96,30 @@ def test_role_change_is_logged_with_old_and_new(client_for, make_user):
     assert (entry.old_value["role"], entry.new_value["role"]) == ("IA", "PIA")
 
 
-def test_reset_mfa_removes_the_authenticator(client_for, make_user):
+def test_email_change_is_logged_on_its_own(client_for, make_user):
     target = make_user("IA")
-    assert TOTPDevice.objects.filter(user=target).exists()
-    response = client_for("ICT").post(
-        reverse("users-reset-mfa", kwargs={"pk": target.pk}), {"reason": REASON}, format="json"
+    old = target.email
+    response = client_for("ICT").patch(
+        reverse("users-detail", kwargs={"pk": target.pk}),
+        {"email": "New.Address@AuditLogs.test", "reason": REASON},
+        format="json",
     )
     assert response.status_code == 200
-    assert not TOTPDevice.objects.filter(user=target).exists()
-    assert last_entry().action == "user.reset_mfa"
+    target.refresh_from_db()
+    assert target.email == "new.address@auditlogs.test"
+    entry = last_entry()
+    assert entry.action == "user.email_change"
+    assert (entry.old_value["email"], entry.new_value["email"]) == (old, "new.address@auditlogs.test")
+
+
+def test_ict_cannot_redirect_its_own_sign_in_pins(client_for):
+    ict = client_for("ICT")
+    response = ict.patch(
+        reverse("users-detail", kwargs={"pk": ict.user.pk}),
+        {"email": "elsewhere@auditlogs.test", "reason": REASON},
+        format="json",
+    )
+    assert response.status_code == 400
 
 
 def test_accounts_are_never_deleted(client_for, make_user):

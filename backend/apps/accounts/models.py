@@ -3,7 +3,6 @@ import uuid
 from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
 from django.db import models
 from django.utils import timezone
-from django_otp import devices_for_user
 
 
 class Role(models.TextChoices):
@@ -57,10 +56,6 @@ class User(AbstractBaseUser):
         if self.acting_cia_until and self.acting_cia_until > timezone.now():
             return Role.CIA
         return self.role
-
-    @property
-    def mfa_enabled(self) -> bool:
-        return any(True for _ in devices_for_user(self, confirmed=True))
 
     def delete(self, *args, **kwargs):
         # No hard deletes (system.md 4.7): disable the account instead, so its history stays in the log.

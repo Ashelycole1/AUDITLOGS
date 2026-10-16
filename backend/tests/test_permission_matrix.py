@@ -26,13 +26,12 @@ MATRIX = [
     ("users-detail", "patch", True, {"ICT"}),
     ("users-disable", "post", True, {"ICT"}),
     ("users-enable", "post", True, {"ICT"}),
-    ("users-reset-mfa", "post", True, {"ICT"}),
     ("audit-log", "get", False, {"CIA"}),
     ("audit-log-verify", "post", False, {"CIA", "ICT"}),
 ]
 
 # Reachable without signing in. Each says nothing about data.
-PUBLIC = {"health", "auth-csrf", "auth-login", "auth-mfa"}
+PUBLIC = {"health", "auth-csrf", "auth-login", "auth-mfa", "auth-mfa-resend"}
 
 
 def url_for(name: str, needs_target: bool, make_user) -> str:

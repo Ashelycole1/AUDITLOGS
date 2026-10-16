@@ -16,7 +16,6 @@ export interface User {
   fullName: string;
   role: Role;
   isActive: boolean;
-  mfaEnabled: boolean;
 }
 
 export interface ImportBatch {

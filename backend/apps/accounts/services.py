@@ -1,7 +1,6 @@
 """Account changes. Each one writes its audit entry in the same transaction (system.md 4.4)."""
 
 from django.db import transaction
-from django_otp.plugins.otp_totp.models import TOTPDevice
 
 from apps.auditlog.services import record
 
@@ -30,13 +29,19 @@ def create_user(*, actor: User, email: str, full_name: str, role: str, reason: s
 @transaction.atomic
 def update_user(*, actor: User, user: User, reason: str, ip=None, **changes) -> User:
     before = _snapshot(user)
-    for field in ("full_name", "role"):
+    for field in ("email", "full_name", "role"):
         if field in changes and changes[field] is not None:
             setattr(user, field, changes[field])
     if _snapshot(user) == before:
         return user
-    user.save(update_fields=["full_name", "role", "updated_at"])
-    action = "user.role_change" if before["role"] != user.role else "user.update"
+    user.save(update_fields=["email", "full_name", "role", "updated_at"])
+    if before["role"] != user.role:
+        action = "user.role_change"
+    elif before["email"] != user.email:
+        # The sign-in PIN goes to this address, so a change is recorded on its own.
+        action = "user.email_change"
+    else:
+        action = "user.update"
     record(
         actor=actor,
         action=action,
@@ -67,17 +72,3 @@ def set_active(*, actor: User, user: User, active: bool, reason: str, ip=None) -
         ip=ip,
     )
     return user
-
-
-@transaction.atomic
-def reset_mfa(*, actor: User, user: User, reason: str, ip=None) -> None:
-    removed = TOTPDevice.objects.filter(user=user).delete()[0]
-    record(
-        actor=actor,
-        action="user.reset_mfa",
-        object_type="User",
-        object_id=user.pk,
-        new={"devices_removed": removed},
-        reason=reason,
-        ip=ip,
-    )

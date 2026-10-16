@@ -8,7 +8,7 @@ def production_problems() -> list[str]:
     problems = []
     if settings.DEBUG:
         problems.append("DEBUG is on.")
-    if not settings.SECRET_KEY or settings.SECRET_KEY == settings.DEV_SECRET_KEY:
+    if not settings.SECRET_KEY_FROM_ENV:
         problems.append("DJANGO_SECRET_KEY is not set.")
     if settings.DATABASES["default"]["ENGINE"] != "django.db.backends.postgresql":
         problems.append("The database is not PostgreSQL.")
@@ -16,6 +16,8 @@ def production_problems() -> list[str]:
         problems.append("ALLOWED_HOSTS must list the production host names.")
     if not settings.SESSION_COOKIE_SECURE or not settings.CSRF_COOKIE_SECURE:
         problems.append("Session and CSRF cookies must be secure.")
+    if not settings.EMAIL_HOST or settings.EMAIL_BACKEND != "django.core.mail.backends.smtp.EmailBackend":
+        problems.append("SMTP_HOST is not set, so sign-in PINs cannot be sent.")
     return problems
 
 

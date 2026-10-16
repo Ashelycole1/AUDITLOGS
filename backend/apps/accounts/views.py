@@ -1,5 +1,4 @@
 import time
-from base64 import b32encode
 
 from django.conf import settings
 from django.contrib.auth import authenticate, login, logout
@@ -7,7 +6,7 @@ from django.db import transaction
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from django_otp import login as otp_login
-from django_otp.plugins.otp_totp.models import TOTPDevice
+from django_otp.plugins.otp_email.models import EmailDevice
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
@@ -39,7 +38,40 @@ EXPIRED = "Your sign-in has expired. Enter your email and password again."
 
 def locked_message() -> str:
     minutes = int(settings.AXES_COOLOFF_TIME.total_seconds() // 60)
-    return f"This account is locked after {settings.AXES_FAILURE_LIMIT} failed attempts. Try again in {minutes} minutes or contact ICT."
+    return (
+        f"This account is locked after {settings.AXES_FAILURE_LIMIT} failed attempts. "
+        f"Try again in {minutes} minutes or contact ICT."
+    )
+
+
+def masked(email: str) -> str:
+    """Enough to recognise the address the PIN went to, without spelling it out."""
+    local, _, domain = email.partition("@")
+    return f"{local[:1]}•••@{domain}"
+
+
+def email_device(user: User) -> EmailDevice:
+    # The PIN goes to the account's own email address, which only ICT can change (and that change is logged).
+    device, _ = EmailDevice.objects.get_or_create(
+        user=user, defaults={"name": "Email PIN", "confirmed": True}
+    )
+    return device
+
+
+def pending_user(request) -> tuple[dict | None, User | None]:
+    pending = request.session.get(PENDING_KEY)
+    if not pending or time.time() - pending["at"] > settings.MFA_PENDING_SECONDS:
+        request.session.pop(PENDING_KEY, None)
+        return None, None
+    user = User.objects.filter(pk=pending["user"], is_active=True).first()
+    if user is None:
+        request.session.pop(PENDING_KEY, None)
+        return None, None
+    return pending, user
+
+
+def expired() -> Response:
+    return Response({"detail": EXPIRED, "code": "expired"}, status=status.HTTP_400_BAD_REQUEST)
 
 
 @method_decorator(ensure_csrf_cookie, name="dispatch")
@@ -54,7 +86,7 @@ class CsrfView(APIView):
 
 @method_decorator(csrf_protect, name="dispatch")
 class LoginView(APIView):
-    """Step 1 of 2: email and password. The session is not signed in until the MFA step passes."""
+    """Step 1 of 2: email and password. On success a one-time PIN is emailed; nothing is signed in yet."""
 
     permission_classes = [AllowAny]
     throttle_classes = [ScopedRateThrottle]
@@ -86,46 +118,67 @@ class LoginView(APIView):
             return Response({"detail": WRONG_CREDENTIALS}, status=status.HTTP_400_BAD_REQUEST)
 
         request.session.cycle_key()
-        request.session[PENDING_KEY] = {"user": str(user.pk), "at": time.time(), "fails": 0}
-
-        if TOTPDevice.objects.filter(user=user, confirmed=True).exists():
-            return Response({"mfa": "verify"})
-
-        # First sign-in: enrol an authenticator. The device is confirmed only when a code from it is accepted.
-        TOTPDevice.objects.filter(user=user, confirmed=False).delete()
-        device = TOTPDevice.objects.create(user=user, name="Authenticator", confirmed=False)
-        return Response(
-            {"mfa": "setup", "secret": b32encode(device.bin_key).decode(), "otpauth_uri": device.config_url}
-        )
+        request.session[PENDING_KEY] = {"user": str(user.pk), "at": time.time(), "fails": 0, "resends": 0}
+        # Within the cooldown a repeated sign-in reuses the PIN already sent, rather than sending another.
+        email_device(user).generate_challenge()
+        return Response({"mfa": "email", "sent_to": masked(user.email)})
 
 
 @method_decorator(csrf_protect, name="dispatch")
-class MfaView(APIView):
-    """Step 2 of 2: the authenticator code. Only after this is the session fully signed in."""
+class MfaResendView(APIView):
+    """Send a fresh PIN for a sign-in in progress. Limited to one a minute and three in all."""
 
     permission_classes = [AllowAny]
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "login"
 
     def post(self, request):
-        pending = request.session.get(PENDING_KEY)
-        if not pending or time.time() - pending["at"] > settings.MFA_PENDING_SECONDS:
+        pending, user = pending_user(request)
+        if user is None:
+            return expired()
+        if pending["resends"] >= settings.MFA_MAX_RESENDS:
             request.session.pop(PENDING_KEY, None)
-            return Response({"detail": EXPIRED, "code": "expired"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "Too many codes sent. " + EXPIRED, "code": "expired"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        device = email_device(user)
+        allowed, _ = device.generate_is_allowed()
+        if not allowed:
+            return Response(
+                {"detail": "Wait a minute before asking for another code.", "code": "cooldown"},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+        device.generate_challenge()
+        pending["resends"] += 1
+        request.session[PENDING_KEY] = pending
+        record(
+            actor=None,
+            action="auth.mfa_resent",
+            object_type="User",
+            object_id=user.pk,
+            new={"resend": pending["resends"]},
+            ip=client_ip(request._request),
+        )
+        return Response({"mfa": "email", "sent_to": masked(user.email)})
 
+
+@method_decorator(csrf_protect, name="dispatch")
+class MfaView(APIView):
+    """Step 2 of 2: the emailed PIN. Only after this is the session fully signed in."""
+
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "login"
+
+    def post(self, request):
+        pending, user = pending_user(request)
+        if user is None:
+            return expired()
         data = MfaSerializer(data=request.data)
         data.is_valid(raise_exception=True)
-        user = User.objects.filter(pk=pending["user"], is_active=True).first()
-        device = None
-        if user:
-            device = (
-                TOTPDevice.objects.filter(user=user, confirmed=True).first()
-                or TOTPDevice.objects.filter(user=user, confirmed=False).order_by("-id").first()
-            )
-        if device is None:
-            request.session.pop(PENDING_KEY, None)
-            return Response({"detail": EXPIRED, "code": "expired"}, status=status.HTTP_400_BAD_REQUEST)
 
+        device = email_device(user)
         ip = client_ip(request._request)
         if not device.verify_token(data.validated_data["code"]):
             pending["fails"] += 1
@@ -145,22 +198,11 @@ class MfaView(APIView):
                 )
             request.session[PENDING_KEY] = pending
             return Response(
-                {"detail": "That code is not correct. Check the time on your phone and try again."},
+                {"detail": "That code is not correct or has expired. Check the latest email and try again."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         with transaction.atomic():
-            if not device.confirmed:
-                device.confirmed = True
-                device.save(update_fields=["confirmed"])
-                record(
-                    actor=user,
-                    action="user.mfa_setup",
-                    object_type="User",
-                    object_id=user.pk,
-                    new={"device": "totp"},
-                    ip=ip,
-                )
             request.session.pop(PENDING_KEY, None)
             login(request._request, user, backend="django.contrib.auth.backends.ModelBackend")
             otp_login(request._request, device)
@@ -169,7 +211,7 @@ class MfaView(APIView):
                 action="auth.login",
                 object_type="User",
                 object_id=user.pk,
-                new={"mfa": "totp"},
+                new={"mfa": "email_pin"},
                 ip=ip,
             )
         return Response(MeSerializer(user).data)
@@ -222,11 +264,15 @@ class UserViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.Gen
 
     def partial_update(self, request, pk=None):
         user = self.get_object()
-        data = UserUpdateSerializer(data=request.data)
+        data = UserUpdateSerializer(data=request.data, context={"user": user})
         data.is_valid(raise_exception=True)
-        if "role" in data.validated_data and data.validated_data["role"] != user.role:
+        changes = data.validated_data
+        if changes.get("role", user.role) != user.role:
             self._not_self(user, "change the role of")
-        user = services.update_user(actor=request.user, user=user, ip=self._ip(), **data.validated_data)
+        if changes.get("email", user.email) != user.email:
+            # The sign-in PIN goes to this address, so ICT may not redirect its own.
+            self._not_self(user, "change the email of")
+        user = services.update_user(actor=request.user, user=user, ip=self._ip(), **changes)
         return Response(UserSerializer(user).data)
 
     def _reasoned(self, request, user: User, what: str) -> str:
@@ -239,25 +285,12 @@ class UserViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.Gen
     def disable(self, request, pk=None):
         user = self.get_object()
         reason = self._reasoned(request, user, "disable")
-        return Response(
-            UserSerializer(
-                services.set_active(actor=request.user, user=user, active=False, reason=reason, ip=self._ip())
-            ).data
-        )
+        user = services.set_active(actor=request.user, user=user, active=False, reason=reason, ip=self._ip())
+        return Response(UserSerializer(user).data)
 
     @action(detail=True, methods=["post"])
     def enable(self, request, pk=None):
         user = self.get_object()
         reason = self._reasoned(request, user, "enable")
-        return Response(
-            UserSerializer(
-                services.set_active(actor=request.user, user=user, active=True, reason=reason, ip=self._ip())
-            ).data
-        )
-
-    @action(detail=True, methods=["post"], url_path="reset-mfa")
-    def reset_mfa(self, request, pk=None):
-        user = self.get_object()
-        reason = self._reasoned(request, user, "reset MFA on")
-        services.reset_mfa(actor=request.user, user=user, reason=reason, ip=self._ip())
+        user = services.set_active(actor=request.user, user=user, active=True, reason=reason, ip=self._ip())
         return Response(UserSerializer(user).data)

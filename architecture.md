@@ -110,7 +110,7 @@ Upload → store source file with SHA-256 → parse (openpyxl or pandas) → val
 ### 5.6 Authentication and sessions
 
 - Argon2 password hashing, minimum length 12.
-- TOTP MFA with django-otp, required before any session is fully active.
+- MFA with django-otp: a 6-digit one-time PIN emailed through the client SMTP server after the password step (owner decision 2026-10-16, replacing TOTP). It is valid for 5 minutes, works once, and is required before any session is fully active.
 - django-axes: lock after 5 failed attempts for 15 minutes; failures logged.
 - Sessions: secure cookies, HttpOnly, SameSite=Lax, 30 minute idle timeout.
 - DRF throttling on login and export endpoints.

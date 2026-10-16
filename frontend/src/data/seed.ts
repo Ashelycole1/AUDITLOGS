@@ -36,13 +36,13 @@ const at = (daysAgo: number, hour = 9): string => {
 const dateIn = (days: number): string => new Date(Date.now() + days * DAY).toISOString().slice(0, 10);
 
 export const users: User[] = [
-  { id: "u-pia", email: "ruth.akello@auditlogs.test", fullName: "Ruth Akello", role: "PIA", isActive: true, mfaEnabled: true },
-  { id: "u-cia", email: "daniel.okello@auditlogs.test", fullName: "Daniel Okello", role: "CIA", isActive: true, mfaEnabled: true },
-  { id: "u-ia1", email: "sarah.nabirye@auditlogs.test", fullName: "Sarah Nabirye", role: "IA", isActive: true, mfaEnabled: true },
-  { id: "u-ia2", email: "peter.mugisha@auditlogs.test", fullName: "Peter Mugisha", role: "IA", isActive: true, mfaEnabled: true },
-  { id: "u-ia3", email: "joan.atim@auditlogs.test", fullName: "Joan Atim", role: "IA", isActive: true, mfaEnabled: true },
-  { id: "u-ceo", email: "moses.kiggundu@auditlogs.test", fullName: "Moses Kiggundu", role: "CEO", isActive: true, mfaEnabled: true },
-  { id: "u-ict", email: "brian.ssali@auditlogs.test", fullName: "Brian Ssali", role: "ICT", isActive: true, mfaEnabled: true },
+  { id: "u-pia", email: "ruth.akello@auditlogs.test", fullName: "Ruth Akello", role: "PIA", isActive: true },
+  { id: "u-cia", email: "daniel.okello@auditlogs.test", fullName: "Daniel Okello", role: "CIA", isActive: true },
+  { id: "u-ia1", email: "sarah.nabirye@auditlogs.test", fullName: "Sarah Nabirye", role: "IA", isActive: true },
+  { id: "u-ia2", email: "peter.mugisha@auditlogs.test", fullName: "Peter Mugisha", role: "IA", isActive: true },
+  { id: "u-ia3", email: "joan.atim@auditlogs.test", fullName: "Joan Atim", role: "IA", isActive: true },
+  { id: "u-ceo", email: "moses.kiggundu@auditlogs.test", fullName: "Moses Kiggundu", role: "CEO", isActive: true },
+  { id: "u-ict", email: "brian.ssali@auditlogs.test", fullName: "Brian Ssali", role: "ICT", isActive: true },
 ];
 
 type Seed = [ref: string, title: string, desc: string, risk: Risk, dept: string, officer: string, deadlineIn: number];

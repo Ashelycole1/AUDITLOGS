@@ -94,7 +94,7 @@ Any other transition is rejected with an error. The CIA may also change status d
 
 ## 6. Screens by role
 
-**Login:** email, password, MFA code. Lockout message after repeated failures.
+**Login:** email, password, then a one-time PIN sent to the work email. Lockout message after repeated failures.
 
 **PIA:** Import (upload, preview, confirm), Batch history, All queries (read-only), Progress overview.
 
@@ -112,7 +112,7 @@ Any other transition is rejected with an error. The CIA may also change status d
 
 Visible query details for the CEO (default): reference, title, risk rating, status, responsible officer, deadline, days overdue. Evidence and response text are hidden unless the CIA enables them per the owner's decision.
 
-**ICT:** Users (create, disable, reset MFA), Roles, Backups status, System health, Break-glass requests.
+**ICT:** Users (create, disable, change email or role), Roles, Backups status, System health, Break-glass requests.
 
 ## 7. Reassignment
 

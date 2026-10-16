@@ -17,7 +17,6 @@ class MfaSerializer(serializers.Serializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
-    mfa_enabled = serializers.BooleanField(read_only=True)
     role_name = serializers.CharField(source="get_role_display", read_only=True)
 
     class Meta:
@@ -29,7 +28,6 @@ class UserSerializer(serializers.ModelSerializer):
             "role",
             "role_name",
             "is_active",
-            "mfa_enabled",
             "acting_cia_until",
             "created_at",
         ]
@@ -58,6 +56,13 @@ class UserCreateSerializer(serializers.Serializer):
 
 
 class UserUpdateSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=False)
     full_name = serializers.CharField(max_length=150, required=False)
     role = serializers.ChoiceField(choices=Role.choices, required=False)
     reason = serializers.CharField(validators=[validate_reason])
+
+    def validate_email(self, value: str) -> str:
+        value = value.strip().lower()
+        if User.objects.filter(email=value).exclude(pk=self.context["user"].pk).exists():
+            raise serializers.ValidationError("An account with this email already exists.")
+        return value

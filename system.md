@@ -54,7 +54,7 @@ These are hard requirements. Any code that violates one is a bug.
 | Backend | Python, Django, Django REST Framework |
 | Frontend | React, TypeScript, Vite, Tailwind CSS |
 | Database | PostgreSQL |
-| Auth | Django auth, Argon2, django-otp (TOTP MFA), django-axes (lockout) |
+| Auth | Django auth, Argon2, django-otp (one-time PIN by email through the client SMTP server, owner decision 2026-10-16), django-axes (lockout) |
 | Import | openpyxl or pandas (Excel/CSV). PDF/Word only as a fallback |
 | Files | Encrypted files on the server's disk |
 | Email | Client's own SMTP server |

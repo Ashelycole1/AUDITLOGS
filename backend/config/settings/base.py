@@ -6,6 +6,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 from django.core.exceptions import ImproperlyConfigured
+from django.core.management.utils import get_random_secret_key
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 
@@ -42,8 +43,10 @@ def database_from_url(url: str | None) -> dict:
 
 
 ENVIRONMENT = env("ENVIRONMENT", "dev")
-DEV_SECRET_KEY = "dev-only-insecure-key-never-use-in-production"  # noqa: S105
-SECRET_KEY = env("DJANGO_SECRET_KEY", DEV_SECRET_KEY)
+# No key is ever written in the code. Without DJANGO_SECRET_KEY a random one is made per process, which
+# is fine for dev and tests (sessions reset on restart). Production refuses to start without the variable.
+SECRET_KEY_FROM_ENV = env("DJANGO_SECRET_KEY") is not None
+SECRET_KEY = env("DJANGO_SECRET_KEY") or get_random_secret_key()
 DEBUG = False
 ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", "localhost,127.0.0.1")
 
@@ -53,7 +56,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "rest_framework",
     "django_otp",
-    "django_otp.plugins.otp_totp",
+    "django_otp.plugins.otp_email",
     "axes",
     "apps.core",
     "apps.accounts",
@@ -73,7 +76,8 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = "config.urls"
 WSGI_APPLICATION = "config.wsgi.application"
-TEMPLATES: list = []
+# Templates render only the sign-in PIN email. No HTML pages are served.
+TEMPLATES = [{"BACKEND": "django.template.backends.django.DjangoTemplates", "APP_DIRS": False, "OPTIONS": {}}]
 
 DATABASES = {"default": database_from_url(env("DATABASE_URL"))}
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
@@ -116,10 +120,23 @@ SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SAMESITE = "Lax"
-# How long a correct password stays valid while the user enters the MFA code.
+# Second factor: a one-time PIN emailed through the client's own mail server (owner decision, DECISIONS.md).
+# How long a correct password stays valid while the user enters the PIN.
 MFA_PENDING_SECONDS = 300
 MFA_MAX_FAILURES = 5
-OTP_TOTP_ISSUER = "AuditLogs"
+MFA_MAX_RESENDS = 3
+OTP_EMAIL_TOKEN_VALIDITY = 300
+OTP_EMAIL_COOLDOWN_DURATION = 60
+OTP_EMAIL_THROTTLE_FACTOR = 1
+OTP_EMAIL_SUBJECT = "Your AuditLogs sign-in code"
+# The PIN and nothing else: no names, no audit content (design.md 9).
+OTP_EMAIL_BODY_TEMPLATE = (
+    "Your AuditLogs sign-in code is {{ token }}.\n\n"
+    "It works once and expires in 5 minutes. If you did not just try to sign in, tell ICT straight away.\n"
+)
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "AuditLogs <no-reply@localhost>")
+OTP_EMAIL_SENDER = DEFAULT_FROM_EMAIL
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework.authentication.SessionAuthentication"],

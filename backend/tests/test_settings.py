@@ -9,11 +9,13 @@ from apps.core.checks import enforce_production_settings, production_problems
 SAFE = {
     "ENVIRONMENT": "prod",
     "DEBUG": False,
-    "SECRET_KEY": "x" * 50,
+    "SECRET_KEY_FROM_ENV": True,
     "DATABASES": {"default": {"ENGINE": "django.db.backends.postgresql", "NAME": "auditlogs"}},
     "ALLOWED_HOSTS": ["auditlogs.example.ug"],
     "SESSION_COOKIE_SECURE": True,
     "CSRF_COOKIE_SECURE": True,
+    "EMAIL_HOST": "mail.example.ug",
+    "EMAIL_BACKEND": "django.core.mail.backends.smtp.EmailBackend",
 }
 
 
@@ -27,7 +29,8 @@ def test_safe_production_settings_pass():
     "unsafe",
     [
         {"DEBUG": True},
-        {"SECRET_KEY": "dev-only-insecure-key-never-use-in-production"},
+        {"SECRET_KEY_FROM_ENV": False},
+        {"EMAIL_HOST": ""},
         {"DATABASES": {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": "x"}}},
         {"ALLOWED_HOSTS": ["*"]},
         {"SESSION_COOKIE_SECURE": False},

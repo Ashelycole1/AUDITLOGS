@@ -1,28 +1,31 @@
-import time
+import re
+import secrets
 import uuid
 
 import pytest
+from django.core import mail
 from django_otp import DEVICE_ID_SESSION_KEY
-from django_otp.oath import TOTP
-from django_otp.plugins.otp_totp.models import TOTPDevice
+from django_otp.plugins.otp_email.models import EmailDevice
 from rest_framework.test import APIClient
 
 from apps.accounts.models import User
 
-PASSWORD = "correct-horse-battery-2026"
+# Generated per test run: no password is ever written in the repository.
+PASSWORD = secrets.token_urlsafe(16)
+WRONG_PASSWORD = secrets.token_urlsafe(16)
 ROLES = ["PIA", "CIA", "IA", "CEO", "ICT"]
 MODEL_BACKEND = "django.contrib.auth.backends.ModelBackend"
 
 
-def totp_code(device: TOTPDevice) -> str:
-    totp = TOTP(device.bin_key, device.step, device.t0, device.digits, device.drift)
-    totp.time = time.time()
-    return str(totp.token()).zfill(device.digits)
+def emailed_pin(to: str) -> str:
+    """The PIN from the most recent sign-in email sent to this address."""
+    message = [m for m in mail.outbox if to in m.to][-1]
+    return re.search(r"\b(\d{6})\b", message.body).group(1)
 
 
 @pytest.fixture
 def make_user(db):
-    def _make(role: str = "IA", *, email: str | None = None, mfa: bool = True, active: bool = True) -> User:
+    def _make(role: str = "IA", *, email: str | None = None, active: bool = True) -> User:
         user = User.objects.create_user(
             email=email or f"{role.lower()}-{uuid.uuid4().hex[:8]}@auditlogs.test",
             full_name=f"Test {role}",
@@ -32,8 +35,6 @@ def make_user(db):
         if not active:
             user.is_active = False
             user.save(update_fields=["is_active"])
-        if mfa:
-            TOTPDevice.objects.create(user=user, name="Authenticator", confirmed=True)
         return user
 
     return _make
@@ -41,12 +42,12 @@ def make_user(db):
 
 @pytest.fixture
 def client_for(make_user):
-    """A client signed in with password AND a verified MFA device, the only state the API trusts."""
+    """A client signed in with password AND a verified PIN, the only state the API trusts."""
 
     def _client(user_or_role) -> APIClient:
         user = make_user(user_or_role) if isinstance(user_or_role, str) else user_or_role
-        device = TOTPDevice.objects.filter(user=user, confirmed=True).first() or TOTPDevice.objects.create(
-            user=user, name="Authenticator", confirmed=True
+        device, _ = EmailDevice.objects.get_or_create(
+            user=user, defaults={"name": "Email PIN", "confirmed": True}
         )
         client = APIClient()
         client.force_login(user, backend=MODEL_BACKEND)
@@ -61,7 +62,7 @@ def client_for(make_user):
 
 @pytest.fixture
 def password_only_client(make_user):
-    """Signed in with a password but never passed MFA. Must be refused everywhere."""
+    """Signed in with a password but never passed the PIN step. Must be refused everywhere."""
 
     def _client(role: str) -> APIClient:
         client = APIClient()

@@ -15,11 +15,11 @@ const ROLE_NAME: Record<Role, string> = {
 
 export function UsersPage() {
   const me = useMe();
-  const { state, createUser, setUserActive, resetMfa } = useStore();
+  const { state, createUser, setUserActive } = useStore();
   const [form, setForm] = useState({ fullName: "", email: "", role: "IA" as Role });
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
-  const [dialog, setDialog] = useState<{ kind: "toggle" | "mfa"; userId: string } | null>(null);
+  const [dialog, setDialog] = useState<{ kind: "toggle"; userId: string } | null>(null);
   const target = state.users.find((u) => u.id === dialog?.userId);
 
   const submit = (e: React.FormEvent) => {
@@ -27,7 +27,7 @@ export function UsersPage() {
     const r = createUser(form);
     if (!r.ok) return setError(r.error);
     setError(null);
-    setFlash(`Account created for ${form.fullName}. They set up MFA on first sign-in.`);
+    setFlash(`Account created for ${form.fullName}. Sign-in codes go to their work email.`);
     setForm({ fullName: "", email: "", role: "IA" });
   };
 
@@ -47,12 +47,10 @@ export function UsersPage() {
                 <td className="whitespace-nowrap" title={u.role}>{ROLE_NAME[u.role]}</td>
                 <td className="whitespace-nowrap">
                   <span className="flex items-center gap-1.5"><Check ok={u.isActive} />{u.isActive ? "Active" : "Disabled"}</span>
-                  <span className="mt-1 flex items-center gap-1.5 text-[0.8125rem] text-muted"><Check ok={u.mfaEnabled} pending={!u.mfaEnabled} />{u.mfaEnabled ? "Authenticator set up" : <span className="text-warn">Authenticator not set up</span>}</span>
                 </td>
                 <td className="w-px whitespace-nowrap">
                   {u.id !== me.id && (
                     <div className="-my-2 flex flex-col items-end">
-                      {u.mfaEnabled && <Button kind="quiet" onClick={() => setDialog({ kind: "mfa", userId: u.id })}>Reset MFA</Button>}
                       <Button kind={u.isActive ? "quiet" : "secondary"} onClick={() => setDialog({ kind: "toggle", userId: u.id })}>{u.isActive ? "Disable" : "Enable"}</Button>
                     </div>
                   )}
@@ -80,19 +78,19 @@ export function UsersPage() {
             </div>
             {error && <Notice tone="error">{error}</Notice>}
             <Button kind="primary" type="submit" className="w-full">Create account</Button>
-            <p className="text-[0.8125rem] leading-snug text-muted">They get an email to set a password and an authenticator on first sign-in.</p>
+            <p className="text-[0.8125rem] leading-snug text-muted">They get an email to set a password. Each sign-in then needs a one-time code sent to that email.</p>
           </form>
         </Panel>
       </div>
 
       <ReasonDialog
         open={!!dialog}
-        title={dialog?.kind === "mfa" ? `Reset MFA for ${target?.fullName}` : `${target?.isActive ? "Disable" : "Enable"} ${target?.fullName}`}
-        description={dialog?.kind === "mfa" ? "They must set up a new authenticator on next sign-in. Confirm their identity first." : target?.isActive ? "They are signed out and cannot sign in. Their history stays in the log." : "They can sign in again with their existing MFA."}
-        confirmLabel={dialog?.kind === "mfa" ? "Reset MFA" : target?.isActive ? "Disable account" : "Enable account"}
+        title={`${target?.isActive ? "Disable" : "Enable"} ${target?.fullName}`}
+        description={target?.isActive ? "They are signed out and cannot sign in. Their history stays in the log." : "They can sign in again with their password and an emailed code."}
+        confirmLabel={target?.isActive ? "Disable account" : "Enable account"}
         danger={dialog?.kind === "toggle" && target?.isActive}
         onConfirm={(reason) => {
-          const r = dialog!.kind === "mfa" ? resetMfa(dialog!.userId, reason) : setUserActive(dialog!.userId, !target!.isActive, reason);
+          const r = setUserActive(dialog!.userId, !target!.isActive, reason);
           return r.ok ? null : r.error;
         }}
         onClose={() => setDialog(null)}
