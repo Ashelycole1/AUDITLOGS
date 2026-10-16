@@ -15,3 +15,7 @@ backend/media/
 backend/var/
 evidence/
 backups/
+
+# TLS certificates and keys for the Docker stack
+deploy/certs/*
+!deploy/certs/README.txt

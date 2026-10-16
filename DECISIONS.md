@@ -118,3 +118,28 @@ Date, decision, reason. Newest last.
     - Without that setting, the in-browser demo runs, so the screens can still be reviewed with no backend.
     - Store actions are asynchronous in both. The API store reloads what changed after each action, so the screen always shows the server's state.
     - **Not connected yet,** because Phase 4 builds these on the server: CSV export (it must be produced and logged server-side, system.md 4.9), ICT access requests and decisions, and the breach register. In API mode they say so instead of pretending.
+
+## 2026-10-17: Docker (owner request)
+
+24. **Docker Compose for production and development** (architecture.md 3). See `deploy/DOCKER.md`.
+    - **Production** (`docker-compose.yml`) runs these services:
+      - `web`: Nginx serving the React build, terminating TLS and setting the headers;
+      - `api`: gunicorn running as a non-root user;
+      - `migrate`: a one-off run of the migrations and grants;
+      - `db`: Postgres 16;
+      - `scheduler` and `backup`.
+    - **Networks:** only `web` publishes ports. The database is on an internal network with no route out. `api` and `scheduler` also join the `app` network, so they can reach the client's mail server for sign-in PINs.
+    - **Development** (`docker-compose.dev.yml`) runs Postgres, the API with live reload, and the Vite frontend in API mode.
+    - **Not run on this machine,** which has no Docker. The CI `docker` job builds the images and starts the production stack with throwaway secrets on every push. That is the first real run.
+
+25. **Two database roles.**
+    - `auditlogs_owner` runs migrations and backups.
+    - The API connects as `auditlogs_app`. That role is created on the database's first start, and `manage.py apply_db_grants` gives it ordinary table rights after every migration, but never UPDATE, DELETE or TRUNCATE on the audit log. This replaces `deploy/db_grants.sql`.
+    - **Note:** the official Postgres image makes the owner a superuser, which can get past the triggers. That is why the hash chain, the nightly verification and off-server backups still matter (architecture.md 14).
+
+26. **The audit log records the real client IP.** Nginx overwrites `X-Real-IP` on every request, and production reads it through `CLIENT_IP_HEADER`. Without that setting the header is ignored, so a client can't forge it. This closes decision 11.
+
+27. **Scheduler and backups need no new dependency.**
+    - `manage.py run_scheduler` runs jobs at fixed Kampala times. Today that's chain verification at 01:30; more jobs join as they are built.
+    - Backups use the `postgres:16` image, so `pg_dump` matches the server version. They keep 30 daily and 12 monthly copies.
+    - **Open:** copying the backups to a second site in Uganda is a server task for ICT.

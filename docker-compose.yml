@@ -1,0 +1,137 @@
+# AuditLogs production stack: one Linux server in Uganda (architecture.md 2, 3 and 9).
+#   docker compose up -d --build
+# Needs .env (copy .env.example) and a TLS certificate in deploy/certs. Full steps: deploy/DOCKER.md.
+# Only `web` is published. The database sits on `data`, a network with no route out.
+
+x-app: &app
+  build:
+    context: ./backend
+    target: prod
+  image: auditlogs-api:latest
+  restart: unless-stopped
+  env_file: .env
+  environment: &app-env
+    DJANGO_SETTINGS_MODULE: config.settings.prod
+    # The API connects as the restricted role: no UPDATE, DELETE or TRUNCATE on the audit log.
+    DATABASE_URL: postgres://auditlogs_app:${APP_DB_PASSWORD:?Set APP_DB_PASSWORD in .env}@db:5432/auditlogs
+    ALLOWED_HOSTS: ${SERVER_NAME:?Set SERVER_NAME in .env}
+    CSRF_TRUSTED_ORIGINS: https://${SERVER_NAME}
+    CLIENT_IP_HEADER: HTTP_X_REAL_IP
+    EVIDENCE_DIR: /var/lib/auditlogs/evidence
+    IMPORT_DIR: /var/lib/auditlogs/imports
+  volumes:
+    - evidence:/var/lib/auditlogs/evidence
+    - imports:/var/lib/auditlogs/imports
+  networks: [data]
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: auditlogs
+      # The owner runs migrations only; the API never connects as it.
+      POSTGRES_USER: auditlogs_owner
+      POSTGRES_PASSWORD: ${DB_OWNER_PASSWORD:?Set DB_OWNER_PASSWORD in .env}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?Set APP_DB_PASSWORD in .env}
+      TZ: UTC
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./deploy/db/create-app-role.sh:/docker-entrypoint-initdb.d/10-create-app-role.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U auditlogs_owner -d auditlogs"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [data]
+
+  # One-off on every `up`: migrate as the owner, then grant the app role its (limited) privileges.
+  migrate:
+    <<: *app
+    restart: "no"
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://auditlogs_owner:${DB_OWNER_PASSWORD}@db:5432/auditlogs
+    command: ["sh", "-c", "python manage.py migrate --noinput && python manage.py apply_db_grants"]
+    healthcheck:
+      disable: true
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    <<: *app
+    # `app` lets web reach the API and the API reach the client's mail server for sign-in PINs.
+    networks: [data, app]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  # Nightly jobs (architecture.md 5.7): audit chain verification, and more as they are built.
+  scheduler:
+    <<: *app
+    command: ["python", "manage.py", "run_scheduler"]
+    networks: [data, app]
+    healthcheck:
+      disable: true
+    environment:
+      <<: *app-env
+      TZ: Africa/Kampala
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  web:
+    build:
+      context: .
+      dockerfile: deploy/web/Dockerfile
+    image: auditlogs-web:latest
+    restart: unless-stopped
+    environment:
+      SERVER_NAME: ${SERVER_NAME}
+      NGINX_ENVSUBST_FILTER: ^SERVER_NAME$
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/certs:/etc/nginx/certs:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [app]
+
+  # Nightly pg_dump plus the (encrypted) evidence and import files; 30 daily, 12 monthly.
+  backup:
+    image: postgres:16
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/backup.sh"]
+    environment:
+      PGHOST: db
+      PGDATABASE: auditlogs
+      PGUSER: auditlogs_owner
+      PGPASSWORD: ${DB_OWNER_PASSWORD}
+      TZ: Africa/Kampala
+      BACKUP_TIME: ${BACKUP_TIME:-02:00}
+    volumes:
+      - ${BACKUP_DIR:-./backups}:/backups
+      # Writable only so restore.sh can put files back; backup.sh just reads them.
+      - evidence:/data/evidence
+      - imports:/data/imports
+      - ./deploy/backup/backup.sh:/backup.sh:ro
+      - ./deploy/backup/restore.sh:/restore.sh:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [data]
+
+networks:
+  # The database and backups: reachable only by the app containers, no route to the internet.
+  data:
+    internal: true
+  # Web to API, and the API out to the mail server.
+  app: {}
+
+volumes:
+  pgdata:
+  evidence:
+  imports:

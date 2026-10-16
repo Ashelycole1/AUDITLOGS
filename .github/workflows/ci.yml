@@ -50,3 +50,57 @@ jobs:
           node-version: "20"
       - run: npm ci
       - run: npm run build
+
+  # Builds both images and starts the full production stack with throwaway secrets and a
+  # self-signed certificate, then checks HTTPS, the redirect, the headers and the database grants.
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Throwaway .env and certificate (CI only, never real values)
+        run: |
+          rnd() { python3 -c "import secrets; print(secrets.token_urlsafe(24))"; }
+          {
+            echo "SERVER_NAME=localhost"
+            echo "DJANGO_SECRET_KEY=$(rnd)$(rnd)"
+            echo "EVIDENCE_ENCRYPTION_KEY=$(python3 -c 'import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())')"
+            echo "DB_OWNER_PASSWORD=$(rnd)"
+            echo "APP_DB_PASSWORD=$(rnd)"
+            echo "SMTP_HOST=localhost"
+            echo "BACKUP_DIR=./backups"
+          } > .env
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj "/CN=localhost" \
+            -keyout deploy/certs/privkey.pem -out deploy/certs/fullchain.pem
+      - name: Build and start the stack
+        run: |
+          docker compose up -d --build
+          for i in $(seq 1 60); do
+            curl -fsSk https://localhost/api/v1/health && exit 0
+            sleep 5
+          done
+          echo "The stack did not become healthy in 5 minutes" >&2
+          exit 1
+      - name: HTTPS answers, HTTP redirects, security headers are set
+        run: |
+          curl -fsSk https://localhost/api/v1/health | grep -q '"ok"'
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost/)" = "301"
+          curl -sSkI https://localhost/ | grep -qi "content-security-policy"
+          curl -sSkI https://localhost/ | grep -qi "strict-transport-security"
+          curl -fsSk https://localhost/login | grep -q '<div id="root">'
+      - name: The API's database role cannot change or remove audit log entries
+        run: |
+          docker compose exec -T db psql -U auditlogs_app -d auditlogs -c "SELECT count(*) FROM auditlog_auditlog"
+          ! docker compose exec -T db psql -U auditlogs_app -d auditlogs -v ON_ERROR_STOP=1 -c "UPDATE auditlog_auditlog SET reason = 'x'"
+          ! docker compose exec -T db psql -U auditlogs_app -d auditlogs -v ON_ERROR_STOP=1 -c "DELETE FROM auditlog_auditlog"
+          ! docker compose exec -T db psql -U auditlogs_app -d auditlogs -v ON_ERROR_STOP=1 -c "TRUNCATE auditlog_auditlog"
+      - name: Scheduler and backup run once
+        run: |
+          docker compose exec -T scheduler python manage.py run_scheduler --once | grep -q "verify_audit_chain: ok"
+          docker compose exec -T backup /bin/sh /backup.sh --now
+          ls backups/daily | grep -q '\.dump$'
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs --no-color
+      - name: Stop
+        if: always()
+        run: docker compose down -v

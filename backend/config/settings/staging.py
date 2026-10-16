@@ -9,9 +9,6 @@ from .prod import *  # noqa: F403
 
 ENVIRONMENT = "staging"
 
-# The platform checks health over plain HTTP inside its network; everything else is redirected to HTTPS.
-SECURE_REDIRECT_EXEMPT = [r"^api/v1/health$"]
-
 # Without an SMTP server configured, sign-in PINs are written to the service log, which only the
 # owner can read. Fine for dummy accounts; set SMTP_* to email them instead.
 if not env("SMTP_HOST"):

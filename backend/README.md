@@ -13,7 +13,9 @@ uv pip install --python .venv -r requirements.txt -r requirements-dev.txt
 .venv/Scripts/python manage.py runserver
 ```
 
-## Run with Docker (PostgreSQL)
+## Run with Docker
+
+The development stack (Postgres, this API with live reload, and the frontend) and the production stack (Nginx with TLS, gunicorn, Postgres, scheduler and backups) are both described in `../deploy/DOCKER.md`.
 
 ```sh
 docker compose -f docker-compose.dev.yml up --build

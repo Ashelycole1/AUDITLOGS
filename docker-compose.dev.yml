@@ -1,8 +1,9 @@
-# Local development: one command starts the database and the API.
+# Local development: database, API and frontend with live reload. Dummy data only (system.md 4.10).
 #   docker compose -f docker-compose.dev.yml up --build
-# Then, once:  docker compose -f docker-compose.dev.yml exec api python manage.py seed_dev_users
+#   docker compose -f docker-compose.dev.yml exec api python manage.py seed_dev_users
+# Open http://localhost:5173. Sign-in PINs appear in the api logs:
+#   docker compose -f docker-compose.dev.yml logs -f api
 # Needs a .env next to this file (copy .env.example). No password is written here.
-# Dummy data only (system.md 4.10). The production compose file comes with the deployment task.
 
 services:
   db:
@@ -12,23 +13,24 @@ services:
       POSTGRES_USER: auditlogs
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata-dev:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U auditlogs -d auditlogs"]
       interval: 5s
-      retries: 10
+      retries: 20
 
   api:
     build:
       context: ./backend
-      args:
-        INSTALL_DEV: "true"
+      target: dev
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.dev
       DATABASE_URL: postgres://auditlogs:${POSTGRES_PASSWORD}@db:5432/auditlogs
       DEV_SEED_PASSWORD: ${DEV_SEED_PASSWORD:-}
-      ALLOWED_HOSTS: localhost,127.0.0.1
-    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+      ALLOWED_HOSTS: localhost,127.0.0.1,api
+      EVIDENCE_DIR: /app/var/evidence
+      IMPORT_DIR: /app/var/imports
+    command: ["sh", "-c", "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"]
     ports:
       - "8000:8000"
     volumes:
@@ -37,5 +39,22 @@ services:
       db:
         condition: service_healthy
 
+  frontend:
+    image: node:20-alpine
+    working_dir: /app
+    environment:
+      VITE_DATA_SOURCE: api
+      VITE_API_PROXY: http://api:8000
+    command: ["sh", "-c", "npm ci && ./node_modules/.bin/vite --host 0.0.0.0 --port 5173"]
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      # The container's own node_modules, so it never mixes with packages installed on the host.
+      - frontend-node-modules:/app/node_modules
+    depends_on:
+      - api
+
 volumes:
-  pgdata:
+  pgdata-dev:
+  frontend-node-modules:

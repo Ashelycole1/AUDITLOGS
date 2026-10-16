@@ -1,0 +1,12 @@
+# Context for deploy/web/Dockerfile (repository root). Keep secrets, data and local builds out of images.
+.git/
+.github/
+.env
+.env.*
+**/node_modules/
+frontend/dist/
+backend/
+deploy/certs/
+backups/
+evidence/
+*.sqlite3

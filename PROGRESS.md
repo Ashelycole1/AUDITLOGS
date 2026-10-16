@@ -96,6 +96,15 @@ Updated at the end of every session and whenever work is paused (see `agent_work
   - **New backend endpoints:** `/auditors`, `/dashboard/queries`, `/dashboard/cia-activity`, plus pending and last decision on query detail. 347 backend tests pass.
   - **Checked end to end** on the local servers through the Vite proxy: PIA import, CIA assign, IA response, evidence and proposal, shown in the CIA approvals inbox, dashboard and audit log, and the IA query detail.
 
+- 2026-10-17, **Dockerised** (DECISIONS 24 to 27, `deploy/DOCKER.md`):
+  - **Production stack:** web (Nginx, TLS, React), api (gunicorn), a one-off migrate step (migrations then grants), db, scheduler and backup.
+  - **Development stack:** db, API with live reload, and the Vite frontend.
+  - **Security:**
+    - the restricted `auditlogs_app` database role can't change or remove audit log rows;
+    - the real client IP comes from Nginx;
+    - the HTTPS-only site refuses to start without a certificate.
+  - CI now builds and smoke-tests the production stack on every push. Docker isn't installed here, so that CI job is the first real run.
+
 ### Not done
 - Nothing is committed yet. The repo has no commits on `main`.
 - **Not run against PostgreSQL yet.** Docker and Postgres aren't installed on this machine. The Postgres trigger SQL, advisory lock, `docker-compose.dev.yml` and CI job are written but unexecuted. CI or a Docker machine will be the first real run.
