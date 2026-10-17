@@ -52,11 +52,11 @@ function Workspace({ q }: { q: Query }) {
       </Link>
       <header className="mb-6 mt-2">
         <p className="font-mono text-sm text-lake-deep">{q.reference}</p>
-        <h1 className="mt-1 max-w-[40ch] text-balance text-2xl font-semibold leading-tight tracking-[-0.02em] sm:text-[1.75rem]">{q.title}</h1>
+        <h1 className="mt-1 max-w-[40ch] text-balance text-2xl font-medium leading-tight tracking-[-0.02em] sm:text-[1.75rem]">{q.title}</h1>
         <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2">
           <StatusBadge status={q.status} />
           <RiskTag risk={q.riskRatingCurrent} />
-          {late > 0 && <span className="text-[0.8125rem] font-semibold text-danger">{late} {late === 1 ? "day" : "days"} overdue</span>}
+          {late > 0 && <span className="text-[0.8125rem] font-medium text-danger">{late} {late === 1 ? "day" : "days"} overdue</span>}
         </div>
       </header>
 
@@ -306,7 +306,7 @@ function PendingRequest({ requestId }: { requestId: string }) {
   const own = r.proposedBy === me.id;
 
   return (
-    <Panel title="Waiting for the CIA" className="!border-[#fedf89] !bg-warn-wash/40">
+    <Panel title="Waiting for the CIA" className="!border-[#fee685] !bg-warn-wash/40">
       <p className="text-sm text-muted">
         {userName(r.proposedBy)} proposed closure on {fmtDateTime(r.createdAt)}.
       </p>

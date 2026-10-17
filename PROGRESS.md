@@ -125,6 +125,8 @@ Updated at the end of every session and whenever work is paused (see `agent_work
 
 - 2026-10-17, MFA pause and database lock-down pushed (`9630ef4`) and live on Render through a blueprint sync. Custom domain **https://auditlog.ashelycole.dev** added: `CSRF_TRUSTED_ORIGINS` on Render is now `https://auditlog.ashelycole.dev,https://auditlogs-gules.vercel.app`. Sign-ins from it had been refused with "Origin checking failed".
 
+- 2026-10-17, **restyled after zaro.ai** (DECISIONS 29): Host Grotesk and JetBrains Mono, warm cloud/umber/lilac palette, top navigation instead of the sidebar, zaro-style sign-in page. The frontend builds. Checked by screenshots of sign-in, dashboard, queries, audit log, query detail and the phone menu (demo mode). Not committed yet.
+
 ### In flight
 - Owner to sign in on staging with a demo account (password only).
 

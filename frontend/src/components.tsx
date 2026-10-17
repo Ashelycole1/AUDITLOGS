@@ -13,7 +13,7 @@ export function Panel({ title, subtitle, aside, children, className }: { title?:
       {(title || aside) && (
         <header className="mb-4 flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
           <div className="min-w-0">
-            {title && <h2 className="text-base font-semibold">{title}</h2>}
+            {title && <h2 className="text-base font-medium tracking-[-0.01em]">{title}</h2>}
             {subtitle && <p className="mt-0.5 text-sm text-muted">{subtitle}</p>}
           </div>
           {aside}
@@ -24,12 +24,13 @@ export function Panel({ title, subtitle, aside, children, className }: { title?:
   );
 }
 
-export function PageHeader({ title, lede, actions }: { title: string; lede?: string; actions?: ReactNode }) {
+export function PageHeader({ title, lede, actions, eyebrow }: { title: string; lede?: string; actions?: ReactNode; eyebrow?: string }) {
   return (
-    <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
+    <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
       <div className="max-w-[68ch]">
-        <h1 className="text-balance text-2xl font-semibold tracking-[-0.02em] sm:text-[1.75rem]">{title}</h1>
-        {lede && <p className="mt-1.5 text-[0.9375rem] leading-relaxed text-muted">{lede}</p>}
+        {eyebrow && <p className="eyebrow mb-2">{eyebrow}</p>}
+        <h1 className="text-balance text-[1.75rem] font-medium leading-[1.1] tracking-[-0.03em] sm:text-[2.25rem]">{title}</h1>
+        {lede && <p className="mt-2 text-[0.9375rem] leading-relaxed text-muted">{lede}</p>}
       </div>
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
     </header>
@@ -43,15 +44,15 @@ export function Button({
   ...rest
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { kind?: BtnKind }) {
   const styles: Record<BtnKind, string> = {
-    primary: "bg-lake text-white border border-lake hover:bg-lake-deep shadow-[0_1px_2px_rgba(16,24,40,0.05)]",
-    secondary: "bg-white text-ink border border-rule hover:bg-subtle shadow-[0_1px_2px_rgba(16,24,40,0.05)]",
-    quiet: "text-lake hover:bg-lake-wash border border-transparent",
-    danger: "bg-white text-danger border border-[#fda29b] hover:bg-danger-wash shadow-[0_1px_2px_rgba(16,24,40,0.05)]",
+    primary: "bg-ink text-[#fafaf8] border border-ink hover:bg-spine-2",
+    secondary: "bg-transparent text-ink border border-rule hover:border-[#aea297] hover:bg-[#20161308]",
+    quiet: "text-lake-deep hover:bg-lake-wash border border-transparent",
+    danger: "bg-transparent text-danger border border-[#f4b4c2] hover:bg-danger-wash",
   };
   return (
     <button
       className={cx(
-        "inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+        "inline-flex min-h-10 items-center justify-center gap-2 rounded-[5px] px-4 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
         styles[kind],
         className,
       )}
@@ -62,12 +63,12 @@ export function Button({
 
 // Each status has its own glyph as well as its own colour, so it reads without colour.
 const STATUS_STYLE: Record<Status, { pill: string; dot: string }> = {
-  Imported: { pill: "bg-[#f2f4f7] text-[#344054] ring-[#d0d5dd]", dot: "bg-[#667085]" },
-  Assigned: { pill: "bg-assign-wash text-assign ring-[#d9d6fe]", dot: "bg-assign" },
-  "In Progress": { pill: "bg-lake-wash text-lake-deep ring-[#c4d9f5]", dot: "bg-lake" },
-  "Proposed for Closure": { pill: "bg-warn-wash text-warn ring-[#fedf89]", dot: "bg-[#dc6803]" },
-  Closed: { pill: "bg-good-wash text-good ring-[#abefc6]", dot: "bg-[#17b26a]" },
-  Returned: { pill: "bg-danger-wash text-danger ring-[#fecdca]", dot: "bg-[#f04438]" },
+  Imported: { pill: "bg-[#ecebe5] text-muted ring-[#dad8ce]", dot: "bg-[#988f77]" },
+  Assigned: { pill: "bg-assign-wash text-assign ring-[#c6e4e9]", dot: "bg-[#3990a1]" },
+  "In Progress": { pill: "bg-lake-wash text-lake-deep ring-[#dcd8fc]", dot: "bg-lake" },
+  "Proposed for Closure": { pill: "bg-warn-wash text-warn ring-[#fee685]", dot: "bg-[#f99c00]" },
+  Closed: { pill: "bg-good-wash text-good ring-[#cae8cd]", dot: "bg-[#4a9d54]" },
+  Returned: { pill: "bg-danger-wash text-danger ring-[#ffd0d9]", dot: "bg-[#e0294f]" },
 };
 
 export function statusDot(s: Status): string {
@@ -120,12 +121,12 @@ export function Check({ ok, pending, label }: { ok?: boolean; pending?: boolean;
 
 export function RiskTag({ risk }: { risk: Risk }) {
   const bars = risk === "High" ? 3 : risk === "Medium" ? 2 : 1;
-  const tone = risk === "High" ? "bg-[#d03b3b]" : risk === "Medium" ? "bg-[#dc6803]" : "bg-[#98a2b3]";
+  const tone = risk === "High" ? "bg-[#e0294f]" : risk === "Medium" ? "bg-[#f99c00]" : "bg-[#aaa38d]";
   return (
     <span className="inline-flex items-center gap-1.5 text-[0.8125rem] text-ink" title={`${risk} risk`}>
       <span className="flex items-end gap-[2px]" aria-hidden>
         {[1, 2, 3].map((i) => (
-          <span key={i} className={cx("w-[3px] rounded-[1px]", i <= bars ? tone : "bg-[#e4e7ec]")} style={{ height: 3 + i * 3 }} />
+          <span key={i} className={cx("w-[3px] rounded-[1px]", i <= bars ? tone : "bg-line")} style={{ height: 3 + i * 3 }} />
         ))}
       </span>
       {risk}
@@ -139,13 +140,13 @@ export function Ref({ children }: { children: ReactNode }) {
 
 export function Notice({ tone = "info", children }: { tone?: "info" | "error" | "ok" | "warn"; children: ReactNode }) {
   const t = {
-    info: { box: "bg-lake-wash border-[#c4d9f5] text-lake-deep", icon: "info" },
-    error: { box: "bg-danger-wash border-[#fecdca] text-danger", icon: "alert" },
-    ok: { box: "bg-good-wash border-[#abefc6] text-good", icon: "check" },
-    warn: { box: "bg-warn-wash border-[#fedf89] text-warn", icon: "alert" },
+    info: { box: "bg-lake-wash border-[#dcd8fc] text-lake-deep", icon: "info" },
+    error: { box: "bg-danger-wash border-[#ffd0d9] text-danger", icon: "alert" },
+    ok: { box: "bg-good-wash border-[#cae8cd] text-good", icon: "check" },
+    warn: { box: "bg-warn-wash border-[#fee685] text-warn", icon: "alert" },
   }[tone] as { box: string; icon: IconName };
   return (
-    <div role={tone === "error" ? "alert" : "status"} className={cx("flex items-start gap-2.5 rounded-lg border px-3.5 py-2.5 text-sm leading-snug", t.box)}>
+    <div role={tone === "error" ? "alert" : "status"} className={cx("flex items-start gap-2.5 rounded-md border px-3.5 py-2.5 text-sm leading-snug", t.box)}>
       <Icon name={t.icon} className="mt-px size-4 shrink-0" />
       <div className="min-w-0">{children}</div>
     </div>
@@ -156,7 +157,7 @@ export function Empty({ title, children, icon = "inbox" }: { title: string; chil
   return (
     <div className="flex flex-col items-center rounded-lg px-6 py-10 text-center">
       <span className="grid size-10 place-items-center rounded-full bg-paper text-faint ring-8 ring-subtle"><Icon name={icon} className="size-5" /></span>
-      <p className="mt-4 font-semibold">{title}</p>
+      <p className="mt-4 font-medium">{title}</p>
       {children && <div className="mx-auto mt-1 max-w-[46ch] text-sm text-muted">{children}</div>}
     </div>
   );
@@ -164,7 +165,7 @@ export function Empty({ title, children, icon = "inbox" }: { title: string; chil
 
 export function Label({ children, htmlFor }: { children: ReactNode; htmlFor?: string }) {
   return (
-    <label htmlFor={htmlFor} className="mb-1.5 block text-sm font-medium text-[#344054]">
+    <label htmlFor={htmlFor} className="mb-1.5 block text-sm font-medium text-muted">
       {children}
     </label>
   );
@@ -225,10 +226,10 @@ export function ReasonDialog({
     <dialog
       ref={ref}
       onClose={onClose}
-      className="m-auto w-[min(32rem,calc(100vw-2rem))] rounded-xl bg-transparent p-0 text-ink backdrop:bg-[#0c111d]/60 backdrop:backdrop-blur-[2px]"
+      className="m-auto w-[min(32rem,calc(100vw-2rem))] rounded-xl bg-transparent p-0 text-ink backdrop:bg-[#130d0b]/55 backdrop:backdrop-blur-[2px]"
     >
-      <form onSubmit={submit} className="rounded-xl bg-white p-6 shadow-[0_20px_24px_-4px_rgba(16,24,40,0.08),0_8px_8px_-4px_rgba(16,24,40,0.03)]">
-        <h2 className="text-lg font-semibold">{title}</h2>
+      <form onSubmit={submit} className="rounded-xl border border-line bg-sheet p-6 shadow-[0_20px_24px_-4px_rgba(32,22,19,0.10),0_8px_8px_-4px_rgba(32,22,19,0.04)]">
+        <h2 className="text-lg font-medium tracking-[-0.01em]">{title}</h2>
         {description && <p className="mt-1 text-sm leading-relaxed text-muted">{description}</p>}
         {children && <div className="mt-5 space-y-4">{children}</div>}
         <div className="mt-5">
@@ -245,7 +246,7 @@ export function ReasonDialog({
         {error && <div className="mt-3"><Notice tone="error">{error}</Notice></div>}
         <div className="mt-6 grid grid-cols-2 gap-3">
           <Button type="button" kind="secondary" onClick={onClose}>Cancel</Button>
-          <Button type="submit" disabled={busy} kind={danger ? "danger" : "primary"} className={danger ? "!bg-[#d92d20] !text-white !border-[#d92d20] hover:!bg-[#b42318]" : ""}>{confirmLabel}</Button>
+          <Button type="submit" disabled={busy} kind={danger ? "danger" : "primary"} className={danger ? "!bg-danger !text-white !border-danger hover:!bg-[#8b0836]" : ""}>{confirmLabel}</Button>
         </div>
       </form>
     </dialog>
@@ -277,7 +278,7 @@ export function StatusRail({ status }: { status: Status }) {
               >
                 {done ? <Icon name="check" className="size-3.5" /> : <span className={cx("size-2 rounded-full", current ? (returned ? "bg-danger" : "bg-lake") : "bg-line")} />}
               </span>
-              <span className={cx("mt-2 px-1 text-xs leading-tight sm:text-[0.8125rem]", current ? (returned ? "font-semibold text-danger" : "font-semibold text-lake-deep") : done ? "font-medium text-ink" : "text-faint")}>
+              <span className={cx("mt-2 px-1 text-xs leading-tight sm:text-[0.8125rem]", current ? (returned ? "font-medium text-danger" : "font-medium text-lake-deep") : done ? "font-medium text-ink" : "text-faint")}>
                 {current && returned ? "Returned" : s}
               </span>
             </li>
@@ -292,8 +293,8 @@ export function StatusRail({ status }: { status: Status }) {
 export function Stat({ label, value, tone }: { label: string; value: number | string; tone?: "danger" | "warn" }) {
   return (
     <div className="card rounded-xl px-5 py-4">
-      <p className="text-sm font-medium text-muted">{label}</p>
-      <p className={cx("mt-2 text-3xl font-semibold tracking-[-0.02em]", tone === "danger" && "text-danger", tone === "warn" && "text-warn")}>{value}</p>
+      <p className="eyebrow">{label}</p>
+      <p className={cx("mt-2 text-3xl font-medium tracking-[-0.03em]", tone === "danger" && "text-danger", tone === "warn" && "text-warn")}>{value}</p>
     </div>
   );
 }
@@ -303,9 +304,9 @@ export function Table({ head, children, empty }: { head: ReactNode[]; children: 
     <div className="-mx-5 overflow-x-auto border-t border-line sm:-mx-6">
       <table className="w-full min-w-[640px] border-collapse text-left text-sm">
         <thead>
-          <tr className="border-b border-line bg-subtle text-xs text-muted">
+          <tr className="border-b border-line bg-subtle text-faint">
             {head.map((h, i) => (
-              <th key={i} className="px-3 py-2.5 font-medium first:pl-5 last:pr-5 sm:first:pl-6 sm:last:pr-6">{h}</th>
+              <th key={i} className="px-3 py-2.5 font-normal first:pl-5 last:pr-5 sm:first:pl-6 sm:last:pr-6">{h}</th>
             ))}
           </tr>
         </thead>
@@ -320,9 +321,9 @@ export function Table({ head, children, empty }: { head: ReactNode[]; children: 
 
 export function Wordmark({ onSpine }: { onSpine?: boolean }) {
   return (
-    <p className={cx("flex items-center gap-2.5 text-[1.0625rem] font-semibold tracking-[-0.01em]", onSpine ? "text-white" : "text-ink")}>
-      <span className="grid size-8 place-items-center rounded-lg bg-lake text-white shadow-[inset_0_-2px_0_rgba(0,0,0,0.15)]">
-        <Icon name="chain" className="size-[18px]" />
+    <p className={cx("flex items-center gap-2 text-[1.125rem] font-medium tracking-[-0.03em]", onSpine ? "text-[#fafaf8]" : "text-ink")}>
+      <span className={cx("grid size-7 place-items-center rounded-[6px]", onSpine ? "bg-[#fafaf8] text-ink" : "bg-ink text-[#fafaf8]")}>
+        <Icon name="chain" className="size-4" />
       </span>
       AuditLogs
     </p>
@@ -331,7 +332,7 @@ export function Wordmark({ onSpine }: { onSpine?: boolean }) {
 
 export function Avatar({ name, className }: { name: string; className?: string }) {
   const initials = name.split(" ").map((p) => p[0]).slice(0, 2).join("");
-  return <span className={cx("grid size-9 shrink-0 place-items-center rounded-full bg-lake-wash text-sm font-semibold text-lake-deep", className)} aria-hidden>{initials}</span>;
+  return <span className={cx("grid size-9 shrink-0 place-items-center rounded-full bg-lake-wash text-sm font-medium text-lake-deep", className)} aria-hidden>{initials}</span>;
 }
 
 // Hosted test copies (Vercel/Render) hold dummy data only (architecture.md 9). The sign-in page says so.

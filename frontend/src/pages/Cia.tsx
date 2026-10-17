@@ -52,7 +52,7 @@ function RequestCard({ r }: { r: StatusChangeRequest }) {
       <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2 border-b border-line px-5 py-4 sm:px-6">
         <div className="min-w-0 max-w-[60ch]">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1"><Ref>{q.reference}</Ref><RiskTag risk={q.riskRatingCurrent} /></div>
-          <Link to={`/queries/${q.id}`} className="mt-1 block text-[1.1875rem] font-semibold leading-snug tracking-[-0.015em] hover:text-lake hover:underline">{q.title}</Link>
+          <Link to={`/queries/${q.id}`} className="mt-1 block text-[1.1875rem] font-medium leading-snug tracking-[-0.015em] hover:text-lake hover:underline">{q.title}</Link>
         </div>
         <p className={cx("text-sm font-medium", days >= 5 ? "text-danger" : "text-warn")}>{waitingFor(r.createdAt)}</p>
       </header>
@@ -271,7 +271,7 @@ export function AuditLogPage() {
       <section className={cx("sheet mb-6 rounded-xl p-5 sm:p-6", result && !result.ok && "!border-danger/50")}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-[58ch]" aria-live="polite">
-            <h2 className={cx("text-[1.375rem] font-semibold tracking-[-0.02em]", result && !result.ok && "text-danger", result?.ok && "text-good")}>{verdict}</h2>
+            <h2 className={cx("text-[1.375rem] font-medium tracking-[-0.02em]", result && !result.ok && "text-danger", result?.ok && "text-good")}>{verdict}</h2>
             <p className={cx("mt-1 text-sm leading-relaxed", result && !result.ok ? "text-danger" : "text-muted")}>
               {running
                 ? `Recomputing fingerprints: ${checkedTo} of ${total}.`
@@ -393,12 +393,12 @@ function LinkNode({ state }: { state: LinkState }) {
       {state === "ok" ? (
         <svg viewBox="0 0 16 16" className="link-tick size-[15px] text-good">
           <circle cx="8" cy="8" r="7.5" fill="currentColor" />
-          <path d="M4.6 8.3 7 10.6l4.4-5" fill="none" stroke="#fafbf7" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M4.6 8.3 7 10.6l4.4-5" fill="none" stroke="#fbfbf9" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       ) : state === "broken" ? (
         <svg viewBox="0 0 16 16" className="link-tick size-[15px] text-danger">
           <circle cx="8" cy="8" r="7.5" fill="currentColor" />
-          <path d="m5.3 5.3 5.4 5.4M10.7 5.3l-5.4 5.4" stroke="#fafbf7" strokeWidth="1.8" strokeLinecap="round" />
+          <path d="m5.3 5.3 5.4 5.4M10.7 5.3l-5.4 5.4" stroke="#fbfbf9" strokeWidth="1.8" strokeLinecap="round" />
         </svg>
       ) : (
         <span className={cx("size-[11px] rounded-full border-[1.5px] bg-sheet", state === "after" ? "border-dashed border-danger/60" : "border-rule")} />
@@ -436,17 +436,17 @@ export function ReportsPage() {
                 <tr key={s} className="border-b border-line last:border-0">
                   <th scope="row" className="py-2.5 pr-3 text-left font-normal"><StatusBadge status={s} /></th>
                   <td className="w-24 py-2.5" aria-hidden>
-                    <div className="h-1.5 bg-ink/6"><div className="h-full bg-[#2a78d6] rounded-r-[3px]" style={{ width: `${(n / max) * 100}%` }} /></div>
+                    <div className="h-1.5 bg-ink/6"><div className="h-full bg-series rounded-r-[3px]" style={{ width: `${(n / max) * 100}%` }} /></div>
                   </td>
-                  <td className="w-10 py-2.5 text-right font-semibold">{n}</td>
+                  <td className="w-10 py-2.5 text-right font-medium">{n}</td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
               <tr className="border-t border-rule">
-                <th scope="row" className="pt-2.5 text-left font-semibold">Total</th>
+                <th scope="row" className="pt-2.5 text-left font-medium">Total</th>
                 <td />
-                <td className="pt-2.5 text-right font-semibold">{visibleQueries.length}</td>
+                <td className="pt-2.5 text-right font-medium">{visibleQueries.length}</td>
               </tr>
             </tfoot>
           </table>
@@ -459,7 +459,7 @@ export function ReportsPage() {
                 <td className={cx(!q.currentAssignee && "text-faint")}>{q.currentAssignee ? userName(q.currentAssignee) : "Not assigned"}</td>
                 <td className="whitespace-nowrap">{fmtDate(q.deadline)}</td>
                 <td className="w-40">
-                  <span className="font-semibold text-danger">{daysOverdue(q)}</span>
+                  <span className="font-medium text-danger">{daysOverdue(q)}</span>
                   <div className="mt-1.5 h-1 bg-danger-wash" aria-hidden><div className="h-full bg-danger" style={{ width: `${(daysOverdue(q) / worst) * 100}%` }} /></div>
                 </td>
               </tr>
@@ -535,7 +535,7 @@ export function CompliancePage() {
             <li className="flex items-start gap-3 pb-3">
               <span className="mt-0.5"><Check ok={failedLogins < FAILED_LOGIN_ALERT} pending={failedLogins > 0 && failedLogins < FAILED_LOGIN_ALERT} /></span>
               <span className="flex-1">Failed sign-ins<span className="block text-muted">An alert is raised at {FAILED_LOGIN_ALERT} or more.</span></span>
-              <span className="font-semibold">{failedLogins}</span>
+              <span className="font-medium">{failedLogins}</span>
             </li>
             <li className="flex items-start gap-3 py-3">
               <span className="mt-0.5"><Check ok /></span>
@@ -546,7 +546,7 @@ export function CompliancePage() {
             <li className="flex items-start gap-3 pt-3">
               <span className="mt-0.5"><Check ok={chainOk} /></span>
               <span className="flex-1">Audit chain verification<span className="block text-muted">A failure writes a draft entry here.</span></span>
-              <span className={chainOk ? "text-muted" : "font-semibold text-danger"}>{chainOk ? "Intact" : "Broken"}</span>
+              <span className={chainOk ? "text-muted" : "font-medium text-danger"}>{chainOk ? "Intact" : "Broken"}</span>
             </li>
           </ul>
           <div className="mt-5"><Empty title="No breaches recorded">If one is detected, record what happened, who was affected, what was done and when the PDPO was told.</Empty></div>

@@ -162,11 +162,11 @@ export function ImportPage() {
             )}
           >
             <svg viewBox="0 0 40 48" className="h-12 w-10 text-spine" aria-hidden>
-              <path d="M6 2h20l12 12v30a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Z" fill="#fafbf7" stroke="currentColor" strokeWidth="2" />
+              <path d="M6 2h20l12 12v30a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Z" fill="#fbfbf9" stroke="currentColor" strokeWidth="2" />
               <path d="M26 2v12h12" fill="none" stroke="currentColor" strokeWidth="2" />
               <path d="M11 24h18M11 30h18M11 36h12" stroke="currentColor" strokeWidth="2" strokeOpacity=".35" />
             </svg>
-            <p className="mt-4 text-lg font-semibold tracking-[-0.01em]">{dragging ? "Drop to check the file" : "Drop the final queries file here"}</p>
+            <p className="mt-4 text-lg font-medium tracking-[-0.01em]">{dragging ? "Drop to check the file" : "Drop the final queries file here"}</p>
             <p className="mt-1 text-sm text-muted">Excel or CSV. Nothing is imported until you confirm.</p>
             <input ref={input} id="import-file" type="file" accept=".csv,.xlsx" className="sr-only" onChange={(e) => onFile(e.target.files?.[0])} />
             <div className="mt-5 flex flex-wrap justify-center gap-2">
@@ -189,12 +189,12 @@ export function ImportPage() {
         <section className="sheet rounded-xl">
           <header className="flex flex-wrap items-end justify-between gap-4 border-b border-line px-5 py-4 sm:px-6">
             <div className="min-w-0">
-              <h2 className="truncate text-[1.0625rem] font-semibold">{preview.filename}</h2>
+              <h2 className="truncate text-[1.0625rem] font-medium">{preview.filename}</h2>
               <p className="mt-0.5 font-mono text-xs text-faint" title={preview.hash}>sha256 {preview.hash.slice(0, 24)}</p>
             </div>
             <dl className="flex gap-6 text-sm">
-              <div className="flex items-center gap-1.5"><Check ok /><dt className="sr-only">Ready</dt><dd><span className="font-semibold">{preview.rows.length - blocking}</span> ready</dd></div>
-              <div className="flex items-center gap-1.5"><Check ok={false} /><dt className="sr-only">Problems</dt><dd className={cx(blocking > 0 && "text-danger")}><span className="font-semibold">{blocking}</span> with problems</dd></div>
+              <div className="flex items-center gap-1.5"><Check ok /><dt className="sr-only">Ready</dt><dd><span className="font-medium">{preview.rows.length - blocking}</span> ready</dd></div>
+              <div className="flex items-center gap-1.5"><Check ok={false} /><dt className="sr-only">Problems</dt><dd className={cx(blocking > 0 && "text-danger")}><span className="font-medium">{blocking}</span> with problems</dd></div>
             </dl>
           </header>
 
@@ -203,7 +203,7 @@ export function ImportPage() {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <Notice tone="error">Fix the lines marked with a cross in the file, then upload it again. The file is imported whole or not at all.</Notice>
                 <label className="flex min-h-10 items-center gap-2 text-sm">
-                  <input type="checkbox" className="size-4 accent-[#256abf]" checked={problemsOnly} onChange={(e) => setProblemsOnly(e.target.checked)} />
+                  <input type="checkbox" className="size-4 accent-lake" checked={problemsOnly} onChange={(e) => setProblemsOnly(e.target.checked)} />
                   Show only lines with problems
                 </label>
               </div>
@@ -305,7 +305,7 @@ export function BatchesPage() {
                 <span className="font-medium">{b.sourceFilename}</span>
                 <span className="mt-0.5 block font-mono text-xs text-faint" title={b.sourceSha256}>sha256 {b.sourceSha256.slice(0, 24)}</span>
               </td>
-              <td className="font-semibold">{b.rowCount}</td>
+              <td className="font-medium">{b.rowCount}</td>
               <td>
                 <span className="inline-flex items-center gap-1.5 text-[0.8125rem] font-medium">
                   <Check {...BATCH_MARK[b.status]} />

@@ -113,7 +113,7 @@ export default function DashboardPage() {
 
   return (
     <>
-      <PageHeader title={title} lede={lede} />
+      <PageHeader eyebrow="Dashboard" title={title} lede={lede} />
 
       <div className="mb-6 flex flex-wrap items-end gap-3" role="group" aria-label="Filter the dashboard">
         {!isIa && (
@@ -126,7 +126,7 @@ export default function DashboardPage() {
           <option value="">All risk ratings</option>
           {RISKS.map((r) => <option key={r} value={r}>{r} risk</option>)}
         </select>
-        {(dept || risk) && <button type="button" onClick={() => { setDept(""); setRisk(""); }} className="min-h-10 rounded-lg px-3 text-sm font-semibold text-lake hover:bg-lake-wash">Clear filters</button>}
+        {(dept || risk) && <button type="button" onClick={() => { setDept(""); setRisk(""); }} className="min-h-10 rounded-lg px-3 text-sm font-medium text-lake hover:bg-lake-wash">Clear filters</button>}
         <p className="ml-auto text-sm text-muted">{qs.length} {qs.length === 1 ? "query" : "queries"}{dept || risk ? " match these filters" : " in total"}</p>
       </div>
 
@@ -152,7 +152,7 @@ export default function DashboardPage() {
           label="Closure rate"
           value={`${qs.length ? Math.round((closed / qs.length) * 100) : 0}%`}
           note={<span className="text-muted">{closed} of {qs.length} closed</span>}
-          spark={<div className="pt-4"><Meter value={qs.length ? closed / qs.length : 0} color={GOOD} track="#dcfae6" label="Share of queries closed" /></div>}
+          spark={<div className="pt-4"><Meter value={qs.length ? closed / qs.length : 0} color={GOOD} track="#e4f4e5" label="Share of queries closed" /></div>}
         />
         <KpiTile {...fourth} />
       </div>
@@ -211,10 +211,10 @@ export default function DashboardPage() {
         <section className={cx("card min-w-0 rounded-xl", isCia && "xl:col-span-2")}>
           <header className="flex flex-wrap items-start justify-between gap-3 p-5 pb-4">
             <div>
-              <h2 className="text-base font-semibold">Needs attention</h2>
+              <h2 className="text-base font-medium">Needs attention</h2>
               <p className="mt-0.5 text-sm text-muted">Overdue first, then queries due in the next 7 days</p>
             </div>
-            {canOpen && <Link to="/queries" className="inline-flex min-h-9 items-center rounded-lg px-3 text-sm font-semibold text-lake hover:bg-lake-wash">View all queries</Link>}
+            {canOpen && <Link to="/queries" className="inline-flex min-h-9 items-center rounded-lg px-3 text-sm font-medium text-lake hover:bg-lake-wash">View all queries</Link>}
           </header>
           {attention.length ? (
             <div className="overflow-x-auto border-t border-line">
@@ -272,10 +272,10 @@ export default function DashboardPage() {
             <section className="card rounded-xl p-5">
               <header className="flex items-start justify-between gap-3">
                 <div>
-                  <h2 className="text-base font-semibold">Recent activity</h2>
+                  <h2 className="text-base font-medium">Recent activity</h2>
                   <p className="mt-0.5 text-sm text-muted">From the audit log</p>
                 </div>
-                <Link to="/audit-log" className="inline-flex min-h-9 items-center rounded-lg px-3 text-sm font-semibold text-lake hover:bg-lake-wash">Open log</Link>
+                <Link to="/audit-log" className="inline-flex min-h-9 items-center rounded-lg px-3 text-sm font-medium text-lake hover:bg-lake-wash">Open log</Link>
               </header>
               <ol className="mt-4 space-y-3.5">
                 {recent.map((e) => (
@@ -307,12 +307,12 @@ function KpiTile({ icon, label, value, note, spark, to, tone }: Tile) {
   const body = (
     <>
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-medium text-muted">{label}</p>
-        <span className={cx("grid size-9 place-items-center rounded-lg ring-1 ring-inset", tone === "danger" ? "bg-danger-wash text-danger ring-[#fecdca]" : tone === "warn" ? "bg-warn-wash text-warn ring-[#fedf89]" : "bg-subtle text-muted ring-line")}>
+        <p className="eyebrow">{label}</p>
+        <span className={cx("grid size-8 place-items-center rounded-md ring-1 ring-inset", tone === "danger" ? "bg-danger-wash text-danger ring-[#ffd0d9]" : tone === "warn" ? "bg-warn-wash text-warn ring-[#fee685]" : "bg-subtle text-muted ring-line")}>
           <Icon name={icon} className="size-[18px]" />
         </span>
       </div>
-      <p className="mt-1 text-[2rem] font-semibold leading-tight tracking-[-0.02em]">{value}</p>
+      <p className="mt-2 text-[2.25rem] font-medium leading-none tracking-[-0.04em]">{value}</p>
       <div className="mt-1 text-sm">{note}</div>
       {spark && <div className="mt-3">{spark}</div>}
     </>
@@ -332,7 +332,7 @@ function Delta({ value, days, upIsBad }: { value: number; days: number; upIsBad:
   const good = upIsBad ? value < 0 : false;
   return (
     <span className="text-muted">
-      <span className={cx("font-semibold", bad && "text-danger", good && "text-good", !bad && !good && "text-ink")}>
+      <span className={cx("font-medium", bad && "text-danger", good && "text-good", !bad && !good && "text-ink")}>
         {value > 0 ? "Up" : "Down"} {Math.abs(value)}
       </span>{" "}
       in {period}

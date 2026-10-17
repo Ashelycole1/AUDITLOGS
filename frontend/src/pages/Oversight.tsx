@@ -48,7 +48,7 @@ export function CiaActivityPage() {
                 on ? "bg-lake text-white" : "bg-sheet hover:bg-white",
               )}
             >
-              <span className={cx("block text-[2rem] font-semibold leading-none tracking-[-0.03em]", !on && action === "status.direct" && n > 0 && "text-warn")}>{n}</span>
+              <span className={cx("block text-[2rem] font-medium leading-none tracking-[-0.03em]", !on && action === "status.direct" && n > 0 && "text-warn")}>{n}</span>
               <span className={cx("mt-2 block text-sm", on ? "text-white/80" : "text-muted")}>{label}</span>
             </button>
           );

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { Button, IS_STAGING, Label, Notice, Wordmark } from "../components";
 import { useStore } from "../storeTypes";
-import { Icon, type IconName } from "../icons";
+import type { IconName } from "../icons";
 
 const FEATURES: { icon: IconName; title: string; body: string }[] = [
   { icon: "upload", title: "Imported once, then locked", body: "Final queries come straight from the PIA's file and cannot be changed without a recorded reason." },
@@ -90,37 +90,36 @@ export default function Login() {
 
   return (
     <>
-    <div className="grid min-h-dvh bg-white lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
-      <section className="relative hidden flex-col justify-between overflow-hidden bg-spine px-10 py-10 text-spine-ink lg:flex xl:px-14">
-        <Wordmark onSpine />
+    <div className="grid min-h-dvh bg-paper lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+      <section className="relative hidden flex-col justify-between px-10 py-9 lg:flex xl:px-16">
+        <Wordmark />
         <div>
-          <h1 className="max-w-[18ch] text-balance text-[2.5rem] font-semibold leading-[1.1] tracking-[-0.025em] text-white xl:text-[2.875rem]">
+          <p className="eyebrow mb-5">Audit query follow-up</p>
+          <h1 className="max-w-[14ch] text-[3.25rem] font-medium leading-[1.02] tracking-[-0.045em] text-ink xl:text-[4rem]">
             Every audit query, followed through to closure.
           </h1>
-          <ul className="mt-10 max-w-md space-y-6">
-            {FEATURES.map((f) => (
-              <li key={f.title} className="flex gap-4">
-                <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-white/10 text-white"><Icon name={f.icon} className="size-5" /></span>
-                <span>
-                  <span className="block font-semibold text-white">{f.title}</span>
-                  <span className="mt-0.5 block text-sm leading-relaxed">{f.body}</span>
-                </span>
+          <ol className="mt-12 grid max-w-2xl gap-x-8 gap-y-6 xl:grid-cols-3">
+            {FEATURES.map((f, i) => (
+              <li key={f.title} className="border-t border-rule pt-4">
+                <span className="font-mono text-xs text-faint">{String(i + 1).padStart(2, "0")}</span>
+                <span className="mt-2 block font-medium text-ink">{f.title}</span>
+                <span className="mt-1 block text-sm leading-relaxed text-muted">{f.body}</span>
               </li>
             ))}
-          </ul>
+          </ol>
         </div>
-        <p className="text-sm text-spine-ink/80">
+        <p className="eyebrow">
           {IS_STAGING ? "Test copy on a hosted service outside Uganda. Dummy data only." : "Internal use only. All data is held in Uganda."}
         </p>
       </section>
 
-      <div className="flex flex-col items-center justify-center px-4 py-10 sm:px-8">
+      <div className="flex flex-col items-center justify-center border-line bg-sheet px-4 py-10 sm:px-8 lg:border-l">
         <div className="mb-8 w-full max-w-[24rem] lg:hidden"><Wordmark /></div>
         <section className="w-full max-w-[24rem]">
           {!pendingUser ? (
             <form onSubmit={submitPassword} className="space-y-4" noValidate>
               <div>
-                <h2 className="text-[1.75rem] font-semibold tracking-[-0.02em]">Sign in</h2>
+                <h2 className="text-[2rem] font-medium tracking-[-0.035em]">Sign in</h2>
                 <p className="mt-2 text-muted">Use your work email. We will then email you a one-time code.</p>
               </div>
               <div>
@@ -137,7 +136,7 @@ export default function Login() {
           ) : (
             <form onSubmit={submitCode} className="space-y-4" noValidate>
               <div>
-                <h2 className="text-[1.75rem] font-semibold tracking-[-0.02em]">Check your email</h2>
+                <h2 className="text-[2rem] font-medium tracking-[-0.035em]">Check your email</h2>
                 <p className="mt-2 text-muted">We sent a 6-digit code to {masked}. It works once and expires in 5 minutes.</p>
               </div>
               <div>
@@ -154,15 +153,15 @@ export default function Login() {
                 />
               </div>
               {mode === "demo" && pin && (
-                <Notice tone="info">Prototype only: the email would contain <span className="font-mono font-semibold">{pin}</span>.</Notice>
+                <Notice tone="info">Prototype only: the email would contain <span className="font-mono font-medium">{pin}</span>.</Notice>
               )}
               {notice && <Notice tone="ok">{notice}</Notice>}
               {error && <Notice tone="error">{error}</Notice>}
               <Button kind="primary" type="submit" disabled={busy || code.length !== 6} className="min-h-11 w-full">{busy ? "Signing in" : "Sign in"}</Button>
-              <button type="button" className="min-h-10 w-full text-sm font-medium text-lake hover:underline" onClick={resend}>
+              <button type="button" className="min-h-10 w-full text-sm font-medium text-lake-deep hover:underline" onClick={resend}>
                 Send a new code
               </button>
-              <button type="button" className="min-h-10 w-full text-sm font-medium text-lake hover:underline" onClick={() => { setPendingUser(null); setPin(null); setNotice(null); setCode(""); setError(null); }}>
+              <button type="button" className="min-h-10 w-full text-sm font-medium text-lake-deep hover:underline" onClick={() => { setPendingUser(null); setPin(null); setNotice(null); setCode(""); setError(null); }}>
                 Use a different account
               </button>
             </form>

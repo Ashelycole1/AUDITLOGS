@@ -115,7 +115,7 @@ export default function QueriesPage() {
             </div>
           ) : <div className="hidden lg:block" />}
           <label className="flex items-center gap-2 pb-2 text-sm">
-            <input type="checkbox" className="size-4 accent-[#256abf]" checked={overdueOnly} onChange={(e) => setOverdueOnly(e.target.checked)} />
+            <input type="checkbox" className="size-4 accent-lake" checked={overdueOnly} onChange={(e) => setOverdueOnly(e.target.checked)} />
             Overdue only
           </label>
         </div>
@@ -139,7 +139,7 @@ export default function QueriesPage() {
                 key="all"
                 type="checkbox"
                 aria-label="Select all unassigned"
-                className="size-4 accent-[#256abf]"
+                className="size-4 accent-lake"
                 disabled={!selectable.length}
                 checked={selectable.length > 0 && selectable.every((q) => selected.has(q.id))}
                 onChange={(e) => setSelected(e.target.checked ? new Set(selectable.map((q) => q.id)) : new Set())}
@@ -185,7 +185,7 @@ function Row({ q, showAssignee, selectable, selected, onToggle, assigneeName }: 
       {selectable && (
         <td className="w-10">
           {!q.currentAssignee && (
-            <input type="checkbox" className="mt-1 size-4 accent-[#256abf]" checked={selected} onChange={onToggle} aria-label={`Select ${q.reference}`} />
+            <input type="checkbox" className="mt-1 size-4 accent-lake" checked={selected} onChange={onToggle} aria-label={`Select ${q.reference}`} />
           )}
         </td>
       )}

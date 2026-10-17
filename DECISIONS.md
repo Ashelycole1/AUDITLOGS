@@ -151,3 +151,13 @@ Date, decision, reason. Newest last.
     - Lockout, throttling, idle timeout and CSRF are unchanged.
     - **Production can't use it.** The start-up check refuses to run in prod with `MFA_REQUIRED` off, and the default is on everywhere, including development and tests.
     - To bring the PIN back, set `MFA_REQUIRED=true` on Render (with `SMTP_*` set, or PINs go to the log again) and change `render.yaml` to match.
+
+## 2026-10-17: Look and feel after zaro.ai (owner request)
+
+29. **The interface follows zaro.ai's fonts, colours and structure.** This replaces the navy finance-dashboard look (decision history in PROGRESS.md).
+    - **Fonts.** zaro.ai uses Saans, a commercial typeface we have no licence for, so we use its own fallback, **Host Grotesk** (OFL). **JetBrains Mono** (OFL) is used for small uppercase labels, table headings, references and dates. Both are bundled through `@fontsource`, so there are still no third-party font hosts. These replace the two IBM Plex packages, so the dependency count is unchanged.
+    - **Colours** are zaro's: off-white "cloud" page (`#f3f2ed`) and cards (`#fbfbf9`), umber ink (`#201613`), dark umber primary buttons, and one lilac accent (`#7345e2`) for links, focus and in-progress work. Status colours use their teal, amber, green and rose steps.
+    - **Charts:** lilac (open), green `#4a9d54` (closed) and rose `#e0294f` (overdue) pass every dataviz validator check on the card surface. The heatmap uses a lilac ramp.
+    - **Structure:** a light top navigation bar (wordmark, plain text links, search, user) replaces the dark sidebar. On phones it opens as a dropdown. Headings are medium weight with tight tracking, and page headers can carry a mono "eyebrow" label. The sign-in page uses zaro's hero layout: a large headline with numbered points.
+    - **Not copied:** zaro's logo, wording, illustrations and font files.
+

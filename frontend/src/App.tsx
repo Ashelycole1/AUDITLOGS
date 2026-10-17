@@ -93,85 +93,89 @@ function Shell() {
     navigate(`/queries?q=${encodeURIComponent(term.trim())}`);
   };
 
-  const nav = (
-    <nav aria-label="Main" className="mt-8 flex flex-col gap-1 px-3">
-      {NAV[me.role].map((n) => (
-        <NavLink
-          key={n.to}
-          to={n.to}
-          className={({ isActive }) =>
-            cx(
-              "flex min-h-10 items-center gap-3 rounded-lg px-3 text-[0.9375rem] font-medium transition-colors",
-              isActive ? "bg-white/10 text-white shadow-[inset_2px_0_0_#6da7ec]" : "text-spine-ink hover:bg-white/5 hover:text-white",
-            )
-          }
-        >
-          <Icon name={n.icon} className="size-5 shrink-0" />
-          <span className="flex-1">{n.label}</span>
-          {n.to === "/approvals" && pending > 0 && <span className="min-w-6 rounded-full bg-[#fdb022] px-1.5 text-center text-xs font-semibold leading-5 text-[#3c2a03]">{pending}</span>}
-        </NavLink>
-      ))}
-    </nav>
-  );
-
-  const sidebar = (
-    <div className="flex h-full flex-col bg-spine">
-      <div className="flex items-center justify-between px-6 pt-6">
-        <Wordmark onSpine />
-        <button type="button" onClick={() => setMenu(false)} className="grid size-10 place-items-center rounded-lg text-spine-ink hover:bg-white/10 lg:hidden" aria-label="Close menu">
-          <Icon name="close" className="size-5" />
-        </button>
-      </div>
-      {nav}
-      <div className="mt-auto border-t border-white/10 p-4">
-        <div className="flex items-center gap-3 rounded-lg p-2">
-          <Avatar name={me.fullName} className="bg-white/10 text-white" />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-white">{me.fullName}</p>
-            <p className="truncate text-xs text-spine-ink">{ROLE_NAME[me.role]}</p>
-          </div>
-          <button type="button" onClick={() => logout()} className="grid size-10 place-items-center rounded-lg text-spine-ink hover:bg-white/10 hover:text-white" aria-label="Sign out" title="Sign out">
-            <Icon name="logout" className="size-5" />
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+  const links = (stacked: boolean) =>
+    NAV[me.role].map((n) => (
+      <NavLink
+        key={n.to}
+        to={n.to}
+        className={({ isActive }) =>
+          cx(
+            "relative flex items-center gap-2 whitespace-nowrap text-sm transition-colors",
+            stacked ? "min-h-11 rounded-md px-3" : "h-16 px-1",
+            isActive
+              ? cx("text-ink", stacked ? "bg-[#20161308]" : "after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-ink")
+              : "text-muted hover:text-ink",
+          )
+        }
+      >
+        {stacked && <Icon name={n.icon} className="size-[18px] shrink-0 text-faint" />}
+        <span className={stacked ? "flex-1" : undefined}>{n.label}</span>
+        {n.to === "/approvals" && pending > 0 && <span className="min-w-5 rounded-full bg-lake px-1.5 text-center font-mono text-[0.6875rem] leading-5 text-white">{pending}</span>}
+      </NavLink>
+    ));
 
   return (
-    <div className="min-h-dvh lg:pl-[17rem]">
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[17rem] lg:block">{sidebar}</aside>
-      {menu && (
-        <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="Menu">
-          <button type="button" className="absolute inset-0 bg-[#0c111d]/60" aria-label="Close menu" onClick={() => setMenu(false)} />
-          <div className="relative h-full w-[17rem] max-w-[85vw]">{sidebar}</div>
-        </div>
-      )}
+    <div className="min-h-dvh">
+      <header className="sticky top-0 z-30 border-b border-line bg-paper/90 backdrop-blur">
+        <div className="mx-auto flex h-16 max-w-[1320px] items-center gap-6 px-4 sm:px-6 lg:px-8">
+          <NavLink to="/" aria-label="AuditLogs home" className="shrink-0"><Wordmark /></NavLink>
+          <nav aria-label="Main" className="hidden items-center gap-5 lg:flex xl:gap-6">{links(false)}</nav>
 
-      <header className="sticky top-0 z-30 border-b border-line bg-white/90 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-[1320px] items-center gap-3 px-4 sm:px-6 lg:px-8">
-          <button type="button" onClick={() => setMenu(true)} className="grid size-10 place-items-center rounded-lg text-muted hover:bg-subtle lg:hidden" aria-label="Open menu">
-            <Icon name="menu" className="size-5" />
-          </button>
-          {canSearch ? (
-            <form onSubmit={search} role="search" className="relative w-full max-w-md">
-              <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 size-[18px] -translate-y-1/2 text-faint" />
-              <input
-                type="search"
-                aria-label="Search queries"
-                placeholder="Search queries by reference or wording"
-                className="field !min-h-10 !pl-10 !shadow-none"
-                value={term}
-                onChange={(e) => setTerm(e.target.value)}
-              />
-            </form>
-          ) : <div className="flex-1" />}
-          <p className="ml-auto hidden whitespace-nowrap text-sm text-muted md:block">{today}</p>
-          <span className="hidden rounded-full bg-lake-wash px-2.5 py-1 text-xs font-semibold text-lake-deep sm:inline">{me.role}</span>
+          <div className="ml-auto flex items-center gap-3">
+            {canSearch && (
+              <form onSubmit={search} role="search" className="relative hidden w-56 md:block lg:hidden xl:block 2xl:w-72">
+                <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-faint" />
+                <input
+                  type="search"
+                  aria-label="Search queries"
+                  placeholder="Search queries"
+                  className="field !min-h-9 !bg-sheet !py-1.5 !pl-9 !text-sm"
+                  value={term}
+                  onChange={(e) => setTerm(e.target.value)}
+                />
+              </form>
+            )}
+            <p className="eyebrow hidden whitespace-nowrap 2xl:block">{today}</p>
+            <div className="hidden items-center gap-2.5 border-l border-line pl-3 lg:flex">
+              <Avatar name={me.fullName} className="!size-8 !bg-[#ecebe5] !text-xs !text-ink" />
+              <div className="leading-tight">
+                <p className="whitespace-nowrap text-sm text-ink">{me.fullName}</p>
+                <p className="font-mono text-[0.6875rem] uppercase tracking-[0.06em] text-faint" title={ROLE_NAME[me.role]}>{me.role}</p>
+              </div>
+              <button type="button" onClick={() => logout()} className="ml-1 grid size-9 place-items-center rounded-md text-faint hover:bg-[#20161308] hover:text-ink" aria-label="Sign out" title="Sign out">
+                <Icon name="logout" className="size-[18px]" />
+              </button>
+            </div>
+            <button type="button" onClick={() => setMenu((m) => !m)} className="grid size-10 place-items-center rounded-md text-muted hover:bg-[#20161308] lg:hidden" aria-label={menu ? "Close menu" : "Open menu"} aria-expanded={menu}>
+              <Icon name={menu ? "close" : "menu"} className="size-5" />
+            </button>
+          </div>
         </div>
+
+        {menu && (
+          <div className="border-t border-line bg-paper px-4 pb-4 pt-2 sm:px-6 lg:hidden">
+            {canSearch && (
+              <form onSubmit={search} role="search" className="relative mb-2 md:hidden">
+                <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-faint" />
+                <input type="search" aria-label="Search queries" placeholder="Search queries" className="field !bg-sheet !pl-9" value={term} onChange={(e) => setTerm(e.target.value)} />
+              </form>
+            )}
+            <nav aria-label="Main" className="flex flex-col">{links(true)}</nav>
+            <div className="mt-3 flex items-center gap-3 border-t border-line pt-3">
+              <Avatar name={me.fullName} className="!size-8 !bg-[#ecebe5] !text-xs !text-ink" />
+              <div className="min-w-0 flex-1 leading-tight">
+                <p className="truncate text-sm">{me.fullName}</p>
+                <p className="truncate text-xs text-faint">{ROLE_NAME[me.role]}</p>
+              </div>
+              <button type="button" onClick={() => logout()} className="inline-flex min-h-9 items-center gap-2 rounded-[5px] border border-rule px-3 text-sm hover:bg-[#20161308]">
+                <Icon name="logout" className="size-4" /> Sign out
+              </button>
+            </div>
+          </div>
+        )}
       </header>
 
-      <main className="mx-auto max-w-[1320px] px-4 pb-16 pt-8 sm:px-6 lg:px-8">
+      <main className="mx-auto max-w-[1320px] px-4 pb-20 pt-10 sm:px-6 lg:px-8">
         <Outlet />
       </main>
     </div>

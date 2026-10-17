@@ -1,46 +1,49 @@
 @import "tailwindcss";
 
 /*
-  Professional finance-dashboard look: cool grey page, white cards, navy sidebar, one blue for action.
+  Warm editorial look after zaro.ai (owner request, DECISIONS 29): off-white "cloud" page, near-black
+  "umber" ink, one lilac accent, Host Grotesk for text and JetBrains Mono for small uppercase labels.
   Token names from earlier passes are kept (paper, sheet, spine, lake...) so every screen follows.
-  Chart colours are validated with the dataviz palette checker against white: blue, green, red all pass.
+  Chart colours are validated with the dataviz palette checker against the card surface (#fbfbf9).
 */
 @theme {
-  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --font-sans: "Host Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
-  --color-paper: #f4f6f9;
-  --color-sheet: #ffffff;
-  --color-ink: #101828;
-  --color-muted: #475467;
-  --color-faint: #667085;
-  --color-line: #e4e7ec;
-  --color-rule: #d0d5dd;
-  --color-subtle: #f9fafb;
+  --color-paper: #f3f2ed;
+  --color-sheet: #fbfbf9;
+  --color-ink: #201613;
+  --color-muted: #524742;
+  --color-faint: #736761;
+  --color-line: #e3e1d9;
+  --color-rule: #cfccc0;
+  --color-subtle: #f6f5f1;
 
-  --color-spine: #0e1726;
-  --color-spine-2: #16233a;
-  --color-spine-ink: #b9c4d4;
+  /* Dark umber: primary buttons, the sign-in panel, tooltips. */
+  --color-spine: #201613;
+  --color-spine-2: #3b2d28;
+  --color-spine-ink: #c2bfaf;
 
-  --color-lake: #256abf;
-  --color-lake-deep: #1c5cab;
-  --color-lake-wash: #ebf2fc;
+  /* Lilac accent: links, focus, the current step, in-progress work. */
+  --color-lake: #7345e2;
+  --color-lake-deep: #5a30c4;
+  --color-lake-wash: #f1effd;
 
-  --color-danger: #b42318;
-  --color-danger-wash: #fef3f2;
-  --color-warn: #b54708;
+  --color-danger: #b8123f;
+  --color-danger-wash: #fff1f3;
+  --color-warn: #953d00;
   --color-warn-wash: #fffaeb;
-  --color-good: #067647;
-  --color-good-wash: #ecfdf3;
-  --color-assign: #5925dc;
-  --color-assign-wash: #f4f3ff;
+  --color-good: #2c6b35;
+  --color-good-wash: #f1f8f1;
+  --color-assign: #2b6f7d;
+  --color-assign-wash: #eff8f9;
 
-  /* Chart marks (dataviz reference steps). */
-  --color-series: #2a78d6;
-  --color-mark-good: #0ca30c;
-  --color-mark-critical: #d03b3b;
-  --color-grid: #eaecf0;
-  --color-axis: #c3c9d2;
+  /* Chart marks (validated: lilac, green, rose on the card surface). */
+  --color-series: #7345e2;
+  --color-mark-good: #4a9d54;
+  --color-mark-critical: #e0294f;
+  --color-grid: #ebe9e2;
+  --color-axis: #cfccc0;
 }
 
 :root {
@@ -55,13 +58,27 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+@layer base {
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  /* Column heads read as small mono labels, as on zaro.ai. */
+  th {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+}
+
 @layer components {
   .card,
   .sheet,
   .glass {
     background: var(--color-sheet);
     border: 1px solid var(--color-line);
-    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
   }
   .glass-shell {
     background: var(--color-sheet);
@@ -72,13 +89,22 @@ body {
     border: 1px solid var(--color-line);
   }
 
+  /* Small uppercase mono label above a heading or figure. */
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    line-height: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--color-faint);
+  }
+
   .field {
     width: 100%;
     min-height: 2.5rem;
-    border-radius: 8px;
+    border-radius: 6px;
     background: #fff;
     border: 1px solid var(--color-rule);
-    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
     padding: 0.5rem 0.75rem;
     font-size: 0.9375rem;
     color: var(--color-ink);
@@ -87,7 +113,7 @@ body {
   .field:focus {
     outline: none;
     border-color: var(--color-lake);
-    box-shadow: 0 0 0 4px rgba(37, 106, 191, 0.16);
+    box-shadow: 0 0 0 3px rgba(115, 69, 226, 0.18);
   }
   .field::placeholder {
     color: var(--color-faint);
