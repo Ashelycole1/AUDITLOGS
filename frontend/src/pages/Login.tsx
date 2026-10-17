@@ -1,20 +1,48 @@
 import { useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
-import { Button, IS_STAGING, Label, Notice, Wordmark } from "../components";
+import { Button, IS_STAGING, Label, Notice } from "../components";
 import { useStore } from "../storeTypes";
-import type { IconName } from "../icons";
+import { Icon, type IconName } from "../icons";
 
+// Public landing and sign-in, after the owner's mock-up (assets/AuditLogs_Landing_Page.png).
 const FEATURES: { icon: IconName; title: string; body: string }[] = [
-  { icon: "upload", title: "Imported once, then locked", body: "Final queries come straight from the PIA's file and cannot be changed without a recorded reason." },
-  { icon: "approvals", title: "Closed only with independent approval", body: "Auditors propose closure. The CIA decides, and nobody can approve their own proposal." },
-  { icon: "chain", title: "A log that cannot be edited", body: "Every action is sealed into a hash-chained audit log that can be verified at any time." },
+  { icon: "bolt", title: "Imported once, then locked", body: "Final queries come straight from the PIA's file and cannot be changed without a recorded reason." },
+  { icon: "users", title: "Closed only with independent approval", body: "Auditors propose closure. The CIA decides, and nobody can approve their own proposal." },
+  { icon: "compliance", title: "A log that cannot be edited", body: "Every action is sealed into a hash-chained audit log that can be verified at any time." },
+  { icon: "lock", title: "Secure & transparent", body: "Built for compliance, accountability and peace of mind." },
 ];
+
+const SECTIONS = [
+  { id: "top", label: "Home" },
+  { id: "features", label: "Features" },
+  { id: "security", label: "Security" },
+  { id: "about", label: "About" },
+];
+
+const SECURITY: { title: string; body: string }[] = [
+  { title: "Two-step sign-in", body: "A password, then a one-time code sent to your work email. The code works once and expires in 5 minutes." },
+  { title: "Idle sessions end", body: "You are signed out after 30 minutes without activity, on the server as well as in the browser." },
+  { title: "Tamper-evident history", body: "Each audit log entry carries the hash of the one before it, so any edit breaks the chain and shows." },
+];
+
+const ROLES: { role: string; body: string }[] = [
+  { role: "PIA", body: "Imports the final queries and assigns them." },
+  { role: "IA", body: "Follows up with management and proposes closure." },
+  { role: "CIA", body: "Approves or rejects closure and keeps the audit log." },
+  { role: "CEO", body: "Oversees the CIA's activity." },
+];
+
+const CARD = "rounded-2xl border border-[#e3ece7] bg-white/70 p-5";
+const EYEBROW = "font-mono text-xs uppercase tracking-[0.32em] text-leaf";
+const FIELD = "field !min-h-14 !rounded-xl !border-[#d9e0dc]";
+const SUBMIT = "!min-h-14 w-full !rounded-xl !border-forest !bg-forest !text-lg hover:!bg-forest-2";
 
 export default function Login() {
   const { me, ready, mode, state, checkPassword, completeMfa, resendPin } = useStore();
   const nav = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [code, setCode] = useState("");
   const [pendingUser, setPendingUser] = useState<string | null>(null);
   // Demo only: stands in for the emailed one-time PIN. In API mode the server emails the real one.
@@ -89,55 +117,112 @@ export default function Login() {
   };
 
   return (
-    <>
-    <div className="grid min-h-dvh bg-paper lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
-      <section className="relative hidden flex-col justify-between px-10 py-9 lg:flex xl:px-16">
-        <Wordmark />
-        <div>
-          <p className="eyebrow mb-5">Audit query follow-up</p>
-          <h1 className="max-w-[14ch] text-[3.25rem] font-medium leading-[1.02] tracking-[-0.045em] text-ink xl:text-[4rem]">
-            Every audit query, followed through to closure.
+    <div id="top" className="landing min-h-dvh bg-[radial-gradient(ellipse_at_top_left,#f1f8f4_0%,#fcfdfc_45%,#ffffff_100%)] text-[#0e1f19]">
+      <header className="mx-auto flex h-20 max-w-[1600px] items-center gap-6 px-4 sm:px-6 lg:h-28 lg:px-8">
+        <a href="#top" aria-label="AuditLogs home" className="flex shrink-0 items-center gap-3">
+          <span className="grid size-10 place-items-center rounded-[10px] bg-forest text-white lg:size-12">
+            <Icon name="chain" className="size-5 lg:size-6" />
+          </span>
+          <span className="text-[1.5rem] font-semibold tracking-[-0.035em] lg:text-[1.875rem]">AuditLogs</span>
+        </a>
+        <nav aria-label="Sections" className="mx-auto hidden items-center gap-12 md:flex">
+          {SECTIONS.map((n, i) => (
+            <a
+              key={n.id}
+              href={`#${n.id}`}
+              aria-current={i === 0 ? "page" : undefined}
+              className={
+                i === 0
+                  ? "relative py-2 text-[0.9375rem] font-medium after:absolute after:inset-x-0 after:-bottom-0.5 after:h-0.5 after:rounded-full after:bg-leaf"
+                  : "py-2 text-[0.9375rem] text-forest/80 hover:text-forest"
+              }
+            >
+              {n.label}
+            </a>
+          ))}
+        </nav>
+        <p className="ml-auto flex items-center gap-2.5 text-[0.9375rem] text-mist md:ml-0">
+          <span className="size-2.5 rounded-full bg-[#22b35e] ring-4 ring-[#22b35e]/15" aria-hidden />
+          Secure Access
+        </p>
+      </header>
+
+      <main className="mx-auto grid max-w-[1600px] gap-10 px-4 pb-16 pt-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_30rem] lg:gap-x-10 lg:gap-y-0 lg:px-8 lg:pt-10">
+        <section className="order-1 min-w-0 lg:order-none">
+          <p className={EYEBROW}>Audit · Track · Stay compliant</p>
+          <h1 className="mt-5 text-[2.5rem] font-bold leading-[1.04] tracking-[-0.035em] sm:text-[3.75rem] xl:text-[4.5rem]">
+            Every audit query,
+            <br />
+            <em className="font-semibold text-leaf">followed through</em>
+            <br />
+            to closure.
           </h1>
-          <ol className="mt-12 grid max-w-2xl gap-x-8 gap-y-6 xl:grid-cols-3">
-            {FEATURES.map((f, i) => (
-              <li key={f.title} className="border-t border-rule pt-4">
-                <span className="font-mono text-xs text-faint">{String(i + 1).padStart(2, "0")}</span>
-                <span className="mt-2 block font-medium text-ink">{f.title}</span>
-                <span className="mt-1 block text-sm leading-relaxed text-muted">{f.body}</span>
+          <p className="mt-7 max-w-[34rem] text-lg leading-relaxed text-mist">
+            Track, manage and close audit queries with ease. No more lost follow-ups. No more unverified changes.
+          </p>
+        </section>
+
+        <ul id="features" className="order-3 grid scroll-mt-8 gap-4 sm:grid-cols-2 lg:order-none lg:col-start-1 lg:mt-10 xl:grid-cols-4">
+            {FEATURES.map((f) => (
+              <li key={f.title} className={CARD}>
+                <span className="grid size-12 place-items-center rounded-full bg-leaf-wash text-forest">
+                  <Icon name={f.icon} className="size-6" />
+                </span>
+                <span className="mt-4 block text-[1.0625rem] font-medium leading-snug tracking-[-0.01em]">{f.title}</span>
+                <span className="mt-2 block text-[0.9375rem] leading-relaxed text-mist">{f.body}</span>
               </li>
             ))}
-          </ol>
-        </div>
-        <p className="eyebrow">
-          {IS_STAGING ? "Test copy on a hosted service outside Uganda. Dummy data only." : "Internal use only. All data is held in Uganda."}
-        </p>
-      </section>
+        </ul>
 
-      <div className="flex flex-col items-center justify-center border-line bg-sheet px-4 py-10 sm:px-8 lg:border-l">
-        <div className="mb-8 w-full max-w-[24rem] lg:hidden"><Wordmark /></div>
-        <section className="w-full max-w-[24rem]">
+        <section aria-label="Sign in" className="order-2 h-fit lg:order-none lg:col-start-2 lg:row-span-2 lg:row-start-1 rounded-3xl border border-[#edf1ee] bg-white p-6 shadow-[0_24px_60px_-28px_rgba(11,59,44,0.22)] sm:p-8 lg:mt-4">
           {!pendingUser ? (
-            <form onSubmit={submitPassword} className="space-y-4" noValidate>
+            <form onSubmit={submitPassword} className="space-y-5" noValidate>
               <div>
-                <h2 className="text-[2rem] font-medium tracking-[-0.035em]">Sign in</h2>
-                <p className="mt-2 text-muted">Use your work email. We will then email you a one-time code.</p>
+                <h2 className="text-[2.5rem] font-semibold leading-tight tracking-[-0.04em]">Sign in</h2>
+                <p className="mt-2 text-[1.0625rem] leading-relaxed text-mist">Use your work email. We will then email you a one-time code.</p>
               </div>
               <div>
-                <Label htmlFor="email">Email</Label>
-                <input id="email" type="email" autoComplete="username" className="field" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                <label htmlFor="email" className="mb-2 block font-medium">Email</label>
+                <div className="relative">
+                  <Icon name="mail" className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-forest/70" />
+                  <input id="email" type="email" autoComplete="username" placeholder="you@company.com" className={`${FIELD} !pl-12`} value={email} onChange={(e) => setEmail(e.target.value)} required />
+                </div>
               </div>
               <div>
-                <Label htmlFor="password">Password</Label>
-                <input id="password" type="password" autoComplete="current-password" className="field" value={password} onChange={(e) => setPassword(e.target.value)} required />
+                <label htmlFor="password" className="mb-2 block font-medium">Password</label>
+                <div className="relative">
+                  <Icon name="lock" className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-forest/70" />
+                  <input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="current-password"
+                    placeholder="Enter your password"
+                    className={`${FIELD} !pl-12 !pr-12`}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute right-2 top-1/2 grid size-10 -translate-y-1/2 place-items-center rounded-lg text-forest/70 hover:bg-leaf-wash hover:text-forest"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    aria-pressed={showPassword}
+                  >
+                    <Icon name={showPassword ? "eye" : "eyeOff"} className="size-5" />
+                  </button>
+                </div>
               </div>
               {error && <Notice tone="error">{error}</Notice>}
-              <Button kind="primary" type="submit" disabled={busy} className="min-h-11 w-full">{busy ? "Checking" : "Continue"}</Button>
+              <Button kind="primary" type="submit" disabled={busy} className={SUBMIT}>
+                {busy ? "Checking" : <>Continue <Icon name="arrowRight" className="size-5" /></>}
+              </Button>
             </form>
           ) : (
-            <form onSubmit={submitCode} className="space-y-4" noValidate>
+            <form onSubmit={submitCode} className="space-y-5" noValidate>
               <div>
-                <h2 className="text-[2rem] font-medium tracking-[-0.035em]">Check your email</h2>
-                <p className="mt-2 text-muted">We sent a 6-digit code to {masked}. It works once and expires in 5 minutes.</p>
+                <h2 className="text-[2.5rem] font-semibold leading-tight tracking-[-0.04em]">Check your email</h2>
+                <p className="mt-2 text-[1.0625rem] leading-relaxed text-mist">We sent a 6-digit code to {masked}. It works once and expires in 5 minutes.</p>
               </div>
               <div>
                 <Label htmlFor="code">Sign-in code</Label>
@@ -146,7 +231,7 @@ export default function Login() {
                   inputMode="numeric"
                   autoComplete="one-time-code"
                   maxLength={6}
-                  className="field text-center font-mono text-xl tracking-[0.4em]"
+                  className={`${FIELD} text-center font-mono text-xl tracking-[0.4em]`}
                   value={code}
                   onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
                   autoFocus
@@ -157,41 +242,77 @@ export default function Login() {
               )}
               {notice && <Notice tone="ok">{notice}</Notice>}
               {error && <Notice tone="error">{error}</Notice>}
-              <Button kind="primary" type="submit" disabled={busy || code.length !== 6} className="min-h-11 w-full">{busy ? "Signing in" : "Sign in"}</Button>
-              <button type="button" className="min-h-10 w-full text-sm font-medium text-lake-deep hover:underline" onClick={resend}>
+              <Button kind="primary" type="submit" disabled={busy || code.length !== 6} className={SUBMIT}>
+                {busy ? "Signing in" : <>Sign in <Icon name="arrowRight" className="size-5" /></>}
+              </Button>
+              <button type="button" className="min-h-10 w-full text-sm font-medium text-leaf hover:underline" onClick={resend}>
                 Send a new code
               </button>
-              <button type="button" className="min-h-10 w-full text-sm font-medium text-lake-deep hover:underline" onClick={() => { setPendingUser(null); setPin(null); setNotice(null); setCode(""); setError(null); }}>
+              <button type="button" className="min-h-10 w-full text-sm font-medium text-leaf hover:underline" onClick={() => { setPendingUser(null); setPin(null); setNotice(null); setCode(""); setError(null); }}>
                 Use a different account
               </button>
             </form>
           )}
 
           {mode === "demo" && (
-          <details className="mt-8 border-t border-line pt-4 text-sm">
-            <summary className="min-h-10 cursor-pointer content-center font-medium text-muted">Demo accounts (dummy data)</summary>
-            <p className="mt-2 text-muted">
-              Prototype only: pick an account and type any password. The code is shown on screen instead of emailed.
-            </p>
-            <ul className="mt-2 space-y-1">
-              {state.users.filter((u) => u.isActive).map((u) => (
-                <li key={u.id}>
-                  <button
-                    type="button"
-                    onClick={() => { setEmail(u.email); setPendingUser(null); setPin(null); setError(null); }}
-                    className="flex min-h-10 w-full items-center justify-between gap-3 rounded-md px-2 text-left hover:bg-subtle"
-                  >
-                    <span>{u.fullName}</span>
-                    <span className="text-muted">{u.role}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </details>
+            <details className="mt-6 border-t border-[#edf1ee] pt-4 text-sm">
+              <summary className="min-h-10 cursor-pointer content-center font-medium text-mist">Demo accounts (dummy data)</summary>
+              <p className="mt-2 text-mist">
+                Prototype only: pick an account and type any password. The code is shown on screen instead of emailed.
+              </p>
+              <ul className="mt-2 space-y-1">
+                {state.users.filter((u) => u.isActive).map((u) => (
+                  <li key={u.id}>
+                    <button
+                      type="button"
+                      onClick={() => { setEmail(u.email); setPendingUser(null); setPin(null); setError(null); }}
+                      className="flex min-h-10 w-full items-center justify-between gap-3 rounded-lg px-2 text-left hover:bg-leaf-wash"
+                    >
+                      <span>{u.fullName}</span>
+                      <span className="text-mist">{u.role}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </details>
           )}
         </section>
-      </div>
+      </main>
+
+      <section id="security" className="mx-auto max-w-[1600px] scroll-mt-8 px-4 py-16 sm:px-6 lg:px-8">
+        <p className={EYEBROW}>Security</p>
+        <h2 className="mt-3 text-[2rem] font-semibold tracking-[-0.035em]">Built so the record can be trusted.</h2>
+        <ul className="mt-8 grid gap-4 md:grid-cols-3">
+          {SECURITY.map((s) => (
+            <li key={s.title} className={CARD}>
+              <span className="block text-[1.0625rem] font-medium">{s.title}</span>
+              <span className="mt-2 block text-[0.9375rem] leading-relaxed text-mist">{s.body}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section id="about" className="mx-auto max-w-[1600px] scroll-mt-8 px-4 pb-16 sm:px-6 lg:px-8">
+        <p className={EYEBROW}>About</p>
+        <h2 className="mt-3 text-[2rem] font-semibold tracking-[-0.035em]">One place for every audit query.</h2>
+        <p className="mt-3 max-w-[40rem] text-lg leading-relaxed text-mist">
+          AuditLogs follows each query from the final report to its closure, and each role sees only the work that is theirs.
+        </p>
+        <dl className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {ROLES.map((r) => (
+            <div key={r.role} className="border-t border-[#d9e0dc] pt-4">
+              <dt className="font-mono text-sm font-medium text-leaf">{r.role}</dt>
+              <dd className="mt-1 text-[0.9375rem] leading-relaxed text-mist">{r.body}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+
+      <footer className="mx-auto max-w-[1600px] border-t border-[#e3ece7] px-4 py-6 sm:px-6 lg:px-8">
+        <p className="font-mono text-[0.6875rem] uppercase tracking-[0.08em] text-mist">
+          {IS_STAGING ? "Test copy on a hosted service outside Uganda. Dummy data only." : "Internal use only. All data is held in Uganda."}
+        </p>
+      </footer>
     </div>
-    </>
   );
 }

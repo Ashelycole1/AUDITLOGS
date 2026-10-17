@@ -38,6 +38,13 @@
   --color-assign: #2b6f7d;
   --color-assign-wash: #eff8f9;
 
+  /* Forest green: the public sign-in page only (owner mock-up, assets/AuditLogs_Landing_Page.png). */
+  --color-forest: #0b3b2c;
+  --color-forest-2: #145240;
+  --color-leaf: #17804d;
+  --color-leaf-wash: #e6f5ec;
+  --color-mist: #66757a;
+
   /* Chart marks (validated: lilac, green, rose on the card surface). */
   --color-series: #7345e2;
   --color-mark-good: #4a9d54;
@@ -117,6 +124,14 @@ body {
   }
   .field::placeholder {
     color: var(--color-faint);
+  }
+
+  .landing .field:focus {
+    border-color: var(--color-leaf);
+    box-shadow: 0 0 0 3px rgba(23, 128, 77, 0.16);
+  }
+  .landing :focus-visible {
+    outline-color: var(--color-leaf);
   }
 
   .num {

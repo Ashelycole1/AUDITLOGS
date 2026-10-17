@@ -1,0 +1,8 @@
+reference,title,description,risk_rating,deadline,responsible_officer,department
+IA/2026/201,Bank reconciliation reviewed by preparer,The same officer prepares and reviews the monthly bank reconciliation.,High,2026-11-30,Finance Manager,Finance
+IA/2026/201,Duplicate of the row above,Same reference twice in one file.,Low,2026-12-01,Finance Manager,Finance
+,Row with no reference,This row has no reference number.,Medium,2026-12-01,Stores Supervisor,Stores
+IA/2026/203,Unknown risk rating,"The risk rating is not High, Medium or Low.",Critical,2026-12-01,ICT Manager,ICT
+IA/2026/204,Date in the wrong format,The deadline is written as text.,Medium,next Friday,HR Manager,Human Resources
+IA/2026/205,Missing officer and department,Both of these are required.,Low,2026-12-01,,
+IA/2026/206,Deadline already passed,This only gives a warning; it does not block the import.,Medium,2026-09-01,Transport Officer,Fleet

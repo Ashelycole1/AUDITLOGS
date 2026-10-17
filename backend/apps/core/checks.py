@@ -1,9 +1,19 @@
 """Start-up checks for production and staging (architecture.md 12). The app refuses to start if any fail."""
 
+import binascii
 import os
 
+from cryptography.fernet import Fernet
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
+
+
+def _valid_fernet_key(key) -> bool:
+    try:
+        Fernet(key)
+    except (ValueError, TypeError, binascii.Error):
+        return False
+    return True
 
 
 def production_problems(*, require_smtp: bool = True) -> list[str]:
@@ -32,6 +42,11 @@ def production_problems(*, require_smtp: bool = True) -> list[str]:
         problems.append("SMTP_HOST is not set, so sign-in PINs cannot be sent.")
     if not settings.FILE_ENCRYPTION_KEY:
         problems.append("EVIDENCE_ENCRYPTION_KEY is not set, so evidence cannot be stored.")
+    elif not _valid_fernet_key(settings.FILE_ENCRYPTION_KEY):
+        # Usually a paste that lost characters, such as the trailing "=".
+        problems.append(
+            'EVIDENCE_ENCRYPTION_KEY is not a valid key (44 characters ending in "="). Paste it again in full.'
+        )
     return problems
 
 

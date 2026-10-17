@@ -1,0 +1,13 @@
+reference,title,description,risk_rating,deadline,responsible_officer,department
+IA/2026/101,Petty cash not reconciled monthly,Petty cash for the head office float was last reconciled in June. Three monthly reconciliations are missing and no one has signed off the balance.,High,2026-11-15,Finance Manager,Finance
+IA/2026/102,Supplier bank details changed without verification,Bank details for two suppliers were changed on an emailed request with no call-back check to a known contact.,High,2026-11-05,Head of Procurement,Procurement
+IA/2026/103,Stock counts not done at the regional store,The quarterly stock count at the regional store was skipped for Q2 and Q3. Book stock cannot be confirmed.,Medium,30/11/2026,Stores Supervisor,Stores
+IA/2026/104,Leavers still active on the payroll system,"Four staff who left in August still have active payroll records. No payments were made, but the accounts were not closed.",High,2026-10-31,HR Manager,Human Resources
+IA/2026/105,Vehicle logbooks incomplete,Logbooks for six pool vehicles have missing trip entries and no supervisor signature for September.,Medium,15/12/2026,Transport Officer,Fleet
+IA/2026/106,Shared administrator password on the finance server,"The finance server uses one administrator account shared by three staff, so actions cannot be traced to a person.",High,2026-11-20,ICT Manager,ICT
+IA/2026/107,Fixed asset tags missing,"A sample of 40 assets found 9 without asset tags, so they cannot be matched to the register.",Low,2027-01-31,Assets Officer,Finance
+IA/2026/108,Purchase orders raised after invoices,"Seven purchase orders were created after the supplier invoice date, which bypasses approval before commitment.",Medium,2026-12-10,Head of Procurement,Procurement
+IA/2026/109,Training records not filed,Mandatory induction records for new staff since March are not on personnel files.,Low,2027-01-15,HR Manager,Human Resources
+IA/2026/110,Backups not tested,"Nightly backups run, but no restore has been tested in the last twelve months.",Medium,2026-12-01,ICT Manager,ICT
+IA/2026/111,Fuel card limits not set,Fuel cards for field vehicles have no daily limits configured with the provider.,Medium,2026-10-10,Transport Officer,Fleet
+IA/2026/112,Goods received without inspection notes,Deliveries in August were accepted at the store without signed inspection notes.,Low,25/09/2026,Stores Supervisor,Stores

@@ -127,6 +127,8 @@ Updated at the end of every session and whenever work is paused (see `agent_work
 
 - 2026-10-17, **restyled after zaro.ai** (DECISIONS 29): Host Grotesk and JetBrains Mono, warm cloud/umber/lilac palette, top navigation instead of the sidebar, zaro-style sign-in page. The frontend builds. Checked by screenshots of sign-in, dashboard, queries, audit log, query detail and the phone menu (demo mode). Not committed yet.
 
+- 2026-10-17, **staging import failed with a 500**: `binascii.Error: Incorrect padding` in `save_encrypted`. The `EVIDENCE_ENCRYPTION_KEY` on Render was pasted incomplete (the local copy is valid). The start-up check now rejects an invalid key with a clear message, and there is a new test. Sample import files are in `samples/imports/`. Owner to re-paste the key on Render. Not committed yet.
+
 ### In flight
 - Owner to sign in on staging with a demo account (password only).
 
