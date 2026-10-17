@@ -123,8 +123,10 @@ Updated at the end of every session and whenever work is paused (see `agent_work
 
 - 2026-10-17, **emailed PIN paused on staging** at the owner's request (DECISIONS 28). `MFA_REQUIRED=false` signs in with the password alone; production refuses to start with it off. Backend tests and lint pass, and the frontend builds.
 
+- 2026-10-17, MFA pause and database lock-down pushed (`9630ef4`) and live on Render through a blueprint sync. Custom domain **https://auditlog.ashelycole.dev** added: `CSRF_TRUSTED_ORIGINS` on Render is now `https://auditlog.ashelycole.dev,https://auditlogs-gules.vercel.app`. Sign-ins from it had been refused with "Origin checking failed".
+
 ### In flight
-- Not yet committed or pushed: the MFA pause and `ipAllowList: []` in `render.yaml`. After pushing, make sure `MFA_REQUIRED=false` is set on the Render service, then try a password sign-in on staging.
+- Owner to sign in on staging with a demo account (password only).
 
 ### Next (proposed)
 1. Owner: confirm the extra dependencies in `DECISIONS.md` item 2 (`openpyxl` is named in system.md).
