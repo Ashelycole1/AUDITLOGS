@@ -2,6 +2,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { CRITICAL, ChartCard, Columns, GOOD, Heatmap, LegendKey, Meter, SERIES, Sparkline, StackedRows, TrendChart, BarList, type Part } from "../charts";
 import { Avatar, Empty, PageHeader, Ref, RiskTag, StatusBadge, cx } from "../components";
+import { RISKS, riskRank } from "../lib/risk";
 import { Icon, type IconName } from "../icons";
 import { STATUSES, daysOverdue, dueWithin, fmtDate, fmtDateTime } from "../lib/rules";
 import { useMe, useStore } from "../storeTypes";
@@ -9,7 +10,6 @@ import type { Query, Risk, Status } from "../types";
 import { ACTION_LABEL } from "./Cia";
 
 const DAY = 86_400_000;
-const RISKS: Risk[] = ["High", "Medium", "Low"];
 const OPEN_STATUSES: Status[] = ["Imported", "Assigned", "In Progress", "Proposed for Closure", "Returned"];
 const short = (t: number) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "Africa/Kampala" }).format(t);
 const endOfDeadline = (q: Query) => new Date(q.deadline + "T23:59:59+03:00").getTime();
@@ -59,8 +59,9 @@ export default function DashboardPage() {
   }, [qs, state.batches]);
 
   const openQs = qs.filter((q) => q.status !== "Closed");
-  const overdueQs = openQs.filter((q) => daysOverdue(q) > 0).sort((a, b) => daysOverdue(b) - daysOverdue(a));
-  const dueSoon = openQs.filter((q) => dueWithin(q, 7)).sort((a, b) => a.deadline.localeCompare(b.deadline));
+  // The most serious rating leads each group, as the risk matrix escalates Critical and High first.
+  const overdueQs = openQs.filter((q) => daysOverdue(q) > 0).sort((a, b) => riskRank(a.riskRatingCurrent) - riskRank(b.riskRatingCurrent) || daysOverdue(b) - daysOverdue(a));
+  const dueSoon = openQs.filter((q) => dueWithin(q, 7)).sort((a, b) => riskRank(a.riskRatingCurrent) - riskRank(b.riskRatingCurrent) || a.deadline.localeCompare(b.deadline));
   const closed = qs.length - openQs.length;
   const pending = state.requests.filter((r) => r.decision === "Pending" && qs.some((q) => q.id === r.queryId));
   const ago = (arr: number[], n: number) => arr[Math.max(0, arr.length - 1 - n)];
@@ -152,7 +153,7 @@ export default function DashboardPage() {
           label="Closure rate"
           value={`${qs.length ? Math.round((closed / qs.length) * 100) : 0}%`}
           note={<span className="text-muted">{closed} of {qs.length} closed</span>}
-          spark={<div className="pt-4"><Meter value={qs.length ? closed / qs.length : 0} color={GOOD} track="#e4f4e5" label="Share of queries closed" /></div>}
+          spark={<div className="pt-4"><Meter value={qs.length ? closed / qs.length : 0} color={GOOD} track="var(--color-meter-good-track)" label="Share of queries closed" /></div>}
         />
         <KpiTile {...fourth} />
       </div>
@@ -212,7 +213,7 @@ export default function DashboardPage() {
           <header className="flex flex-wrap items-start justify-between gap-3 p-5 pb-4">
             <div>
               <h2 className="text-base font-medium">Needs attention</h2>
-              <p className="mt-0.5 text-sm text-muted">Overdue first, then queries due in the next 7 days</p>
+              <p className="mt-0.5 text-sm text-muted">Overdue first, then due in the next 7 days. Highest risk first in each.</p>
             </div>
             {canOpen && <Link to="/queries" className="inline-flex min-h-9 items-center rounded-lg px-3 text-sm font-medium text-lake hover:bg-lake-wash">View all queries</Link>}
           </header>
@@ -308,7 +309,7 @@ function KpiTile({ icon, label, value, note, spark, to, tone }: Tile) {
     <>
       <div className="flex items-center justify-between gap-3">
         <p className="eyebrow">{label}</p>
-        <span className={cx("grid size-8 place-items-center rounded-md ring-1 ring-inset", tone === "danger" ? "bg-danger-wash text-danger ring-[#ffd0d9]" : tone === "warn" ? "bg-warn-wash text-warn ring-[#fee685]" : "bg-subtle text-muted ring-line")}>
+        <span className={cx("grid size-8 place-items-center rounded-md ring-1 ring-inset", tone === "danger" ? "bg-danger-wash text-danger ring-danger-ring" : tone === "warn" ? "bg-warn-wash text-warn ring-warn-ring" : "bg-subtle text-muted ring-line")}>
           <Icon name={icon} className="size-[18px]" />
         </span>
       </div>
@@ -318,7 +319,7 @@ function KpiTile({ icon, label, value, note, spark, to, tone }: Tile) {
     </>
   );
   return to ? (
-    <Link to={to} className="card block rounded-xl p-5 transition-shadow hover:shadow-[0_4px_8px_-2px_rgba(16,24,40,0.1)]">{body}</Link>
+    <Link to={to} className="card block rounded-xl p-5 transition-shadow hover:border-rule hover:shadow-[0_4px_8px_-2px_rgba(0,0,0,0.1)]">{body}</Link>
   ) : (
     <div className="card rounded-xl p-5">{body}</div>
   );

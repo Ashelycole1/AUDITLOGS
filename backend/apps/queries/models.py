@@ -16,6 +16,9 @@ class Status(models.TextChoices):
 
 
 class Risk(models.TextChoices):
+    """Four tiers from the Standard Risk Matrix Color Mapping Reference (DECISIONS 31), most serious first."""
+
+    CRITICAL = "Critical"
     HIGH = "High"
     MEDIUM = "Medium"
     LOW = "Low"
@@ -68,8 +71,8 @@ class Query(models.Model):
     title = models.CharField(max_length=300)
     description_original = models.TextField()
     description_current = models.TextField()
-    risk_rating_original = models.CharField(max_length=6, choices=Risk.choices)
-    risk_rating_current = models.CharField(max_length=6, choices=Risk.choices)
+    risk_rating_original = models.CharField(max_length=8, choices=Risk.choices)
+    risk_rating_current = models.CharField(max_length=8, choices=Risk.choices)
     # Changed only by the workflow service (architecture.md 5.2), never set directly by a view.
     status = models.CharField(max_length=24, choices=Status.choices, default=Status.IMPORTED)
     deadline = models.DateField()

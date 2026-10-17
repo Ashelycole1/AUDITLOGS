@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Icon, type IconName } from "./icons";
 import { MIN_REASON, reasonError } from "./lib/rules";
+import { riskLevel } from "./lib/risk";
+import { useTheme } from "./theme";
 import type { Risk, Status } from "./types";
 
 export function cx(...c: (string | false | null | undefined)[]): string {
@@ -44,10 +46,10 @@ export function Button({
   ...rest
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { kind?: BtnKind }) {
   const styles: Record<BtnKind, string> = {
-    primary: "bg-ink text-[#fafaf8] border border-ink hover:bg-spine-2",
-    secondary: "bg-transparent text-ink border border-rule hover:border-[#aea297] hover:bg-[#20161308]",
+    primary: "bg-ink text-on-ink border border-ink hover:bg-spine-2",
+    secondary: "bg-transparent text-ink border border-rule hover:border-rule-strong hover:bg-hover",
     quiet: "text-lake-deep hover:bg-lake-wash border border-transparent",
-    danger: "bg-transparent text-danger border border-[#f4b4c2] hover:bg-danger-wash",
+    danger: "bg-transparent text-danger border border-danger-line hover:bg-danger-wash",
   };
   return (
     <button
@@ -63,12 +65,12 @@ export function Button({
 
 // Each status has its own glyph as well as its own colour, so it reads without colour.
 const STATUS_STYLE: Record<Status, { pill: string; dot: string }> = {
-  Imported: { pill: "bg-[#ecebe5] text-muted ring-[#dad8ce]", dot: "bg-[#988f77]" },
-  Assigned: { pill: "bg-assign-wash text-assign ring-[#c6e4e9]", dot: "bg-[#3990a1]" },
-  "In Progress": { pill: "bg-lake-wash text-lake-deep ring-[#dcd8fc]", dot: "bg-lake" },
-  "Proposed for Closure": { pill: "bg-warn-wash text-warn ring-[#fee685]", dot: "bg-[#f99c00]" },
-  Closed: { pill: "bg-good-wash text-good ring-[#cae8cd]", dot: "bg-[#4a9d54]" },
-  Returned: { pill: "bg-danger-wash text-danger ring-[#ffd0d9]", dot: "bg-[#e0294f]" },
+  Imported: { pill: "bg-chip text-muted ring-chip-ring", dot: "bg-mark-imported" },
+  Assigned: { pill: "bg-assign-wash text-assign ring-assign-ring", dot: "bg-mark-assigned" },
+  "In Progress": { pill: "bg-lake-wash text-lake-deep ring-lake-ring", dot: "bg-lake" },
+  "Proposed for Closure": { pill: "bg-warn-wash text-warn ring-warn-ring", dot: "bg-mark-warn" },
+  Closed: { pill: "bg-good-wash text-good ring-good-ring", dot: "bg-mark-good" },
+  Returned: { pill: "bg-danger-wash text-danger ring-danger-ring", dot: "bg-mark-critical" },
 };
 
 export function statusDot(s: Status): string {
@@ -91,7 +93,7 @@ export function StatusMark({ status, className }: { status: Status; className?: 
       {status === "Assigned" && (<><circle cx="8" cy="8" r="5" {...common} strokeWidth={1.5} /><path d="M8 3a5 5 0 0 1 0 10Z" fill="currentColor" /></>)}
       {status === "In Progress" && (<><circle cx="8" cy="8" r="5" {...common} strokeWidth={1.5} /><path d="M8 3a5 5 0 0 1 5 5H8Z" fill="currentColor" /></>)}
       {status === "Proposed for Closure" && <path d="M3 8.5 6.3 12 13 3.5" {...common} />}
-      {status === "Closed" && (<><circle cx="8" cy="8" r="6" fill="currentColor" /><path d="m5.2 8.2 2 2 3.8-4.2" fill="none" stroke="#fff" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" /></>)}
+      {status === "Closed" && (<><circle cx="8" cy="8" r="6" fill="currentColor" /><path d="m5.2 8.2 2 2 3.8-4.2" fill="none" className="stroke-sheet" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" /></>)}
       {status === "Returned" && <path d="m4 4 8 8M12 4l-8 8" {...common} />}
     </svg>
   );
@@ -119,18 +121,36 @@ export function Check({ ok, pending, label }: { ok?: boolean; pending?: boolean;
   );
 }
 
+// Risk colour chips follow the Standard Risk Matrix Color Mapping Reference (lib/risk.ts). The letter
+// code and the name always travel with the colour, so the rating never depends on colour alone.
+const RISK_CHIP: Record<Risk, string> = {
+  Critical: "bg-risk-critical text-risk-critical-ink",
+  High: "bg-risk-high text-risk-high-ink",
+  Medium: "bg-risk-medium text-risk-medium-ink",
+  Low: "bg-risk-low text-risk-low-ink",
+};
+
 export function RiskTag({ risk }: { risk: Risk }) {
-  const bars = risk === "High" ? 3 : risk === "Medium" ? 2 : 1;
-  const tone = risk === "High" ? "bg-[#e0294f]" : risk === "Medium" ? "bg-[#f99c00]" : "bg-[#aaa38d]";
+  const level = riskLevel(risk);
   return (
-    <span className="inline-flex items-center gap-1.5 text-[0.8125rem] text-ink" title={`${risk} risk`}>
-      <span className="flex items-end gap-[2px]" aria-hidden>
-        {[1, 2, 3].map((i) => (
-          <span key={i} className={cx("w-[3px] rounded-[1px]", i <= bars ? tone : "bg-line")} style={{ height: 3 + i * 3 }} />
-        ))}
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[0.8125rem] text-ink" title={`${risk} risk: ${level.escalation}`}>
+      <span className={cx("grid size-[18px] place-items-center rounded-[4px] font-mono text-[0.6875rem] font-medium leading-none", RISK_CHIP[risk])} aria-hidden>
+        {level.code}
       </span>
       {risk}
     </span>
+  );
+}
+
+// What a rating means and who it goes to, for the query page and the CIA's edit dialog.
+export function RiskGuide({ risk, className }: { risk: Risk; className?: string }) {
+  const level = riskLevel(risk);
+  return (
+    <div className={cx("rounded-md border border-line bg-subtle px-3 py-2.5 text-[0.8125rem] leading-snug", className)}>
+      <RiskTag risk={risk} />
+      <p className="mt-1.5 text-muted">{level.meaning}</p>
+      <p className="mt-1 text-ink"><span className="font-medium">Escalation:</span> {level.escalation}</p>
+    </div>
   );
 }
 
@@ -140,10 +160,10 @@ export function Ref({ children }: { children: ReactNode }) {
 
 export function Notice({ tone = "info", children }: { tone?: "info" | "error" | "ok" | "warn"; children: ReactNode }) {
   const t = {
-    info: { box: "bg-lake-wash border-[#dcd8fc] text-lake-deep", icon: "info" },
-    error: { box: "bg-danger-wash border-[#ffd0d9] text-danger", icon: "alert" },
-    ok: { box: "bg-good-wash border-[#cae8cd] text-good", icon: "check" },
-    warn: { box: "bg-warn-wash border-[#fee685] text-warn", icon: "alert" },
+    info: { box: "bg-lake-wash border-lake-ring text-lake-deep", icon: "info" },
+    error: { box: "bg-danger-wash border-danger-ring text-danger", icon: "alert" },
+    ok: { box: "bg-good-wash border-good-ring text-good", icon: "check" },
+    warn: { box: "bg-warn-wash border-warn-ring text-warn", icon: "alert" },
   }[tone] as { box: string; icon: IconName };
   return (
     <div role={tone === "error" ? "alert" : "status"} className={cx("flex items-start gap-2.5 rounded-md border px-3.5 py-2.5 text-sm leading-snug", t.box)}>
@@ -228,7 +248,7 @@ export function ReasonDialog({
       onClose={onClose}
       className="m-auto w-[min(32rem,calc(100vw-2rem))] rounded-xl bg-transparent p-0 text-ink backdrop:bg-[#130d0b]/55 backdrop:backdrop-blur-[2px]"
     >
-      <form onSubmit={submit} className="rounded-xl border border-line bg-sheet p-6 shadow-[0_20px_24px_-4px_rgba(32,22,19,0.10),0_8px_8px_-4px_rgba(32,22,19,0.04)]">
+      <form onSubmit={submit} className="rounded-xl border border-line bg-sheet p-6 shadow-[0_20px_24px_-4px_rgba(0,0,0,0.12),0_8px_8px_-4px_rgba(0,0,0,0.05)]">
         <h2 className="text-lg font-medium tracking-[-0.01em]">{title}</h2>
         {description && <p className="mt-1 text-sm leading-relaxed text-muted">{description}</p>}
         {children && <div className="mt-5 space-y-4">{children}</div>}
@@ -246,7 +266,7 @@ export function ReasonDialog({
         {error && <div className="mt-3"><Notice tone="error">{error}</Notice></div>}
         <div className="mt-6 grid grid-cols-2 gap-3">
           <Button type="button" kind="secondary" onClick={onClose}>Cancel</Button>
-          <Button type="submit" disabled={busy} kind={danger ? "danger" : "primary"} className={danger ? "!bg-danger !text-white !border-danger hover:!bg-[#8b0836]" : ""}>{confirmLabel}</Button>
+          <Button type="submit" disabled={busy} kind={danger ? "danger" : "primary"} className={danger ? "!bg-danger !text-on-accent !border-danger hover:!bg-danger-deep" : ""}>{confirmLabel}</Button>
         </div>
       </form>
     </dialog>
@@ -271,9 +291,9 @@ export function StatusRail({ status }: { status: Status }) {
               <span
                 className={cx(
                   "relative z-10 grid size-6 place-items-center rounded-full",
-                  done && "bg-lake text-white",
+                  done && "bg-lake text-on-accent",
                   current && (returned ? "bg-danger-wash ring-2 ring-danger" : "bg-lake-wash ring-2 ring-lake"),
-                  !done && !current && "bg-white ring-2 ring-line",
+                  !done && !current && "bg-sheet ring-2 ring-line",
                 )}
               >
                 {done ? <Icon name="check" className="size-3.5" /> : <span className={cx("size-2 rounded-full", current ? (returned ? "bg-danger" : "bg-lake") : "bg-line")} />}
@@ -321,8 +341,8 @@ export function Table({ head, children, empty }: { head: ReactNode[]; children: 
 
 export function Wordmark({ onSpine }: { onSpine?: boolean }) {
   return (
-    <p className={cx("flex items-center gap-2 text-[1.125rem] font-medium tracking-[-0.03em]", onSpine ? "text-[#fafaf8]" : "text-ink")}>
-      <span className={cx("grid size-7 place-items-center rounded-[6px]", onSpine ? "bg-[#fafaf8] text-ink" : "bg-ink text-[#fafaf8]")}>
+    <p className={cx("flex items-center gap-2 text-[1.125rem] font-medium tracking-[-0.03em]", onSpine ? "text-on-ink" : "text-ink")}>
+      <span className={cx("grid size-7 place-items-center rounded-[6px]", onSpine ? "bg-on-ink text-ink" : "bg-ink text-on-ink")}>
         <Icon name="chain" className="size-4" />
       </span>
       AuditLogs
@@ -333,6 +353,23 @@ export function Wordmark({ onSpine }: { onSpine?: boolean }) {
 export function Avatar({ name, className }: { name: string; className?: string }) {
   const initials = name.split(" ").map((p) => p[0]).slice(0, 2).join("");
   return <span className={cx("grid size-9 shrink-0 place-items-center rounded-full bg-lake-wash text-sm font-medium text-lake-deep", className)} aria-hidden>{initials}</span>;
+}
+
+// Switches light and dark. The icon shows the theme a press moves to.
+export function ThemeToggle({ className }: { className?: string }) {
+  const [theme, setTheme] = useTheme();
+  const next = theme === "dark" ? "light" : "dark";
+  return (
+    <button
+      type="button"
+      onClick={() => setTheme(next)}
+      className={cx("grid size-9 shrink-0 place-items-center rounded-md text-faint transition-colors hover:bg-hover hover:text-ink", className)}
+      aria-label={`Switch to ${next} mode`}
+      title={`Switch to ${next} mode`}
+    >
+      <Icon name={next === "dark" ? "moon" : "sun"} className="size-[18px]" />
+    </button>
+  );
 }
 
 // Hosted test copies (Vercel/Render) hold dummy data only (architecture.md 9). The sign-in page says so.

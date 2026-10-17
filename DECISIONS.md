@@ -161,3 +161,21 @@ Date, decision, reason. Newest last.
     - **Structure:** a light top navigation bar (wordmark, plain text links, search, user) replaces the dark sidebar. On phones it opens as a dropdown. Headings are medium weight with tight tracking, and page headers can carry a mono "eyebrow" label. The sign-in page uses zaro's hero layout: a large headline with numbered points.
     - **Not copied:** zaro's logo, wording, illustrations and font files.
 
+
+## 2026-10-17: Dark mode (owner request)
+
+30. **Light and dark themes from one set of tokens.**
+    - Every colour is a CSS variable in `frontend/src/index.css`. The light values are unchanged, and `:root[data-theme="dark"]` redefines all of them. Screens use only tokens, with no raw hex values, so a new screen gets both themes for free.
+    - **Dark palette:** a warm umber night (page `#141110`, cards `#1c1817`), so it reads as the same product. The lilac accent and status colours are lifted to keep text contrast on the dark card. The sign-in page gets its own deep-forest variant.
+    - **Charts** have their own dark steps rather than an automatic flip. Lilac `#8f72f0`, green `#56a862` and rose `#ec4f75` pass every dataviz validator check on `#1c1817`, and the heatmap ramp passes the ordinal checks. Tooltips use `--color-tip`.
+    - **Choosing a theme:** the sun/moon button is in the top bar and on the sign-in page. Until someone presses it, the app follows the system setting and changes with it; after that, the choice is kept in `localStorage` (`auditlogs.theme`).
+    - **No flash, no CSP change.** `public/theme-init.js` sets `data-theme` before the first paint. It is a same-origin file because the CSP forbids inline scripts.
+
+## 2026-10-17: Risk ratings follow the Standard Risk Matrix Color Mapping Reference (owner request)
+
+31. **Four risk tiers: Low, Medium, High, Critical.** The owner's reference (`assets/Standard Risk Matrix Color Mapping Reference.pdf`, which cites ISO/IEC 31010 Annex B.29 and ANSI/ASSP Z590.3) answers the open question in design.md 13 ("confirm scale with the client").
+    - **Data:** `Risk` gains `Critical`, and the rating columns widen to 8 characters (migration `queries 0002`). Existing ratings are unchanged. Imports accept the four names in any case, and also read **"Extreme"** as Critical, since the reference uses both names.
+    - **Colours are the reference's own**, green to red. Light mode uses its dark steps (`#2e7d32`, `#fbc02d`, `#ef6c00`, `#c62828`) and dark mode its light steps (`#4caf50`, `#ffeb3b`, `#ff9800`, `#f44336`). They are tokens (`--color-risk-*`), and each has its own label ink chosen so the letter clears the reference's 4.5:1 rule.
+    - **Dual coding**, as the reference's accessibility section requires: every rating shows a colour chip with its letter code (L, M, H, C) and the name. Colour is never on its own.
+    - **Meaning and escalation** from the reference are in `frontend/src/lib/risk.ts`. The query page shows them under Details, and so does the CIA's edit dialog when choosing a rating. "Needs attention" on the dashboard puts the highest rating first within overdue and due-soon.
+    - **Not done:** the reference's numeric indices (1–4, 5–9, 10–15, 16–25) assume likelihood × impact scores, which the import file does not carry. Automatic escalation (for example, emailing the CEO on a Critical query) waits for the notification work in Phase 4.

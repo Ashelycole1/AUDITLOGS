@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Button, Empty, Label, Notice, PageHeader, Panel, ReasonDialog, Ref, RiskTag, StatusBadge, Table, cx } from "../components";
 import { STATUSES, daysOverdue, fmtDate } from "../lib/rules";
+import { RISKS } from "../lib/risk";
 import { useMe, useStore } from "../storeTypes";
 import type { Query, Risk, Status } from "../types";
 
@@ -99,9 +100,7 @@ export default function QueriesPage() {
             <Label htmlFor="q-risk">Risk</Label>
             <select id="q-risk" className="field" value={risk} onChange={(e) => setRisk(e.target.value as Risk | "")}>
               <option value="">Any risk</option>
-              <option>High</option>
-              <option>Medium</option>
-              <option>Low</option>
+              {RISKS.map((r) => <option key={r}>{r}</option>)}
             </select>
           </div>
           {!isIa ? (

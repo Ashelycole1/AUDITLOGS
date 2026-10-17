@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
-import { Button, IS_STAGING, Label, Notice } from "../components";
+import { Button, IS_STAGING, Label, Notice, ThemeToggle } from "../components";
 import { useStore } from "../storeTypes";
 import { Icon, type IconName } from "../icons";
 
@@ -32,10 +32,10 @@ const ROLES: { role: string; body: string }[] = [
   { role: "CEO", body: "Oversees the CIA's activity." },
 ];
 
-const CARD = "rounded-2xl border border-[#e3ece7] bg-white/70 p-5";
+const CARD = "rounded-2xl border border-land-line bg-land-card p-5";
 const EYEBROW = "font-mono text-xs uppercase tracking-[0.32em] text-leaf";
-const FIELD = "field !min-h-14 !rounded-xl !border-[#d9e0dc]";
-const SUBMIT = "!min-h-14 w-full !rounded-xl !border-forest !bg-forest !text-lg hover:!bg-forest-2";
+const FIELD = "field !min-h-14 !rounded-xl !border-land-field-line";
+const SUBMIT = "!min-h-14 w-full !rounded-xl !border-forest !bg-forest !text-lg !text-white hover:!bg-forest-2";
 
 export default function Login() {
   const { me, ready, mode, state, checkPassword, completeMfa, resendPin } = useStore();
@@ -117,7 +117,7 @@ export default function Login() {
   };
 
   return (
-    <div id="top" className="landing min-h-dvh bg-[radial-gradient(ellipse_at_top_left,#f1f8f4_0%,#fcfdfc_45%,#ffffff_100%)] text-[#0e1f19]">
+    <div id="top" className="landing min-h-dvh bg-land-to bg-[radial-gradient(ellipse_at_top_left,var(--color-land-from)_0%,var(--color-land-via)_45%,var(--color-land-to)_100%)] text-land-ink">
       <header className="mx-auto flex h-20 max-w-[1600px] items-center gap-6 px-4 sm:px-6 lg:h-28 lg:px-8">
         <a href="#top" aria-label="AuditLogs home" className="flex shrink-0 items-center gap-3">
           <span className="grid size-10 place-items-center rounded-[10px] bg-forest text-white lg:size-12">
@@ -134,7 +134,7 @@ export default function Login() {
               className={
                 i === 0
                   ? "relative py-2 text-[0.9375rem] font-medium after:absolute after:inset-x-0 after:-bottom-0.5 after:h-0.5 after:rounded-full after:bg-leaf"
-                  : "py-2 text-[0.9375rem] text-forest/80 hover:text-forest"
+                  : "py-2 text-[0.9375rem] text-forest-ink/80 hover:text-forest-ink"
               }
             >
               {n.label}
@@ -142,9 +142,10 @@ export default function Login() {
           ))}
         </nav>
         <p className="ml-auto flex items-center gap-2.5 text-[0.9375rem] text-mist md:ml-0">
-          <span className="size-2.5 rounded-full bg-[#22b35e] ring-4 ring-[#22b35e]/15" aria-hidden />
+          <span className="size-2.5 rounded-full bg-live ring-4 ring-live/15" aria-hidden />
           Secure Access
         </p>
+        <ThemeToggle className="!text-mist hover:!bg-leaf-wash hover:!text-forest-ink" />
       </header>
 
       <main className="mx-auto grid max-w-[1600px] gap-10 px-4 pb-16 pt-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_30rem] lg:gap-x-10 lg:gap-y-0 lg:px-8 lg:pt-10">
@@ -165,7 +166,7 @@ export default function Login() {
         <ul id="features" className="order-3 grid scroll-mt-8 gap-4 sm:grid-cols-2 lg:order-none lg:col-start-1 lg:mt-10 xl:grid-cols-4">
             {FEATURES.map((f) => (
               <li key={f.title} className={CARD}>
-                <span className="grid size-12 place-items-center rounded-full bg-leaf-wash text-forest">
+                <span className="grid size-12 place-items-center rounded-full bg-leaf-wash text-forest-ink">
                   <Icon name={f.icon} className="size-6" />
                 </span>
                 <span className="mt-4 block text-[1.0625rem] font-medium leading-snug tracking-[-0.01em]">{f.title}</span>
@@ -174,7 +175,7 @@ export default function Login() {
             ))}
         </ul>
 
-        <section aria-label="Sign in" className="order-2 h-fit lg:order-none lg:col-start-2 lg:row-span-2 lg:row-start-1 rounded-3xl border border-[#edf1ee] bg-white p-6 shadow-[0_24px_60px_-28px_rgba(11,59,44,0.22)] sm:p-8 lg:mt-4">
+        <section aria-label="Sign in" className="order-2 h-fit lg:order-none lg:col-start-2 lg:row-span-2 lg:row-start-1 rounded-3xl border border-land-panel-line bg-land-panel p-6 shadow-[0_24px_60px_-28px_var(--color-land-shadow)] sm:p-8 lg:mt-4">
           {!pendingUser ? (
             <form onSubmit={submitPassword} className="space-y-5" noValidate>
               <div>
@@ -184,14 +185,14 @@ export default function Login() {
               <div>
                 <label htmlFor="email" className="mb-2 block font-medium">Email</label>
                 <div className="relative">
-                  <Icon name="mail" className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-forest/70" />
+                  <Icon name="mail" className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-forest-ink/70" />
                   <input id="email" type="email" autoComplete="username" placeholder="you@company.com" className={`${FIELD} !pl-12`} value={email} onChange={(e) => setEmail(e.target.value)} required />
                 </div>
               </div>
               <div>
                 <label htmlFor="password" className="mb-2 block font-medium">Password</label>
                 <div className="relative">
-                  <Icon name="lock" className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-forest/70" />
+                  <Icon name="lock" className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-forest-ink/70" />
                   <input
                     id="password"
                     type={showPassword ? "text" : "password"}
@@ -205,7 +206,7 @@ export default function Login() {
                   <button
                     type="button"
                     onClick={() => setShowPassword((v) => !v)}
-                    className="absolute right-2 top-1/2 grid size-10 -translate-y-1/2 place-items-center rounded-lg text-forest/70 hover:bg-leaf-wash hover:text-forest"
+                    className="absolute right-2 top-1/2 grid size-10 -translate-y-1/2 place-items-center rounded-lg text-forest-ink/70 hover:bg-leaf-wash hover:text-forest-ink"
                     aria-label={showPassword ? "Hide password" : "Show password"}
                     aria-pressed={showPassword}
                   >
@@ -255,7 +256,7 @@ export default function Login() {
           )}
 
           {mode === "demo" && (
-            <details className="mt-6 border-t border-[#edf1ee] pt-4 text-sm">
+            <details className="mt-6 border-t border-land-panel-line pt-4 text-sm">
               <summary className="min-h-10 cursor-pointer content-center font-medium text-mist">Demo accounts (dummy data)</summary>
               <p className="mt-2 text-mist">
                 Prototype only: pick an account and type any password. The code is shown on screen instead of emailed.
@@ -300,7 +301,7 @@ export default function Login() {
         </p>
         <dl className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {ROLES.map((r) => (
-            <div key={r.role} className="border-t border-[#d9e0dc] pt-4">
+            <div key={r.role} className="border-t border-land-field-line pt-4">
               <dt className="font-mono text-sm font-medium text-leaf">{r.role}</dt>
               <dd className="mt-1 text-[0.9375rem] leading-relaxed text-mist">{r.body}</dd>
             </div>
@@ -308,7 +309,7 @@ export default function Login() {
         </dl>
       </section>
 
-      <footer className="mx-auto max-w-[1600px] border-t border-[#e3ece7] px-4 py-6 sm:px-6 lg:px-8">
+      <footer className="mx-auto max-w-[1600px] border-t border-land-line px-4 py-6 sm:px-6 lg:px-8">
         <p className="font-mono text-[0.6875rem] uppercase tracking-[0.08em] text-mist">
           {IS_STAGING ? "Test copy on a hosted service outside Uganda. Dummy data only." : "Internal use only. All data is held in Uganda."}
         </p>

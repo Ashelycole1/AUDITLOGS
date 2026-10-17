@@ -393,12 +393,12 @@ function LinkNode({ state }: { state: LinkState }) {
       {state === "ok" ? (
         <svg viewBox="0 0 16 16" className="link-tick size-[15px] text-good">
           <circle cx="8" cy="8" r="7.5" fill="currentColor" />
-          <path d="M4.6 8.3 7 10.6l4.4-5" fill="none" stroke="#fbfbf9" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M4.6 8.3 7 10.6l4.4-5" fill="none" className="stroke-sheet" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       ) : state === "broken" ? (
         <svg viewBox="0 0 16 16" className="link-tick size-[15px] text-danger">
           <circle cx="8" cy="8" r="7.5" fill="currentColor" />
-          <path d="m5.3 5.3 5.4 5.4M10.7 5.3l-5.4 5.4" stroke="#fbfbf9" strokeWidth="1.8" strokeLinecap="round" />
+          <path d="m5.3 5.3 5.4 5.4M10.7 5.3l-5.4 5.4" className="stroke-sheet" strokeWidth="1.8" strokeLinecap="round" />
         </svg>
       ) : (
         <span className={cx("size-[11px] rounded-full border-[1.5px] bg-sheet", state === "after" ? "border-dashed border-danger/60" : "border-rule")} />

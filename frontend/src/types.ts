@@ -8,7 +8,7 @@ export type Status =
   | "Closed"
   | "Returned";
 
-export type Risk = "High" | "Medium" | "Low";
+export type Risk = "Critical" | "High" | "Medium" | "Low";
 
 export interface User {
   id: string;

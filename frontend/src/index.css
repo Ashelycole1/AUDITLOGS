@@ -5,8 +5,12 @@
   "umber" ink, one lilac accent, Host Grotesk for text and JetBrains Mono for small uppercase labels.
   Token names from earlier passes are kept (paper, sheet, spine, lake...) so every screen follows.
   Chart colours are validated with the dataviz palette checker against the card surface (#fbfbf9).
+
+  Dark mode: every colour is a token here, and the dark block below redefines them all. Screens use
+  only tokens (no raw hex), so both themes stay in step. public/theme-init.js sets data-theme on <html>
+  before first paint, from the saved choice or the system setting (src/theme.ts).
 */
-@theme {
+@theme static {
   --font-sans: "Host Grotesk", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
@@ -18,32 +22,63 @@
   --color-line: #e3e1d9;
   --color-rule: #cfccc0;
   --color-subtle: #f6f5f1;
+  /* Inputs, neutral chips (avatars, the Imported pill, empty heatmap cells), and hover washes. */
+  --color-field: #ffffff;
+  --color-chip: #ecebe5;
+  --color-chip-ring: #dad8ce;
+  --color-hover: #20161308;
+  --color-rule-strong: #aea297;
 
   /* Dark umber: primary buttons, the sign-in panel, tooltips. */
   --color-spine: #201613;
   --color-spine-2: #3b2d28;
   --color-spine-ink: #c2bfaf;
+  /* Text on the dark ink button and on solid accent fills. */
+  --color-on-ink: #fafaf8;
+  --color-on-accent: #ffffff;
+  /* Chart tooltips. */
+  --color-tip: #201613;
+  --color-tip-ink: #ffffff;
 
   /* Lilac accent: links, focus, the current step, in-progress work. */
   --color-lake: #7345e2;
   --color-lake-deep: #5a30c4;
   --color-lake-wash: #f1effd;
+  --color-lake-ring: #dcd8fc;
 
   --color-danger: #b8123f;
+  --color-danger-deep: #8b0836;
   --color-danger-wash: #fff1f3;
+  --color-danger-ring: #ffd0d9;
+  --color-danger-line: #f4b4c2;
   --color-warn: #953d00;
   --color-warn-wash: #fffaeb;
+  --color-warn-ring: #fee685;
   --color-good: #2c6b35;
   --color-good-wash: #f1f8f1;
+  --color-good-ring: #cae8cd;
   --color-assign: #2b6f7d;
   --color-assign-wash: #eff8f9;
+  --color-assign-ring: #c6e4e9;
 
   /* Forest green: the public sign-in page only (owner mock-up, assets/AuditLogs_Landing_Page.png). */
   --color-forest: #0b3b2c;
   --color-forest-2: #145240;
+  --color-forest-ink: #0b3b2c;
   --color-leaf: #17804d;
   --color-leaf-wash: #e6f5ec;
   --color-mist: #66757a;
+  --color-live: #22b35e;
+  --color-land-ink: #0e1f19;
+  --color-land-from: #f1f8f4;
+  --color-land-via: #fcfdfc;
+  --color-land-to: #ffffff;
+  --color-land-line: #e3ece7;
+  --color-land-field-line: #d9e0dc;
+  --color-land-card: #ffffffb3;
+  --color-land-panel: #ffffff;
+  --color-land-panel-line: #edf1ee;
+  --color-land-shadow: #0b3b2c38;
 
   /* Chart marks (validated: lilac, green, rose on the card surface). */
   --color-series: #7345e2;
@@ -51,10 +86,134 @@
   --color-mark-critical: #e0294f;
   --color-grid: #ebe9e2;
   --color-axis: #cfccc0;
+  --color-mark-warn: #f99c00;
+  --color-mark-neutral: #aaa38d;
+  --color-mark-imported: #988f77;
+  --color-mark-assigned: #3990a1;
+  --color-meter-track: #eceafd;
+  --color-meter-good-track: #e4f4e5;
+  /* Sequential lilac ramp for the heatmap, light to dark; steps 4 to 6 carry --color-ramp-ink-hi text. */
+  --color-ramp-1: #dcd8fc;
+  --color-ramp-2: #bdb4f8;
+  --color-ramp-3: #a392f3;
+  --color-ramp-4: #8566ec;
+  --color-ramp-5: #7345e2;
+  --color-ramp-6: #5a30c4;
+  --color-ramp-ink-hi: #ffffff;
+
+  /* Risk ratings: the Standard Risk Matrix Color Mapping Reference (assets/), green to red. Each fill
+     has its own label ink so the letter code clears 4.5:1 (light uses the reference's dark steps). */
+  --color-risk-low: #2e7d32;
+  --color-risk-low-ink: #ffffff;
+  --color-risk-medium: #fbc02d;
+  --color-risk-medium-ink: #201613;
+  --color-risk-high: #ef6c00;
+  --color-risk-high-ink: #201613;
+  --color-risk-critical: #c62828;
+  --color-risk-critical-ink: #ffffff;
 }
 
 :root {
   color-scheme: light;
+}
+
+/*
+  Dark theme: warm umber night, so it reads as the same product. Surfaces step up in lightness
+  (page < card < inset); accents are lifted to keep 4.5:1 text contrast on the card surface, and
+  chart marks pass the dataviz validator against #1c1817 (L 0.48 to 0.67, CVD-safe). The ramp runs dark to light, so the strongest cell
+  is the brightest.
+*/
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --color-paper: #141110;
+  --color-sheet: #1c1817;
+  --color-ink: #f0ebe6;
+  --color-muted: #c0b5ae;
+  --color-faint: #988c85;
+  --color-line: #2f2926;
+  --color-rule: #453b37;
+  --color-subtle: #221d1b;
+  --color-field: #171312;
+  --color-chip: #2b2522;
+  --color-chip-ring: #3b332f;
+  --color-hover: #ffffff0d;
+  --color-rule-strong: #6e625c;
+
+  --color-spine: #f0ebe6;
+  --color-spine-2: #d8cfc8;
+  --color-spine-ink: #b8ada6;
+  --color-on-ink: #141110;
+  --color-on-accent: #141110;
+  --color-tip: #3a312d;
+  --color-tip-ink: #f6f2ee;
+
+  --color-lake: #a08af7;
+  --color-lake-deep: #c3b4fc;
+  --color-lake-wash: #29223f;
+  --color-lake-ring: #40356a;
+
+  --color-danger: #ff7a95;
+  --color-danger-deep: #ff9db1;
+  --color-danger-wash: #36191f;
+  --color-danger-ring: #5e2837;
+  --color-danger-line: #7d3346;
+  --color-warn: #f3ad62;
+  --color-warn-wash: #33240f;
+  --color-warn-ring: #5c4117;
+  --color-good: #7fcd89;
+  --color-good-wash: #172a1a;
+  --color-good-ring: #2b4b2f;
+  --color-assign: #73c4d3;
+  --color-assign-wash: #13292d;
+  --color-assign-ring: #23474e;
+
+  --color-forest: #1a7a4f;
+  --color-forest-2: #20905d;
+  --color-forest-ink: #a6dcbf;
+  --color-leaf: #56c88b;
+  --color-leaf-wash: #16301f;
+  --color-mist: #9aaba5;
+  --color-live: #3fcf7a;
+  --color-land-ink: #e7f0eb;
+  --color-land-from: #11261d;
+  --color-land-via: #0c1713;
+  --color-land-to: #090f0d;
+  --color-land-line: #1e3029;
+  --color-land-field-line: #2b3f37;
+  --color-land-card: #ffffff08;
+  --color-land-panel: #0f1a16;
+  --color-land-panel-line: #1e3029;
+  --color-land-shadow: #00000080;
+
+  --color-series: #8f72f0;
+  --color-mark-good: #56a862;
+  --color-mark-critical: #ec4f75;
+  --color-grid: #2a2422;
+  --color-axis: #453b37;
+  --color-mark-warn: #f5a524;
+  --color-mark-neutral: #7f7667;
+  --color-mark-imported: #8f8670;
+  --color-mark-assigned: #4fabbd;
+  --color-meter-track: #2c2545;
+  --color-meter-good-track: #1e3322;
+  --color-ramp-1: #4f4194;
+  --color-ramp-2: #6250b3;
+  --color-ramp-3: #7764d0;
+  --color-ramp-4: #8f7aea;
+  --color-ramp-5: #ab96fa;
+  --color-ramp-6: #d0c4fe;
+  --color-ramp-ink-hi: #141110;
+
+  /* The reference's light steps read better on the dark card; all take dark label ink (>= 4.8:1). */
+  --color-risk-low: #4caf50;
+  --color-risk-low-ink: #141110;
+  --color-risk-medium: #ffeb3b;
+  --color-risk-medium-ink: #141110;
+  --color-risk-high: #ff9800;
+  --color-risk-high-ink: #141110;
+  --color-risk-critical: #f44336;
+  --color-risk-critical-ink: #141110;
 }
 
 html,
@@ -110,7 +269,7 @@ body {
     width: 100%;
     min-height: 2.5rem;
     border-radius: 6px;
-    background: #fff;
+    background: var(--color-field);
     border: 1px solid var(--color-rule);
     padding: 0.5rem 0.75rem;
     font-size: 0.9375rem;
@@ -126,6 +285,9 @@ body {
     color: var(--color-faint);
   }
 
+  .landing .field {
+    background: var(--color-land-panel);
+  }
   .landing .field:focus {
     border-color: var(--color-leaf);
     box-shadow: 0 0 0 3px rgba(23, 128, 77, 0.16);

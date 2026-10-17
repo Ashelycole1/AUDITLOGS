@@ -13,7 +13,8 @@ from django.conf import settings
 from openpyxl import load_workbook
 
 FIELDS = ("reference", "title", "description", "risk_rating", "deadline", "responsible_officer", "department")
-RISKS = {"high": "High", "medium": "Medium", "low": "Low"}
+# "Extreme" is the reference's other name for Critical (Standard Risk Matrix Color Mapping Reference).
+RISKS = {"critical": "Critical", "extreme": "Critical", "high": "High", "medium": "Medium", "low": "Low"}
 DATE_FORMATS = ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y")  # Ugandan files write day before month.
 MAX_LENGTH = {"reference": 50, "title": 300, "responsible_officer": 150, "department": 150}
 
@@ -141,7 +142,9 @@ def validate(rows: list[ParsedRow], existing_references: set[str], today: date) 
         if risk:
             d["risk_rating"] = risk
         else:
-            row.errors.append(f'Unknown risk rating "{d["risk_rating"] or "blank"}". Use High, Medium or Low')
+            row.errors.append(
+                f'Unknown risk rating "{d["risk_rating"] or "blank"}". Use Low, Medium, High or Critical'
+            )
 
         deadline = _parse_date(d["deadline"])
         if deadline is None:

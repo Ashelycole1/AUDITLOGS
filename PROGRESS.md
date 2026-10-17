@@ -129,6 +129,14 @@ Updated at the end of every session and whenever work is paused (see `agent_work
 
 - 2026-10-17, **staging import failed with a 500**: `binascii.Error: Incorrect padding` in `save_encrypted`. The `EVIDENCE_ENCRYPTION_KEY` on Render was pasted incomplete (the local copy is valid). The start-up check now rejects an invalid key with a clear message, and there is a new test. Sample import files are in `samples/imports/`. Owner to re-paste the key on Render. Not committed yet.
 
+- 2026-10-17, **dark mode** (DECISIONS 30):
+  - Every colour is now a token in `src/index.css`, and a dark block redefines them all. About 60 raw hex values in components, charts and pages were replaced by tokens. The light theme looks the same as before.
+  - Sun/moon toggle in the top bar (desktop and phone) and on the sign-in page. It follows the system setting until pressed, then remembers the choice. `public/theme-init.js` sets the theme before first paint without breaking the CSP.
+  - Dark chart colours and the heatmap ramp pass the dataviz validator against the dark card.
+  - Checked by screenshots in both themes: sign-in (desktop and phone), CIA dashboard (including heatmap and tooltip), queries, query detail, approvals and the reason dialog, audit log, reports, compliance, PIA import and batches, CEO CIA activity, ICT users and system. No console errors. The frontend builds. Not committed yet.
+
+- 2026-10-17, **four-tier risk scale** (DECISIONS 31), from the owner's Standard Risk Matrix Color Mapping Reference: Low, Medium, High, Critical, with the reference's green-to-red colours in both themes, letter codes, and meaning/escalation text on the query page and the CIA edit dialog. Backend: `Critical` choice, migration `queries 0002`, import also accepts "Extreme". The sample files are updated. 359 backend tests pass, ruff and black are clean, and the frontend builds. Checked by screenshots in light and dark (queries, dashboard heatmap and Needs attention, query detail, edit dialog). Not committed yet.
+
 ### In flight
 - Owner to sign in on staging with a demo account (password only).
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { BrowserRouter, Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { Avatar, cx, Wordmark } from "./components";
+import { Avatar, cx, ThemeToggle, Wordmark } from "./components";
 import { Icon, type IconName } from "./icons";
 import { useStore } from "./storeTypes";
 import type { Role } from "./types";
@@ -103,14 +103,14 @@ function Shell() {
             "relative flex items-center gap-2 whitespace-nowrap text-sm transition-colors",
             stacked ? "min-h-11 rounded-md px-3" : "h-16 px-1",
             isActive
-              ? cx("text-ink", stacked ? "bg-[#20161308]" : "after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-ink")
+              ? cx("text-ink", stacked ? "bg-hover" : "after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-ink")
               : "text-muted hover:text-ink",
           )
         }
       >
         {stacked && <Icon name={n.icon} className="size-[18px] shrink-0 text-faint" />}
         <span className={stacked ? "flex-1" : undefined}>{n.label}</span>
-        {n.to === "/approvals" && pending > 0 && <span className="min-w-5 rounded-full bg-lake px-1.5 text-center font-mono text-[0.6875rem] leading-5 text-white">{pending}</span>}
+        {n.to === "/approvals" && pending > 0 && <span className="min-w-5 rounded-full bg-lake px-1.5 text-center font-mono text-[0.6875rem] leading-5 text-on-accent">{pending}</span>}
       </NavLink>
     ));
 
@@ -136,17 +136,18 @@ function Shell() {
               </form>
             )}
             <p className="eyebrow hidden whitespace-nowrap 2xl:block">{today}</p>
+            <ThemeToggle />
             <div className="hidden items-center gap-2.5 border-l border-line pl-3 lg:flex">
-              <Avatar name={me.fullName} className="!size-8 !bg-[#ecebe5] !text-xs !text-ink" />
+              <Avatar name={me.fullName} className="!size-8 !bg-chip !text-xs !text-ink" />
               <div className="leading-tight">
                 <p className="whitespace-nowrap text-sm text-ink">{me.fullName}</p>
                 <p className="font-mono text-[0.6875rem] uppercase tracking-[0.06em] text-faint" title={ROLE_NAME[me.role]}>{me.role}</p>
               </div>
-              <button type="button" onClick={() => logout()} className="ml-1 grid size-9 place-items-center rounded-md text-faint hover:bg-[#20161308] hover:text-ink" aria-label="Sign out" title="Sign out">
+              <button type="button" onClick={() => logout()} className="ml-1 grid size-9 place-items-center rounded-md text-faint hover:bg-hover hover:text-ink" aria-label="Sign out" title="Sign out">
                 <Icon name="logout" className="size-[18px]" />
               </button>
             </div>
-            <button type="button" onClick={() => setMenu((m) => !m)} className="grid size-10 place-items-center rounded-md text-muted hover:bg-[#20161308] lg:hidden" aria-label={menu ? "Close menu" : "Open menu"} aria-expanded={menu}>
+            <button type="button" onClick={() => setMenu((m) => !m)} className="grid size-10 place-items-center rounded-md text-muted hover:bg-hover lg:hidden" aria-label={menu ? "Close menu" : "Open menu"} aria-expanded={menu}>
               <Icon name={menu ? "close" : "menu"} className="size-5" />
             </button>
           </div>
@@ -162,12 +163,12 @@ function Shell() {
             )}
             <nav aria-label="Main" className="flex flex-col">{links(true)}</nav>
             <div className="mt-3 flex items-center gap-3 border-t border-line pt-3">
-              <Avatar name={me.fullName} className="!size-8 !bg-[#ecebe5] !text-xs !text-ink" />
+              <Avatar name={me.fullName} className="!size-8 !bg-chip !text-xs !text-ink" />
               <div className="min-w-0 flex-1 leading-tight">
                 <p className="truncate text-sm">{me.fullName}</p>
                 <p className="truncate text-xs text-faint">{ROLE_NAME[me.role]}</p>
               </div>
-              <button type="button" onClick={() => logout()} className="inline-flex min-h-9 items-center gap-2 rounded-[5px] border border-rule px-3 text-sm hover:bg-[#20161308]">
+              <button type="button" onClick={() => logout()} className="inline-flex min-h-9 items-center gap-2 rounded-[5px] border border-rule px-3 text-sm hover:bg-hover">
                 <Icon name="logout" className="size-4" /> Sign out
               </button>
             </div>

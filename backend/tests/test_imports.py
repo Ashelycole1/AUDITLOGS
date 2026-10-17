@@ -110,6 +110,27 @@ def test_past_deadline_warns_but_does_not_block(client_for):
     assert pia.post(reverse("imports-confirm", kwargs={"pk": preview["id"]})).status_code == 200
 
 
+def test_all_four_risk_tiers_are_read(client_for):
+    """The Standard Risk Matrix Color Mapping Reference scale: Low, Medium, High, Critical."""
+    pia = client_for("PIA")
+    lines = [
+        f"IA/2026/07{i},Title,Text,{raw},{FUTURE},Officer,Dept"
+        for i, raw in enumerate(("low", "MEDIUM", "High", "critical", "Extreme"))
+    ]
+    preview = upload(pia, csv_file(*lines)).json()
+    assert [r["errors"] for r in preview["rows"]] == [[]] * 5
+    assert [r["data"]["risk_rating"] for r in preview["rows"]] == [
+        "Low",
+        "Medium",
+        "High",
+        "Critical",
+        "Critical",
+    ]
+    assert pia.post(reverse("imports-confirm", kwargs={"pk": preview["id"]})).status_code == 200
+    saved = Query.objects.get(reference="IA/2026/073")
+    assert (saved.risk_rating_original, saved.risk_rating_current) == ("Critical", "Critical")
+
+
 def test_day_first_dates_are_read(client_for):
     preview = upload(client_for("PIA"), csv_file(good_line("IA/2026/061", deadline="15/12/2030"))).json()
     assert preview["rows"][0]["data"]["deadline"] == "2030-12-15"

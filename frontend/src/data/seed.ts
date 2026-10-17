@@ -48,7 +48,7 @@ export const users: User[] = [
 type Seed = [ref: string, title: string, desc: string, risk: Risk, dept: string, officer: string, deadlineIn: number];
 
 const batch1: Seed[] = [
-  ["IA/2026/014", "Payments made without approved purchase orders", "Eleven supplier payments totalling UGX 48.2m were processed before a purchase order was approved in the system.", "High", "Procurement", "Head of Procurement", -20],
+  ["IA/2026/014", "Payments made without approved purchase orders", "Eleven supplier payments totalling UGX 48.2m were processed before a purchase order was approved in the system.", "Critical", "Procurement", "Head of Procurement", -20],
   ["IA/2026/015", "Bank accounts not reconciled at month end", "The operations and project accounts were last reconciled in June. Unexplained differences remain on both.", "High", "Finance", "Financial Controller", 12],
   ["IA/2026/016", "Fixed asset register not updated", "Thirty-four laptops and two vehicles bought this year are missing from the fixed asset register.", "Medium", "Finance", "Assets Accountant", -9],
   ["IA/2026/017", "Fuel cards active for transferred staff", "Six fuel cards remain active for staff who moved stations more than three months ago.", "Medium", "Fleet", "Transport Officer", 5],
@@ -63,7 +63,7 @@ const batch1: Seed[] = [
 const batch2: Seed[] = [
   ["IA/2026/031", "Vehicle logbooks incomplete", "Logbooks for five pool vehicles have gaps of more than a week in September.", "Medium", "Fleet", "Transport Officer", 40],
   ["IA/2026/032", "Backups not tested", "No restore test of the finance system backup has been recorded this financial year.", "High", "ICT", "ICT Manager", 35],
-  ["IA/2026/033", "Supplier bank details changed by email", "Two supplier bank account changes were made on the strength of an email without a call-back check.", "High", "Finance", "Financial Controller", 21],
+  ["IA/2026/033", "Supplier bank details changed by email", "Two supplier bank account changes were made on the strength of an email without a call-back check.", "Critical", "Finance", "Financial Controller", 21],
   ["IA/2026/034", "Training costs not budgeted", "External training worth UGX 12m was paid from the general operations line.", "Low", "Human Resources", "HR Manager", 45],
 ];
 

@@ -148,7 +148,7 @@ Lists every direct CIA change: status changes made without a proposal, rating ed
 ## 13. Validation rules (examples)
 
 - Reference: required, unique, max 50 characters.
-- Risk rating: one of High, Medium, Low (confirm scale with the client).
+- Risk rating: one of Low, Medium, High, Critical, per the Standard Risk Matrix Color Mapping Reference (`assets/`, DECISIONS 31). "Extreme" is accepted as Critical.
 - Deadline: valid date; may not be before import date without a warning.
 - Evidence: allowed types (pdf, docx, xlsx, png, jpg, csv, txt), size limit 20 MB, hashed on upload.
 - Reasons: required, at least 10 characters.

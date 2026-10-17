@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button, Check, Empty, Notice, PageHeader, Panel, Ref, Table, cx } from "../components";
 import { fmtDateTime } from "../lib/rules";
+import { parseRisk } from "../lib/risk";
 import { sha256 } from "../lib/sha256";
 import { useStore } from "../storeTypes";
 import type { ImportRow } from "../types";
@@ -12,7 +13,7 @@ const COLUMNS = ["reference", "title", "description", "risk_rating", "deadline",
 const SAMPLE = `reference,title,description,risk_rating,deadline,responsible_officer,department
 IA/2026/041,Stock count differences not investigated,Differences from the June stock count were written off without investigation.,Medium,2026-12-15,Stores Supervisor,Stores
 IA/2026/042,Overtime paid without approval forms,Overtime for 14 staff was paid in August without signed approval forms.,High,2026-11-30,HR Manager,Human Resources
-IA/2026/043,Insurance cover lapsed on two vehicles,Comprehensive cover for two pool vehicles lapsed in July and was not renewed.,High,2026-11-20,Transport Officer,Fleet
+IA/2026/043,Insurance cover lapsed on two vehicles,Comprehensive cover for two pool vehicles lapsed in July and was not renewed.,Critical,2026-11-20,Transport Officer,Fleet
 ,Website content not reviewed,Public website lists staff who left more than a year ago.,Low,2026-12-31,Communications Officer,Communications
 IA/2026/042,Duplicate supplier records,The supplier master file has 37 suppliers recorded twice.,Medium,2026-12-10,Financial Controller,Finance
 IA/2026/046,Unused software licences,Forty licences for the design suite have not been used in six months.,Severe,2026-12-01,ICT Manager,ICT
@@ -67,7 +68,9 @@ function validate(text: string, existing: Set<string>): { rows: ImportRow[]; err
     else if (seen.has(r.reference)) r.errors.push("Duplicate reference in this file");
     seen.add(r.reference);
     if (!r.title) r.errors.push("Missing title");
-    if (!["High", "Medium", "Low"].includes(r.riskRating)) r.errors.push(`Unknown rating "${r.riskRating || "blank"}"`);
+    const risk = parseRisk(r.riskRating);
+    if (risk) r.riskRating = risk;
+    else r.errors.push(`Unknown rating "${r.riskRating || "blank"}", use Low, Medium, High or Critical`);
     const d = /^\d{4}-\d{2}-\d{2}$/.test(r.deadline) ? new Date(r.deadline + "T00:00:00Z") : null;
     if (!d || Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== r.deadline) r.errors.push(`Bad date "${r.deadline || "blank"}", use YYYY-MM-DD`);
     else if (r.deadline < today) r.errors.push("Deadline is before today");
@@ -162,7 +165,7 @@ export function ImportPage() {
             )}
           >
             <svg viewBox="0 0 40 48" className="h-12 w-10 text-spine" aria-hidden>
-              <path d="M6 2h20l12 12v30a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Z" fill="#fbfbf9" stroke="currentColor" strokeWidth="2" />
+              <path d="M6 2h20l12 12v30a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Z" className="fill-sheet" stroke="currentColor" strokeWidth="2" />
               <path d="M26 2v12h12" fill="none" stroke="currentColor" strokeWidth="2" />
               <path d="M11 24h18M11 30h18M11 36h12" stroke="currentColor" strokeWidth="2" strokeOpacity=".35" />
             </svg>
@@ -179,11 +182,11 @@ export function ImportPage() {
           {/* The template the file must follow, drawn as the header row it should start with. */}
           <p className="mt-6 text-sm font-medium">The first row must have these columns, in any order</p>
           <div className="mt-2 overflow-x-auto">
-            <ol className="flex min-w-max border border-rule bg-white font-mono text-xs">
+            <ol className="flex min-w-max border border-rule bg-field font-mono text-xs">
               {COLUMNS.map((c) => <li key={c} className="border-l border-rule px-3 py-2 first:border-l-0">{c}</li>)}
             </ol>
           </div>
-          <p className="mt-2 text-[0.8125rem] text-muted">Risk is High, Medium or Low. Deadlines are written YYYY-MM-DD. The file and its fingerprint are kept with the batch.</p>
+          <p className="mt-2 text-[0.8125rem] text-muted">Risk is Low, Medium, High or Critical (Extreme is read as Critical). Deadlines are written YYYY-MM-DD. The file and its fingerprint are kept with the batch.</p>
         </Panel>
       ) : (
         <section className="sheet rounded-xl">

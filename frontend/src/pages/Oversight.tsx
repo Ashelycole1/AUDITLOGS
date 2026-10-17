@@ -45,11 +45,11 @@ export function CiaActivityPage() {
               onClick={() => setKind(on ? null : action)}
               className={cx(
                 "px-5 py-4 text-left transition-colors",
-                on ? "bg-lake text-white" : "bg-sheet hover:bg-white",
+                on ? "bg-lake text-on-accent" : "bg-sheet hover:bg-subtle",
               )}
             >
               <span className={cx("block text-[2rem] font-medium leading-none tracking-[-0.03em]", !on && action === "status.direct" && n > 0 && "text-warn")}>{n}</span>
-              <span className={cx("mt-2 block text-sm", on ? "text-white/80" : "text-muted")}>{label}</span>
+              <span className={cx("mt-2 block text-sm", on ? "text-on-accent/80" : "text-muted")}>{label}</span>
             </button>
           );
         })}

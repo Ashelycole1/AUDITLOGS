@@ -23,6 +23,19 @@ def assign(cia, query, ia, reason=""):
     )
 
 
+def test_cia_can_raise_a_rating_to_critical(client_for, make_query):
+    query = make_query()
+    url = reverse("queries-detail", kwargs={"pk": query.pk})
+    response = client_for("CIA").patch(
+        url, {"risk_rating_current": "Critical", "reason": REASON}, format="json"
+    )
+    assert response.status_code == 200
+    assert (response.json()["risk_rating_current"], response.json()["risk_rating_original"]) == (
+        "Critical",
+        "Medium",
+    )
+
+
 def test_cia_edit_keeps_the_original_and_records_a_revision(client_for, make_query):
     cia = client_for("CIA")
     query = make_query()

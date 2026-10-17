@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Button, Empty, Label, Notice, Panel, ReasonDialog, RiskTag, StatusBadge, StatusMark, StatusRail, cx } from "../components";
+import { Button, Empty, Label, Notice, Panel, ReasonDialog, RiskGuide, RiskTag, StatusBadge, StatusMark, StatusRail, cx } from "../components";
+import { RISKS } from "../lib/risk";
 import { EVIDENCE_MAX_BYTES, EVIDENCE_TYPES, STATUSES, daysOverdue, fmtBytes, fmtDate, fmtDateTime, isAllowedTransition } from "../lib/rules";
 import { useMe, useStore } from "../storeTypes";
-import type { EditableField, FollowUpActivity, Query, Status } from "../types";
+import type { EditableField, FollowUpActivity, Query, Risk, Status } from "../types";
 
 const FIELD_LABEL: Record<EditableField, string> = {
   title: "Title",
@@ -93,12 +94,13 @@ function Workspace({ q }: { q: Query }) {
               <dd className={cx(!q.currentAssignee && "text-faint")}>{q.currentAssignee ? userName(q.currentAssignee) : "Not assigned"}</dd>
               <dt className="text-muted">Risk</dt>
               <dd>
-                {q.riskRatingCurrent}
+                <RiskTag risk={q.riskRatingCurrent} />
                 {q.riskRatingCurrent !== q.riskRatingOriginal && <span className="block text-muted">Imported as {q.riskRatingOriginal}</span>}
               </dd>
               <dt className="text-muted">Source</dt>
               <dd className="break-all">{batch?.sourceFilename ?? q.batchFilename}</dd>
             </dl>
+            <RiskGuide risk={q.riskRatingCurrent} className="mt-4" />
           </Panel>
 
           {pending && <PendingRequest requestId={pending.id} />}
@@ -184,7 +186,7 @@ function FollowUp({ q }: { q: Query }) {
                 role="radio"
                 aria-checked={kind === k}
                 onClick={() => setKind(k)}
-                className={cx("min-h-9 rounded px-3 transition-colors", kind === k ? "bg-lake font-medium text-white" : "text-muted hover:text-ink")}
+                className={cx("min-h-9 rounded px-3 transition-colors", kind === k ? "bg-lake font-medium text-on-accent" : "text-muted hover:text-ink")}
               >
                 {k === "Note" ? "Note" : "Management response"}
               </button>
@@ -306,7 +308,7 @@ function PendingRequest({ requestId }: { requestId: string }) {
   const own = r.proposedBy === me.id;
 
   return (
-    <Panel title="Waiting for the CIA" className="!border-[#fee685] !bg-warn-wash/40">
+    <Panel title="Waiting for the CIA" className="!border-warn-ring !bg-warn-wash/40">
       <p className="text-sm text-muted">
         {userName(r.proposedBy)} proposed closure on {fmtDateTime(r.createdAt)}.
       </p>
@@ -407,9 +409,12 @@ function CiaActions({ q }: { q: Query }) {
         <div>
           <Label htmlFor="edit-value">New value</Label>
           {field === "riskRatingCurrent" ? (
-            <select id="edit-value" className="field" value={value} onChange={(e) => setValue(e.target.value)}>
-              <option>High</option><option>Medium</option><option>Low</option>
-            </select>
+            <>
+              <select id="edit-value" className="field" value={value} onChange={(e) => setValue(e.target.value)}>
+                {RISKS.map((r) => <option key={r}>{r}</option>)}
+              </select>
+              {RISKS.includes(value as Risk) && <RiskGuide risk={value as Risk} className="mt-2" />}
+            </>
           ) : field === "deadline" ? (
             <input id="edit-value" type="date" className="field" value={value} onChange={(e) => setValue(e.target.value)} />
           ) : field === "descriptionCurrent" ? (

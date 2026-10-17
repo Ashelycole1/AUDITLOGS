@@ -5,14 +5,18 @@ import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { cx } from "./components";
 import { Icon } from "./icons";
 
-export const SERIES = "#7345e2";
-export const GOOD = "#4a9d54";
-export const CRITICAL = "#e0294f";
-const GRID = "#ebe9e2";
-const AXIS = "#cfccc0";
-const MUTED = "#736761";
-// Sequential lilac ramp, light to dark (zaro lilac steps 200 to 600, plus a deeper 700).
-const RAMP = ["#dcd8fc", "#bdb4f8", "#a392f3", "#8566ec", "#7345e2", "#5a30c4"];
+// Colours are CSS variables (index.css), so every chart follows the light or dark theme. SVG marks
+// take them through style, not presentation attributes.
+export const SERIES = "var(--color-series)";
+export const GOOD = "var(--color-mark-good)";
+export const CRITICAL = "var(--color-mark-critical)";
+const GRID = "var(--color-grid)";
+const AXIS = "var(--color-axis)";
+const MUTED = "var(--color-faint)";
+const SURFACE = "var(--color-sheet)";
+const EMPTY = "var(--color-chip)";
+// Sequential lilac ramp, weakest to strongest (zaro lilac steps 200 to 600, plus a deeper 700).
+const RAMP = [1, 2, 3, 4, 5, 6].map((i) => `var(--color-ramp-${i})`);
 
 export function useWidth<T extends HTMLElement>(): [React.RefObject<T>, number] {
   const ref = useRef<T>(null);
@@ -58,7 +62,7 @@ function TipLayer({ tip, width }: { tip: TipState; width: number }) {
   return (
     <div
       role="tooltip"
-      className="pointer-events-none absolute z-30 whitespace-nowrap rounded-lg bg-ink px-3 py-2 text-xs leading-relaxed text-white shadow-lg"
+      className="pointer-events-none absolute z-30 whitespace-nowrap rounded-lg bg-tip px-3 py-2 text-xs leading-relaxed text-tip-ink shadow-lg"
       style={{ left: tip.x, top: tip.y - 8, transform: `translate(${shift}, -100%)` }}
     >
       {tip.body}
@@ -194,29 +198,29 @@ export function TrendChart({ labels, series, height = 248 }: { labels: string[];
         <svg width={w} height={height} className="block overflow-visible">
           {ticks.map((t) => (
             <g key={t}>
-              <line x1={m.l} x2={w - m.r} y1={y(t)} y2={y(t)} stroke={t === 0 ? AXIS : GRID} />
-              <text x={m.l - 8} y={y(t)} dy="0.32em" textAnchor="end" fontSize={11} fill={MUTED} className="tabular-nums">{t}</text>
+              <line x1={m.l} x2={w - m.r} y1={y(t)} y2={y(t)} style={{ stroke: t === 0 ? AXIS : GRID }} />
+              <text x={m.l - 8} y={y(t)} dy="0.32em" textAnchor="end" fontSize={11} style={{ fill: MUTED }} className="tabular-nums">{t}</text>
             </g>
           ))}
           {labels.map((l, i) => (i % every === 0 || i === n - 1) && (i === n - 1 || n - 1 - i >= every * 0.6) && (
-            <text key={i} x={x(i)} y={height - 8} textAnchor={i === 0 ? "start" : i === n - 1 ? "end" : "middle"} fontSize={11} fill={MUTED}>{l}</text>
+            <text key={i} x={x(i)} y={height - 8} textAnchor={i === 0 ? "start" : i === n - 1 ? "end" : "middle"} fontSize={11} style={{ fill: MUTED }}>{l}</text>
           ))}
           {series.map((s) => s.area && (
-            <path key={`a-${s.name}`} d={`${line(s.values)}L${x(n - 1)},${y(0)}L${x(0)},${y(0)}Z`} fill={s.color} fillOpacity={0.1} />
+            <path key={`a-${s.name}`} d={`${line(s.values)}L${x(n - 1)},${y(0)}L${x(0)},${y(0)}Z`} style={{ fill: s.color }} fillOpacity={0.1} />
           ))}
           {series.map((s) => (
-            <path key={s.name} d={line(s.values)} fill="none" stroke={s.color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+            <path key={s.name} d={line(s.values)} fill="none" style={{ stroke: s.color }} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
           ))}
           {ends.map((e, i) => (
             <g key={e.s.name}>
-              <circle cx={x(n - 1)} cy={e.y} r={4} fill={e.s.color} stroke="#fbfbf9" strokeWidth={2} />
-              {showEnd[i] && <text x={x(n - 1) + 9} y={e.y} dy="0.32em" fontSize={12} fontWeight={600} fill="#201613">{e.v}</text>}
+              <circle cx={x(n - 1)} cy={e.y} r={4} style={{ fill: e.s.color, stroke: SURFACE }} strokeWidth={2} />
+              {showEnd[i] && <text x={x(n - 1) + 9} y={e.y} dy="0.32em" fontSize={12} fontWeight={600} className="fill-ink">{e.v}</text>}
             </g>
           ))}
           {hover !== null && (
             <g pointerEvents="none">
-              <line x1={hx} x2={hx} y1={m.t} y2={m.t + ih} stroke="#aea297" />
-              {series.map((s) => <circle key={s.name} cx={hx} cy={y(s.values[hover])} r={4.5} fill={s.color} stroke="#fbfbf9" strokeWidth={2} />)}
+              <line x1={hx} x2={hx} y1={m.t} y2={m.t + ih} className="stroke-rule-strong" />
+              {series.map((s) => <circle key={s.name} cx={hx} cy={y(s.values[hover])} r={4.5} style={{ fill: s.color, stroke: SURFACE }} strokeWidth={2} />)}
             </g>
           )}
           <rect
@@ -239,7 +243,7 @@ export function TrendChart({ labels, series, height = 248 }: { labels: string[];
       {hover !== null && (
         <div
           role="tooltip"
-          className="pointer-events-none absolute z-30 whitespace-nowrap rounded-lg bg-ink px-3 py-2 text-xs leading-relaxed text-white shadow-lg"
+          className="pointer-events-none absolute z-30 whitespace-nowrap rounded-lg bg-tip px-3 py-2 text-xs leading-relaxed text-tip-ink shadow-lg"
           style={{ left: hx, top: m.t, transform: `translate(${shift}, 0)`, marginLeft: shift === "0%" ? 12 : shift === "-100%" ? -12 : 0 }}
         >
           <div className="mb-1 text-spine-ink">{labels[hover]}</div>
@@ -397,9 +401,9 @@ export function Heatmap({ rows, cols, value }: { rows: { key: string; label: Rea
                       key={c.key}
                       tabIndex={0}
                       aria-label={`${r.name} risk, ${c.name}: ${v}`}
-                      className={cx("h-10 min-w-10 rounded-md text-center font-medium tabular-nums outline-none transition-[filter] hover:brightness-95 focus-visible:ring-2 focus-visible:ring-ink", s >= 3 ? "text-white" : s < 0 ? "text-faint" : "text-ink")}
-                      style={{ background: s < 0 ? "#ecebe5" : RAMP[s] }}
-                      onPointerMove={(e) => show(e, <><div className="mb-1 text-spine-ink">{r.name} risk</div><TipRow color={s < 0 ? "#ecebe5" : RAMP[s]} label={c.name} value={v} /></>)}
+                      className={cx("h-10 min-w-10 rounded-md text-center font-medium tabular-nums outline-none transition-[filter] hover:brightness-95 focus-visible:ring-2 focus-visible:ring-ink", s >= 3 ? "text-ramp-ink-hi" : s < 0 ? "text-faint" : "text-ink")}
+                      style={{ background: s < 0 ? EMPTY : RAMP[s] }}
+                      onPointerMove={(e) => show(e, <><div className="mb-1 text-spine-ink">{r.name} risk</div><TipRow color={s < 0 ? EMPTY : RAMP[s]} label={c.name} value={v} /></>)}
                       onPointerLeave={hide}
                       onFocus={(e) => show(e, <TipRow label={`${r.name} risk, ${c.name}`} value={v} />)}
                       onBlur={hide}
@@ -437,9 +441,9 @@ export function Sparkline({ values, color = SERIES, height = 40 }: { values: num
     <div ref={ref} style={{ height }} aria-hidden>
       {w > 0 && n > 1 && (
         <svg width={w} height={height} className="block overflow-visible">
-          <path d={`${d}L${x(n - 1)},${height}L${x(0)},${height}Z`} fill={color} fillOpacity={0.08} />
-          <path d={d} fill="none" stroke={color} strokeOpacity={0.55} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
-          <circle cx={x(n - 1)} cy={y(values[n - 1])} r={3.5} fill={color} stroke="#fbfbf9" strokeWidth={2} />
+          <path d={`${d}L${x(n - 1)},${height}L${x(0)},${height}Z`} style={{ fill: color }} fillOpacity={0.08} />
+          <path d={d} fill="none" style={{ stroke: color }} strokeOpacity={0.55} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+          <circle cx={x(n - 1)} cy={y(values[n - 1])} r={3.5} style={{ fill: color, stroke: SURFACE }} strokeWidth={2} />
         </svg>
       )}
     </div>
@@ -447,7 +451,7 @@ export function Sparkline({ values, color = SERIES, height = 40 }: { values: num
 }
 
 /* Meter: the fill carries the value; the track is a lighter step of the same hue. */
-export function Meter({ value, color = SERIES, track = "#eceafd", label }: { value: number; color?: string; track?: string; label: string }) {
+export function Meter({ value, color = SERIES, track = "var(--color-meter-track)", label }: { value: number; color?: string; track?: string; label: string }) {
   const pct = Math.max(0, Math.min(1, value));
   return (
     <div className="h-2 overflow-hidden rounded-full" style={{ background: track }} role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct * 100)} aria-label={label}>

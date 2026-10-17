@@ -1,6 +1,6 @@
 reference,title,description,risk_rating,deadline,responsible_officer,department
 IA/2026/101,Petty cash not reconciled monthly,Petty cash for the head office float was last reconciled in June. Three monthly reconciliations are missing and no one has signed off the balance.,High,2026-11-15,Finance Manager,Finance
-IA/2026/102,Supplier bank details changed without verification,Bank details for two suppliers were changed on an emailed request with no call-back check to a known contact.,High,2026-11-05,Head of Procurement,Procurement
+IA/2026/102,Supplier bank details changed without verification,Bank details for two suppliers were changed on an emailed request with no call-back check to a known contact.,Critical,2026-11-05,Head of Procurement,Procurement
 IA/2026/103,Stock counts not done at the regional store,The quarterly stock count at the regional store was skipped for Q2 and Q3. Book stock cannot be confirmed.,Medium,30/11/2026,Stores Supervisor,Stores
 IA/2026/104,Leavers still active on the payroll system,"Four staff who left in August still have active payroll records. No payments were made, but the accounts were not closed.",High,2026-10-31,HR Manager,Human Resources
 IA/2026/105,Vehicle logbooks incomplete,Logbooks for six pool vehicles have missing trip entries and no supervisor signature for September.,Medium,15/12/2026,Transport Officer,Fleet
