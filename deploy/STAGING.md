@@ -2,8 +2,8 @@
 
 > **Dummy data only.** Vercel and Render are outside Uganda. architecture.md 9 allows them for staging
 > only because real audit data never goes there (system.md 4.6 and 4.10). Production runs on the
-> server in Uganda. `config.settings.prod` refuses to start on Render, and every hosted page shows a
-> "Test system: dummy data only" banner.
+> server in Uganda. `config.settings.prod` refuses to start on Render, and the hosted sign-in page
+> says it is a test copy with dummy data only.
 
 ```
 Browser ──> https://<app>.vercel.app ──(/api/* forwarded)──> https://auditlogs-api.onrender.com
@@ -48,7 +48,7 @@ If Render gives the service a different address (for example because the name is
 1. In Vercel, choose **Add New, then Project**, and import the same repository.
 2. Set **Root Directory** to `frontend`. The framework (Vite), the build command and `dist` come from `frontend/vercel.json`.
 3. Under **Environment Variables**, add two variables:
-   - `VITE_DEPLOY_ENV` = `staging`, which shows the "dummy data only" banner;
+   - `VITE_DEPLOY_ENV` = `staging`, which marks the sign-in page as a dummy-data test copy;
    - `VITE_DATA_SOURCE` = `api`, which makes the screens use the Render backend. Without it, the site runs the in-browser demo.
 4. Deploy, then copy the address (e.g. `https://auditlogs.vercel.app`) into `CSRF_TRUSTED_ORIGINS` on Render and redeploy the backend.
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { BrowserRouter, Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { Avatar, cx, StagingBanner, Wordmark } from "./components";
+import { Avatar, cx, Wordmark } from "./components";
 import { Icon, type IconName } from "./icons";
 import { useStore } from "./storeTypes";
 import type { Role } from "./types";
@@ -140,7 +140,6 @@ function Shell() {
 
   return (
     <div className="min-h-dvh lg:pl-[17rem]">
-      <StagingBanner />
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-[17rem] lg:block">{sidebar}</aside>
       {menu && (
         <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="Menu">

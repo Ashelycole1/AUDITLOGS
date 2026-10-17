@@ -105,7 +105,7 @@ Date, decision, reason. Newest last.
     - **Guardrails:**
       - `config.settings.prod` refuses to start when Render's `RENDER` variable is present.
       - Staging uses `config.settings.staging`: production security, but PINs may go to the service log.
-      - Every hosted page shows a "dummy data only" banner.
+      - The hosted sign-in page says it is a dummy-data test copy. (The yellow banner on every page was removed at the owner's request on 2026-10-17.)
       - `noindex` headers keep search engines out.
     - Vercel forwards `/api/*` to Render, so cookies stay first-party and `SameSite=Lax`. There's no cross-site cookie or CORS setup.
     - The region is Frankfurt, the closest Render region.

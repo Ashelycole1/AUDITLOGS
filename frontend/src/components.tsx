@@ -334,14 +334,5 @@ export function Avatar({ name, className }: { name: string; className?: string }
   return <span className={cx("grid size-9 shrink-0 place-items-center rounded-full bg-lake-wash text-sm font-semibold text-lake-deep", className)} aria-hidden>{initials}</span>;
 }
 
-// Hosted test copies (Vercel/Render) hold dummy data only (architecture.md 9). Say so on every screen.
+// Hosted test copies (Vercel/Render) hold dummy data only (architecture.md 9). The sign-in page says so.
 export const IS_STAGING = import.meta.env.VITE_DEPLOY_ENV === "staging" || window.location.hostname.endsWith(".vercel.app");
-
-export function StagingBanner() {
-  if (!IS_STAGING) return null;
-  return (
-    <div role="note" className="bg-[#fdb022] px-4 py-1.5 text-center text-sm font-semibold text-[#3c2a03]">
-      Test system: dummy data only. Never enter real audit information here.
-    </div>
-  );
-}

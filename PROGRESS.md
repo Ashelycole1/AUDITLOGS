@@ -88,7 +88,7 @@ Updated at the end of every session and whenever work is paused (see `agent_work
 - 2026-10-17, **staging deployment prepared, not yet deployed** (DECISIONS 22, `deploy/STAGING.md`):
   - `render.yaml` sets up the API on gunicorn plus Postgres, in Frankfurt, with staging settings.
   - `frontend/vercel.json` forwards `/api` to Render, sends other paths to the single-page app, and sets strict security headers.
-  - "Dummy data only" banner, and production refuses to run on Render.
+  - "Dummy data only" banner, and production refuses to run on Render. (The yellow banner was removed on 2026-10-17 at the owner's request; only the sign-in page's footnote remains.)
   - 323 tests passing.
 
 - 2026-10-17, **frontend connected to the API** (`VITE_DATA_SOURCE=api`, DECISIONS 23):
