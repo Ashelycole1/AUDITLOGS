@@ -168,7 +168,7 @@ Date, decision, reason. Newest last.
     - Every colour is a CSS variable in `frontend/src/index.css`. The light values are unchanged, and `:root[data-theme="dark"]` redefines all of them. Screens use only tokens, with no raw hex values, so a new screen gets both themes for free.
     - **Dark palette:** a warm umber night (page `#141110`, cards `#1c1817`), so it reads as the same product. The lilac accent and status colours are lifted to keep text contrast on the dark card. The sign-in page gets its own deep-forest variant.
     - **Charts** have their own dark steps rather than an automatic flip. Lilac `#8f72f0`, green `#56a862` and rose `#ec4f75` pass every dataviz validator check on `#1c1817`, and the heatmap ramp passes the ordinal checks. Tooltips use `--color-tip`.
-    - **Choosing a theme:** the sun/moon button is in the top bar and on the sign-in page. Until someone presses it, the app follows the system setting and changes with it; after that, the choice is kept in `localStorage` (`auditlogs.theme`).
+    - **Choosing a theme:** the app opens in **light mode for everyone** by default, whatever the computer's own setting (owner decision, 2026-10-17). The sun/moon button in the top bar and on the sign-in page switches between light and dark, and the choice is kept in `localStorage` (`auditlogs.theme`).
     - **No flash, no CSP change.** `public/theme-init.js` sets `data-theme` before the first paint. It is a same-origin file because the CSP forbids inline scripts.
 
 ## 2026-10-17: Risk ratings follow the Standard Risk Matrix Color Mapping Reference (owner request)

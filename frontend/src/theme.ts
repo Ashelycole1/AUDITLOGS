@@ -1,11 +1,10 @@
 import { useSyncExternalStore } from "react";
 
-// Light or dark. Until the person picks one, the app follows the system setting and changes with it.
+// Light or dark. Everyone starts in light; the toggle switches and the choice is remembered.
 // public/theme-init.js applies the same rule before first paint; keep the storage key in step.
 export type Theme = "light" | "dark";
 
 const KEY = "auditlogs.theme";
-const media = window.matchMedia("(prefers-color-scheme: dark)");
 const listeners = new Set<() => void>();
 
 function saved(): Theme | null {
@@ -36,10 +35,7 @@ export function setTheme(t: Theme) {
   apply(t);
 }
 
-apply(saved() ?? (media.matches ? "dark" : "light"));
-media.addEventListener("change", (e) => {
-  if (!saved()) apply(e.matches ? "dark" : "light");
-});
+apply(saved() ?? "light");
 
 export function useTheme(): [Theme, (t: Theme) => void] {
   const theme = useSyncExternalStore((l) => {

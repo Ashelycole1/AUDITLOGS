@@ -8,7 +8,7 @@
 
   Dark mode: every colour is a token here, and the dark block below redefines them all. Screens use
   only tokens (no raw hex), so both themes stay in step. public/theme-init.js sets data-theme on <html>
-  before first paint, from the saved choice or the system setting (src/theme.ts).
+  before first paint: light unless the person has chosen dark (src/theme.ts).
 */
 @theme static {
   --font-sans: "Host Grotesk", ui-sans-serif, system-ui, sans-serif;

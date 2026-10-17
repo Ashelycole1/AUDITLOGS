@@ -6,6 +6,6 @@
   try {
     saved = localStorage.getItem("auditlogs.theme");
   } catch (e) {}
-  var dark = saved ? saved === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
-  document.documentElement.dataset.theme = dark ? "dark" : "light";
+  // Light unless the person has chosen dark (owner decision: light is the default for everyone).
+  document.documentElement.dataset.theme = saved === "dark" ? "dark" : "light";
 })();

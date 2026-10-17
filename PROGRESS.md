@@ -131,7 +131,7 @@ Updated at the end of every session and whenever work is paused (see `agent_work
 
 - 2026-10-17, **dark mode** (DECISIONS 30):
   - Every colour is now a token in `src/index.css`, and a dark block redefines them all. About 60 raw hex values in components, charts and pages were replaced by tokens. The light theme looks the same as before.
-  - Sun/moon toggle in the top bar (desktop and phone) and on the sign-in page. It follows the system setting until pressed, then remembers the choice. `public/theme-init.js` sets the theme before first paint without breaking the CSP.
+  - Sun/moon toggle in the top bar (desktop and phone) and on the sign-in page. Light is the default for everyone (the system setting is ignored); the toggle switches and remembers the choice. `public/theme-init.js` sets the theme before first paint without breaking the CSP.
   - Dark chart colours and the heatmap ramp pass the dataviz validator against the dark card.
   - Checked by screenshots in both themes: sign-in (desktop and phone), CIA dashboard (including heatmap and tooltip), queries, query detail, approvals and the reason dialog, audit log, reports, compliance, PIA import and batches, CEO CIA activity, ICT users and system. No console errors. The frontend builds. Not committed yet.
 
