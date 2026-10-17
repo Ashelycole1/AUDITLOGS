@@ -86,7 +86,8 @@ class CsrfView(APIView):
 
 @method_decorator(csrf_protect, name="dispatch")
 class LoginView(APIView):
-    """Step 1 of 2: email and password. On success a one-time PIN is emailed; nothing is signed in yet."""
+    """Step 1 of 2: email and password. On success a one-time PIN is emailed; nothing is signed in yet.
+    With MFA paused (MFA_REQUIRED=false, staging only) this step signs in and returns the user."""
 
     permission_classes = [AllowAny]
     throttle_classes = [ScopedRateThrottle]
@@ -116,6 +117,20 @@ class LoginView(APIView):
                     {"detail": locked_message(), "code": "locked"}, status=status.HTTP_403_FORBIDDEN
                 )
             return Response({"detail": WRONG_CREDENTIALS}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not settings.MFA_REQUIRED:
+            # MFA paused (staging only): the password alone signs in, and the log says so.
+            with transaction.atomic():
+                login(raw, user, backend="django.contrib.auth.backends.ModelBackend")
+                record(
+                    actor=user,
+                    action="auth.login",
+                    object_type="User",
+                    object_id=user.pk,
+                    new={"mfa": "off"},
+                    ip=ip,
+                )
+            return Response(MeSerializer(user).data)
 
         request.session.cycle_key()
         request.session[PENDING_KEY] = {"user": str(user.pk), "at": time.time(), "fails": 0, "resends": 0}

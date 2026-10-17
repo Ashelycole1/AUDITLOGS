@@ -36,6 +36,7 @@ def test_safe_production_settings_pass():
         {"DATABASES": {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": "x"}}},
         {"ALLOWED_HOSTS": ["*"]},
         {"SESSION_COOKIE_SECURE": False},
+        {"MFA_REQUIRED": False},
     ],
 )
 def test_unsafe_production_settings_refuse_to_start(unsafe):
@@ -51,6 +52,11 @@ def test_staging_may_log_pins_instead_of_emailing_them():
         "EMAIL_BACKEND": "django.core.mail.backends.console.EmailBackend",
     }
     with override_settings(**staging):
+        enforce_production_settings()
+
+
+def test_staging_may_pause_mfa():
+    with override_settings(**{**SAFE, "ENVIRONMENT": "staging", "MFA_REQUIRED": False}):
         enforce_production_settings()
 
 

@@ -26,6 +26,8 @@ def production_problems(*, require_smtp: bool = True) -> list[str]:
     smtp_ready = (
         settings.EMAIL_HOST and settings.EMAIL_BACKEND == "django.core.mail.backends.smtp.EmailBackend"
     )
+    if settings.ENVIRONMENT == "prod" and not settings.MFA_REQUIRED:
+        problems.append("MFA_REQUIRED is off. Production always needs the emailed PIN.")
     if require_smtp and not smtp_ready:
         problems.append("SMTP_HOST is not set, so sign-in PINs cannot be sent.")
     if not settings.FILE_ENCRYPTION_KEY:

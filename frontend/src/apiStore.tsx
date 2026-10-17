@@ -285,7 +285,14 @@ export function ApiStoreProvider({ children }: { children: ReactNode }) {
 
     async checkPassword(email, password) {
       try {
-        const r = await api.post<{ sent_to: string }>("/auth/login", { email, password });
+        const r = await api.post<{ mfa?: string; sent_to?: string } & Raw>("/auth/login", { email, password });
+        if (!r.mfa) {
+          // MFA paused on the server (staging only): the password step has already signed in.
+          const who = toUser(r);
+          setMe(who);
+          await load(who);
+          return { ok: true, signedIn: true };
+        }
         return { ok: true, userId: "pending", sentTo: r.sent_to };
       } catch (e) {
         return fail(e instanceof ApiError ? e.message : "Sign-in failed.");

@@ -7,6 +7,7 @@ from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
 from django.core import mail
 from django.core.exceptions import ValidationError
+from django.test import override_settings
 from django.urls import reverse
 from django_otp.plugins.otp_email.models import EmailDevice
 from rest_framework.test import APIClient
@@ -233,3 +234,27 @@ def test_health_says_nothing_about_data():
     response = APIClient().get(reverse("health"))
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+@override_settings(MFA_REQUIRED=False)
+def test_paused_mfa_signs_in_with_the_password_alone(make_user):
+    user = make_user("CIA")
+    client = APIClient()
+
+    response = client.post(LOGIN, {"email": user.email, "password": PASSWORD}, format="json")
+    assert response.status_code == 200
+    assert response.json()["role"] == "CIA"
+    assert client.get(ME).json()["email"] == user.email
+    assert not mail.outbox
+    entry = AuditLog.objects.filter(action="auth.login").get()
+    assert entry.new_value == {"mfa": "off"}
+    assert verify_chain().ok
+
+
+@override_settings(MFA_REQUIRED=False)
+def test_paused_mfa_still_refuses_a_wrong_password(make_user):
+    user = make_user("IA")
+    client = APIClient()
+    response = client.post(LOGIN, {"email": user.email, "password": WRONG_PASSWORD}, format="json")
+    assert response.status_code == 400
+    assert client.get(ME).status_code == 403

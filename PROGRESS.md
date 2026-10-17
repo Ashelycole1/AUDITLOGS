@@ -121,9 +121,10 @@ Updated at the end of every session and whenever work is paused (see `agent_work
 - 2026-10-17, **staging frontend live** at https://auditlogs-gules.vercel.app. `CSRF_TRUSTED_ORIGINS` is set on Render to that address.
   - Checked: the page, `/api` forwarding, CSP/no-framing/no-referrer/noindex headers, the CSRF cookie, a wrong-credentials login (400) and a foreign-origin login (403).
 
+- 2026-10-17, **emailed PIN paused on staging** at the owner's request (DECISIONS 28). `MFA_REQUIRED=false` signs in with the password alone; production refuses to start with it off. Backend tests and lint pass, and the frontend builds.
+
 ### In flight
-- Owner to sign in on staging with the demo accounts. The PIN is in the Render logs for `auditlogs-api`.
-- `ipAllowList: []` in `render.yaml` is not committed or pushed yet.
+- Not yet committed or pushed: the MFA pause and `ipAllowList: []` in `render.yaml`. After pushing, make sure `MFA_REQUIRED=false` is set on the Render service, then try a password sign-in on staging.
 
 ### Next (proposed)
 1. Owner: confirm the extra dependencies in `DECISIONS.md` item 2 (`openpyxl` is named in system.md).

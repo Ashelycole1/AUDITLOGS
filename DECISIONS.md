@@ -143,3 +143,11 @@ Date, decision, reason. Newest last.
     - `manage.py run_scheduler` runs jobs at fixed Kampala times. Today that's chain verification at 01:30; more jobs join as they are built.
     - Backups use the `postgres:16` image, so `pg_dump` matches the server version. They keep 30 daily and 12 monthly copies.
     - **Open:** copying the backups to a second site in Uganda is a server task for ICT.
+
+## 2026-10-17: Emailed PIN paused on staging (owner request)
+
+28. **Staging signs in with the password alone for now.** Staging has no mail server, so PINs only reached the Render log, which made it hard to try.
+    - `MFA_REQUIRED=false` (set in `render.yaml`) makes a correct password sign in directly. The audit log records the sign-in as `auth.login` with `{"mfa": "off"}`, so these sign-ins can be told apart.
+    - Lockout, throttling, idle timeout and CSRF are unchanged.
+    - **Production can't use it.** The start-up check refuses to run in prod with `MFA_REQUIRED` off, and the default is on everywhere, including development and tests.
+    - To bring the PIN back, set `MFA_REQUIRED=true` on Render (with `SMTP_*` set, or PINs go to the log again) and change `render.yaml` to match.

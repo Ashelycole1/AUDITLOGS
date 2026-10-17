@@ -42,6 +42,7 @@ export default function Login() {
     run(async () => {
       const r = await checkPassword(email, password);
       if (!r.ok) return setError(r.error);
+      if (r.signedIn) return nav("/", { replace: true });
       setError(null);
       setNotice(null);
       setCode("");

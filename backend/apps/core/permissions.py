@@ -8,18 +8,18 @@ fails if any route is neither covered by the matrix nor listed as public.
 
 from collections.abc import Iterable, Mapping
 
+from django.conf import settings
 from rest_framework.permissions import BasePermission
 
 
 def is_fully_authenticated(user) -> bool:
-    """Signed in, active, and past the MFA step. A password alone is never enough."""
-    return bool(
-        user
-        and user.is_authenticated
-        and user.is_active
-        and callable(getattr(user, "is_verified", None))
-        and user.is_verified()
-    )
+    """Signed in, active, and past the MFA step. A password alone is not enough unless MFA is paused
+    (MFA_REQUIRED=false, staging only; production refuses to start that way)."""
+    if not (user and user.is_authenticated and user.is_active):
+        return False
+    if not settings.MFA_REQUIRED:
+        return True
+    return callable(getattr(user, "is_verified", None)) and user.is_verified()
 
 
 def roles_for(view, method: str) -> Iterable[str]:

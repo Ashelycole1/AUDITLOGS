@@ -49,6 +49,10 @@ services:
         value: "true"
       - key: DEV_SEED_PASSWORD
         sync: false
+      # Emailed PIN paused on staging until it has a mail server: the password alone signs in (DECISIONS 28).
+      # Set to "true" (or remove) to bring the PIN back. Production refuses to start with it off.
+      - key: MFA_REQUIRED
+        value: "false"
       # Optional. Without SMTP_HOST, sign-in PINs appear in this service's log.
       - key: SMTP_HOST
         sync: false

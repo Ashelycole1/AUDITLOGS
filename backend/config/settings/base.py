@@ -125,6 +125,9 @@ SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SAMESITE = "Lax"
 # Second factor: a one-time PIN emailed through the client's own mail server (owner decision, DECISIONS.md).
+# MFA_REQUIRED=false pauses it so a correct password signs in directly. Staging only, while it has no mail
+# server (DECISIONS 28); production refuses to start with it off (apps/core/checks.py).
+MFA_REQUIRED = (env("MFA_REQUIRED", "true") or "true").strip().lower() != "false"
 # How long a correct password stays valid while the user enters the PIN.
 MFA_PENDING_SECONDS = 300
 MFA_MAX_FAILURES = 5

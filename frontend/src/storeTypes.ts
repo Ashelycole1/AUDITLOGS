@@ -24,7 +24,8 @@ export interface Store {
   userName: (id: string | null) => string;
   visibleQueries: Query[];
   // auth
-  checkPassword: (email: string, password: string) => Promise<Result & { userId?: string; pin?: string; sentTo?: string }>;
+  // signedIn: the server signed in on the password alone (MFA paused on staging), so there is no PIN step.
+  checkPassword: (email: string, password: string) => Promise<Result & { userId?: string; pin?: string; sentTo?: string; signedIn?: boolean }>;
   completeMfa: (userId: string, code: string) => Promise<Result>;
   resendPin: () => Promise<Result & { pin?: string; sentTo?: string }>;
   logout: (reason?: string) => void;
