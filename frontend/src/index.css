@@ -224,6 +224,22 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/*
+  A steady page on phones (owner request): nothing may push the page sideways (clip, unlike hidden,
+  keeps the sticky header working), phones do not inflate text on rotation, a double tap does not
+  zoom, and sideways swipes do not bounce. Pinch zoom stays on for people who need larger text.
+*/
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  touch-action: manipulation;
+  overscroll-behavior-x: none;
+}
+html,
+body {
+  overflow-x: clip;
+}
+
 @layer base {
   h1,
   h2,
@@ -236,6 +252,80 @@ body {
     font-size: 0.6875rem;
     text-transform: uppercase;
     letter-spacing: 0.06em;
+  }
+  /* iPhones zoom the page in when a field under 16px gets focus, and it stays zoomed. In this layer
+     the !important also beats size utilities marked important (earlier layers win for !important). */
+  @media (max-width: 767px) {
+    input,
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
+  }
+}
+
+/*
+  Tables on phones: each row becomes a card of label/value lines, so no column is hidden off-screen.
+  Labels come from the column headings (useStackLabels in components.tsx).
+*/
+@media (max-width: 639px) {
+  .stack-table {
+    min-width: 0 !important;
+  }
+  .stack-table,
+  .stack-table tbody,
+  .stack-table tr {
+    display: block;
+  }
+  .stack-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .stack-table tbody tr {
+    padding: 0.875rem 1.25rem;
+  }
+  /* The label sits in a fixed left gutter; the cell's own content flows as usual beside it. */
+  .stack-table tbody td {
+    display: block;
+    position: relative;
+    min-width: 0 !important;
+    max-width: none !important;
+    width: auto !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+    padding: 0.3rem 0 0.3rem 7.25rem !important;
+    text-align: left !important;
+  }
+  .stack-table tbody td::before {
+    content: attr(data-label);
+    position: absolute;
+    left: 0;
+    top: 0.3rem;
+    width: 6.5rem;
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    line-height: 1.25rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-faint);
+  }
+  /* Cells without a heading (checkboxes, row actions) span the card; empty cells are dropped. */
+  .stack-table tbody td[data-label=""] {
+    padding-left: 0 !important;
+  }
+  .stack-table tbody td[data-label=""]::before {
+    display: none;
+  }
+  .stack-table tbody td:empty {
+    display: none;
+  }
+  /* The audit log's chain line between rows only makes sense in the wide table. */
+  .stack-table tbody td > .absolute {
+    display: none;
   }
 }
 

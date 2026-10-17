@@ -137,6 +137,13 @@ Updated at the end of every session and whenever work is paused (see `agent_work
 
 - 2026-10-17, **four-tier risk scale** (DECISIONS 31), from the owner's Standard Risk Matrix Color Mapping Reference: Low, Medium, High, Critical, with the reference's green-to-red colours in both themes, letter codes, and meaning/escalation text on the query page and the CIA edit dialog. Backend: `Critical` choice, migration `queries 0002`, import also accepts "Extreme". The sample files are updated. 359 backend tests pass, ruff and black are clean, and the frontend builds. Checked by screenshots in light and dark (queries, dashboard heatmap and Needs attention, query detail, edit dialog). Not committed yet.
 
+- 2026-10-17, **mobile view fixed and page held steady**:
+  - Reports and ICT Users were 658px wide on a 360px phone, which pushed the whole page sideways. Cause: grid cards could not shrink below their tables. `Panel` now has `min-w-0`.
+  - On phones every table becomes a card per row, with the column name beside each value (`stack-table` in `index.css`, labels from `useStackLabels`). Before, only the first column was visible and the rest scrolled off inside the card.
+  - The dashboard risk heatmap is turned round (statuses down, the four risk tiers across), so it fits a phone. The import page's required columns wrap instead of scrolling.
+  - Page steadiness: the page can no longer be pushed sideways (`overflow-x: clip`); phone fields are 16px so iPhones do not zoom in on tap; double-tap zoom, text inflation on rotation and sideways bounce are off. **Pinch zoom is left on** for accessibility.
+  - Checked by an automated audit of all 20 screens for every role at 360px: no page overflow and no hidden sideways scrolling. Screenshots reviewed. The frontend builds. Not committed yet.
+
 ### In flight
 - Owner to sign in on staging with a demo account (password only).
 

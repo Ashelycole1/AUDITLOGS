@@ -1,7 +1,7 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { CRITICAL, ChartCard, Columns, GOOD, Heatmap, LegendKey, Meter, SERIES, Sparkline, StackedRows, TrendChart, BarList, type Part } from "../charts";
-import { Avatar, Empty, PageHeader, Ref, RiskTag, StatusBadge, cx } from "../components";
+import { Avatar, Empty, PageHeader, Ref, RiskTag, StatusBadge, cx, useStackLabels } from "../components";
 import { RISKS, riskRank } from "../lib/risk";
 import { Icon, type IconName } from "../icons";
 import { STATUSES, daysOverdue, dueWithin, fmtDate, fmtDateTime } from "../lib/rules";
@@ -32,6 +32,8 @@ export default function DashboardPage() {
   const { visibleQueries, state, userName } = useStore();
   const [dept, setDept] = useState("");
   const [risk, setRisk] = useState<Risk | "">("");
+  const attentionTable = useRef<HTMLTableElement>(null);
+  useStackLabels(attentionTable);
 
   const departments = [...new Set(visibleQueries.map((q) => q.department))].sort();
   // The filters above the charts scope every number on the page, so they always agree.
@@ -187,13 +189,14 @@ export default function DashboardPage() {
 
         <ChartCard
           title="Open queries by risk"
-          subtitle="Count per risk rating and status"
-          table={{ head: ["Risk", ...OPEN_STATUSES], rows: RISKS.map((r) => [r, ...OPEN_STATUSES.map((s) => openQs.filter((q) => q.riskRatingCurrent === r && q.status === s).length)]) }}
+          subtitle="Count per status and risk rating"
+          table={{ head: ["Status", ...RISKS], rows: OPEN_STATUSES.map((s) => [s, ...RISKS.map((r) => openQs.filter((q) => q.riskRatingCurrent === r && q.status === s).length)]) }}
         >
+          {/* Statuses down, the four risk tiers across: four narrow columns fit a phone, five status columns did not. */}
           <Heatmap
-            rows={RISKS.map((r) => ({ key: r, name: r, label: <RiskTag risk={r} /> }))}
-            cols={OPEN_STATUSES.map((s) => ({ key: s, name: s, label: s === "Proposed for Closure" ? "Proposed" : s === "In Progress" ? "In progress" : s }))}
-            value={(r, c) => openQs.filter((q) => q.riskRatingCurrent === r && q.status === c).length}
+            rows={OPEN_STATUSES.map((s) => ({ key: s, name: s, label: s === "Proposed for Closure" ? "Proposed" : s === "In Progress" ? "In progress" : s }))}
+            cols={RISKS.map((r) => ({ key: r, name: `${r} risk`, label: <RiskTag risk={r} compact /> }))}
+            value={(s, r) => openQs.filter((q) => q.riskRatingCurrent === r && q.status === s).length}
           />
         </ChartCard>
 
@@ -219,7 +222,7 @@ export default function DashboardPage() {
           </header>
           {attention.length ? (
             <div className="overflow-x-auto border-t border-line">
-              <table className="w-full min-w-[640px] text-left text-sm">
+              <table ref={attentionTable} className="stack-table w-full min-w-[640px] text-left text-sm">
                 <thead className="bg-subtle text-xs text-muted">
                   <tr>
                     <th className="py-2.5 pl-5 pr-3 font-medium">Query</th>

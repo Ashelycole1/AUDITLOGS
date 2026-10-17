@@ -181,9 +181,10 @@ export function ImportPage() {
 
           {/* The template the file must follow, drawn as the header row it should start with. */}
           <p className="mt-6 text-sm font-medium">The first row must have these columns, in any order</p>
-          <div className="mt-2 overflow-x-auto">
-            <ol className="flex min-w-max border border-rule bg-field font-mono text-xs">
-              {COLUMNS.map((c) => <li key={c} className="border-l border-rule px-3 py-2 first:border-l-0">{c}</li>)}
+          {/* On phones the columns wrap as separate cells instead of scrolling sideways. */}
+          <div className="mt-2 sm:overflow-x-auto">
+            <ol className="flex flex-wrap gap-1.5 font-mono text-xs sm:min-w-max sm:flex-nowrap sm:gap-0 sm:border sm:border-rule">
+              {COLUMNS.map((c) => <li key={c} className="border border-rule bg-field px-3 py-2 sm:border-0 sm:border-l sm:first:border-l-0">{c}</li>)}
             </ol>
           </div>
           <p className="mt-2 text-[0.8125rem] text-muted">Risk is Low, Medium, High or Critical (Extreme is read as Critical). Deadlines are written YYYY-MM-DD. The file and its fingerprint are kept with the batch.</p>

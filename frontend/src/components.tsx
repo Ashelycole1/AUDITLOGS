@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Icon, type IconName } from "./icons";
 import { MIN_REASON, reasonError } from "./lib/rules";
 import { riskLevel } from "./lib/risk";
@@ -11,7 +11,7 @@ export function cx(...c: (string | false | null | undefined)[]): string {
 
 export function Panel({ title, subtitle, aside, children, className }: { title?: string; subtitle?: string; aside?: ReactNode; children: ReactNode; className?: string }) {
   return (
-    <section className={cx("card rounded-xl p-5 sm:p-6", className)}>
+    <section className={cx("card min-w-0 rounded-xl p-5 sm:p-6", className)}>
       {(title || aside) && (
         <header className="mb-4 flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
           <div className="min-w-0">
@@ -130,14 +130,15 @@ const RISK_CHIP: Record<Risk, string> = {
   Low: "bg-risk-low text-risk-low-ink",
 };
 
-export function RiskTag({ risk }: { risk: Risk }) {
+// compact keeps the name for screen readers only below 640px, where space is tight (heatmap heads).
+export function RiskTag({ risk, compact }: { risk: Risk; compact?: boolean }) {
   const level = riskLevel(risk);
   return (
     <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[0.8125rem] text-ink" title={`${risk} risk: ${level.escalation}`}>
       <span className={cx("grid size-[18px] place-items-center rounded-[4px] font-mono text-[0.6875rem] font-medium leading-none", RISK_CHIP[risk])} aria-hidden>
         {level.code}
       </span>
-      {risk}
+      <span className={compact ? "max-sm:sr-only" : undefined}>{risk}</span>
     </span>
   );
 }
@@ -319,10 +320,25 @@ export function Stat({ label, value, tone }: { label: string; value: number | st
   );
 }
 
+// On phones a .stack-table shows each row as a card (index.css). Each cell is labelled with its column
+// heading, copied from the header after every render so rows built in other components get it too.
+export function useStackLabels(ref: RefObject<HTMLTableElement>) {
+  useLayoutEffect(() => {
+    const table = ref.current;
+    if (!table) return;
+    const labels = [...table.querySelectorAll("thead th")].map((th) => (th.querySelector(".sr-only") ? "" : th.textContent?.trim() ?? ""));
+    table.querySelectorAll("tbody tr").forEach((tr) => {
+      [...tr.children].forEach((td, i) => td.setAttribute("data-label", labels[i] ?? ""));
+    });
+  });
+}
+
 export function Table({ head, children, empty }: { head: ReactNode[]; children: ReactNode; empty?: ReactNode }) {
+  const ref = useRef<HTMLTableElement>(null);
+  useStackLabels(ref);
   return (
     <div className="-mx-5 overflow-x-auto border-t border-line sm:-mx-6">
-      <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+      <table ref={ref} className="stack-table w-full min-w-[640px] border-collapse text-left text-sm">
         <thead>
           <tr className="border-b border-line bg-subtle text-faint">
             {head.map((h, i) => (

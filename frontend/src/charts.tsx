@@ -373,7 +373,8 @@ export function Columns({ items, color = SERIES, height = 180 }: { items: { key:
   );
 }
 
-/* Matrix of counts on a sequential blue ramp; the number is printed in every cell. */
+/* Matrix of counts on a sequential lilac ramp; the number is printed in every cell. Row and column names
+   are full phrases ("In progress", "Critical risk") as they are read together in labels and tooltips. */
 export function Heatmap({ rows, cols, value }: { rows: { key: string; label: ReactNode; name: string }[]; cols: { key: string; label: ReactNode; name: string }[]; value: (r: string, c: string) => number }) {
   const { box, tip, show, hide } = useTip();
   const [ref, w] = useWidth<HTMLDivElement>();
@@ -400,12 +401,12 @@ export function Heatmap({ rows, cols, value }: { rows: { key: string; label: Rea
                     <td
                       key={c.key}
                       tabIndex={0}
-                      aria-label={`${r.name} risk, ${c.name}: ${v}`}
-                      className={cx("h-10 min-w-10 rounded-md text-center font-medium tabular-nums outline-none transition-[filter] hover:brightness-95 focus-visible:ring-2 focus-visible:ring-ink", s >= 3 ? "text-ramp-ink-hi" : s < 0 ? "text-faint" : "text-ink")}
+                      aria-label={`${r.name}, ${c.name}: ${v}`}
+                      className={cx("h-10 min-w-9 rounded-md sm:min-w-10 text-center font-medium tabular-nums outline-none transition-[filter] hover:brightness-95 focus-visible:ring-2 focus-visible:ring-ink", s >= 3 ? "text-ramp-ink-hi" : s < 0 ? "text-faint" : "text-ink")}
                       style={{ background: s < 0 ? EMPTY : RAMP[s] }}
-                      onPointerMove={(e) => show(e, <><div className="mb-1 text-spine-ink">{r.name} risk</div><TipRow color={s < 0 ? EMPTY : RAMP[s]} label={c.name} value={v} /></>)}
+                      onPointerMove={(e) => show(e, <><div className="mb-1 text-spine-ink">{r.name}</div><TipRow color={s < 0 ? EMPTY : RAMP[s]} label={c.name} value={v} /></>)}
                       onPointerLeave={hide}
-                      onFocus={(e) => show(e, <TipRow label={`${r.name} risk, ${c.name}`} value={v} />)}
+                      onFocus={(e) => show(e, <TipRow label={`${r.name}, ${c.name}`} value={v} />)}
                       onBlur={hide}
                     >
                       {v}

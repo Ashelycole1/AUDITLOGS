@@ -141,9 +141,9 @@ export default function Login() {
             </a>
           ))}
         </nav>
-        <p className="ml-auto flex items-center gap-2.5 text-[0.9375rem] text-mist md:ml-0">
+        <p className="ml-auto flex items-center gap-2.5 whitespace-nowrap text-[0.9375rem] text-mist md:ml-0">
           <span className="size-2.5 rounded-full bg-live ring-4 ring-live/15" aria-hidden />
-          Secure Access
+          <span className="max-[400px]:sr-only">Secure Access</span>
         </p>
         <ThemeToggle className="!text-mist hover:!bg-leaf-wash hover:!text-forest-ink" />
       </header>
