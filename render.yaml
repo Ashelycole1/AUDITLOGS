@@ -10,6 +10,8 @@ databases:
     databaseName: auditlogs
     user: auditlogs
     postgresMajorVersion: "16"
+    # No outside connections; the API reaches it over Render's private network.
+    ipAllowList: []
 
 services:
   - type: web

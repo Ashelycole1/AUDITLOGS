@@ -105,16 +105,25 @@ Updated at the end of every session and whenever work is paused (see `agent_work
     - the HTTPS-only site refuses to start without a certificate.
   - CI now builds and smoke-tests the production stack on every push. Docker isn't installed here, so that CI job is the first real run.
 
+- 2026-10-17, **Render connected to Claude Code** (owner ran `deploy/setup-render.ps1`; staging secrets are in `~/auditlogs-staging-secrets.txt`, outside the repo). Pushed to GitHub; CI fixes merged as PRs #1 and #2.
+
 ### Not done
-- Nothing is committed yet. The repo has no commits on `main`.
-- **Not run against PostgreSQL yet.** Docker and Postgres aren't installed on this machine. The Postgres trigger SQL, advisory lock, `docker-compose.dev.yml` and CI job are written but unexecuted. CI or a Docker machine will be the first real run.
-- The frontend still uses its in-browser store. It isn't wired to the API yet; that needs an API client and TanStack Query.
-- MFA enrolment shows a secret and `otpauth://` URI but no QR code. That needs either a frontend dependency or an in-house encoder (owner to decide).
-- Acting-CIA grant endpoint, one-time enrolment links and email are not built. Real client IP from Nginx is still to come.
+- Postgres has run only in CI so far, not on a local machine (Docker isn't installed here).
+- Acting-CIA grant endpoint and one-time enrolment links are not built.
 - Pre-commit hooks and dummy query fixtures are not set up.
 
+- 2026-10-17, **staging backend live** at https://auditlogs-api.onrender.com (Blueprint; `auditlogs-api` srv-db9h0k3bc2fs73dolj60 and `auditlogs-staging-db` in Frankfurt; the database expires 2026-11-16).
+  - Migrations ran on Postgres 16, including the append-only audit triggers, and the 7 demo accounts were created.
+  - `/api/v1/health` returns 200; anonymous `/api/v1/queries` returns 403.
+  - The hand-made `AUDITLOGS` service, which kept failing because the production check refused to start it, was deleted.
+  - `render.yaml` now sets `ipAllowList: []` on the database. Until that is pushed, the database accepts outside connections (0.0.0.0/0).
+
+- 2026-10-17, **staging frontend live** at https://auditlogs-gules.vercel.app. `CSRF_TRUSTED_ORIGINS` is set on Render to that address.
+  - Checked: the page, `/api` forwarding, CSP/no-framing/no-referrer/noindex headers, the CSRF cookie, a wrong-credentials login (400) and a foreign-origin login (403).
+
 ### In flight
-- The frontend dev server (http://localhost:5173) was stopped automatically on 2026-10-16 because the machine ran low on memory. Restart it with `npm run dev` in `frontend/` when needed.
+- Owner to sign in on staging with the demo accounts. The PIN is in the Render logs for `auditlogs-api`.
+- `ipAllowList: []` in `render.yaml` is not committed or pushed yet.
 
 ### Next (proposed)
 1. Owner: confirm the extra dependencies in `DECISIONS.md` item 2 (`openpyxl` is named in system.md).
