@@ -4,6 +4,7 @@ from datetime import datetime
 
 import pytest
 from django.core.management import call_command
+from django.db import connection
 from django.test import RequestFactory, override_settings
 
 from apps.auditlog.models import AuditLog
@@ -28,8 +29,13 @@ def test_client_ip_falls_back_when_the_header_is_missing():
 
 @pytest.mark.django_db
 def test_grants_are_a_postgres_step(capsys):
-    call_command("apply_db_grants")
-    assert "Nothing to do" in capsys.readouterr().out
+    role = connection.settings_dict.get("USER") or "auditlogs"
+    call_command("apply_db_grants", role=role)
+    output = capsys.readouterr().out
+    if connection.vendor == "postgresql":
+        assert f"Grants applied to {role}" in output
+    else:
+        assert "Nothing to do" in output
 
 
 def test_jobs_run_at_the_next_kampala_time():
