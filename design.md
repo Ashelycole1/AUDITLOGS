@@ -11,9 +11,11 @@ Changed at the owner's request on 2026-10-22 (auditlogs-required-changes.md, DEC
 3. **Assign:** PIA (or CIA) assigns each query to an IA or SIA. The CIA may reassign at any time; a PIA's reassignment waits for the CIA (Pending Approval).
 4. **Follow up:** IA or SIA records notes, management responses, evidence.
 5. **Propose:** the auditor proposes closure.
-6. **Review:** PIA may return the proposal for more work or keep it in view; otherwise it waits for the CIA.
-7. **Decide:** CIA closes or returns it, with a reason on return.
+6. **Review:** PIA or CIA may return the proposal for more work or keep it in view.
+7. **Decide:** CIA closes it.
 8. **Monitor:** CEO views the dashboard and responsible personnel, and may comment.
+
+Follow-up notes, management responses, evidence and comments can be added by anyone in the audit chain (IA, SIA, PIA, CIA) who can see the query; an IA or SIA only on their own. The CEO comments too.
 
 ## 2. Permission matrix
 
@@ -31,13 +33,14 @@ IA and SIA have the same rights (S) until the client defines more for the SIA.
 | Assign an unassigned query (to IA or SIA) | Y | Y | N | N | N |
 | Reassign | request | Y | N | N | N |
 | Approve or reject a reassignment | N | Y | N | N | N |
-| Add follow-up note or response | N | Y | S | N | N |
-| Upload evidence | N | Y | S | N | N |
+| Add follow-up note or response | Y | Y | S | N | N |
+| Upload evidence | Y | Y | S | N | N |
 | Propose closure | N | N | S | N | N |
 | Close a proposal | N | Y | N | N | N |
 | Return a proposal | Y | Y | N | N | N |
-| Keep a proposal in view | Y | N | N | N | N |
-| Comment on a query | N | Y | read S | Y | N |
+| Keep a proposal in view | Y | Y | N | N | N |
+| Comment on a query | Y | Y | S | Y | N |
+| Read own notifications | Y | Y | Y | Y | Y |
 | View change history | R | Y | S | N | N |
 | View CIA Activity view | N | N | N | Y | N |
 | View responsible personnel | R | Y | N | Y | N |
@@ -101,7 +104,7 @@ Auditor = the IA or SIA assigned to the query.
 | In Progress | Proposed for Closure | Auditor | Reason and at least one response or evidence item required |
 | Proposed for Closure | Closed | CIA | Not the proposer; decision logged |
 | Proposed for Closure | Returned | PIA, CIA | Reason required |
-| Proposed for Closure | Kept in View | PIA | Reason required; the query stays under watch, not closed |
+| Proposed for Closure | Kept in View | PIA, CIA | Reason required; the query stays under watch, not closed |
 | Returned | In Progress | Auditor | Automatic when the auditor resumes work |
 | Kept in View | In Progress | Auditor | Automatic when the auditor resumes work |
 | Kept in View | Returned | PIA, CIA | Reason required |
@@ -146,9 +149,11 @@ The CIA reassigns directly. A PIA's reassignment is a request: the query is Pend
 
 ICT can grant a time-limited acting CIA flag on written instruction from the CEO or CIA. It expires automatically and is logged. The acting CIA has CIA rights for that period and appears on the CIA Activity view.
 
-## 9. Notifications (email via client SMTP)
+## 9. Notifications (in the app; email later)
 
-New assignment or reassignment (new auditor), reassignment waiting (CIA), reassignment approved (requesting PIA and new auditor) or rejected (PIA), export waiting (CIA), export approved or rejected (PIA), query returned or kept in view (auditor), new CIA or CEO comment (auditor). Not yet: deadline due in 7 days, query overdue, and the department owner, whose email address the import does not carry. Emails contain the reference and a link, never evidence or sensitive text such as titles, reasons or comments. They are sent after the change is saved; a mail failure is logged and never undoes the change.
+Notifications are shown inside AuditLogs for now (owner, 2026-10-22): a bell in the top bar with the unread count, and a Notifications page. Each person sees only their own and can mark them read. Email through the client SMTP server can be switched on later (`NOTIFY_BY_EMAIL=true`) and then carries the same content.
+
+New assignment or reassignment (new auditor), reassignment waiting (CIA), reassignment approved (requesting PIA and new auditor) or rejected (PIA), export waiting (CIA), export approved or rejected (PIA), query returned or kept in view (auditor), new comment by someone else (auditor). Not yet: deadline due in 7 days, query overdue, and the department owner, who has no account. Notifications contain the reference and a link, never evidence or sensitive text such as titles, reasons or comments. Emails, when switched on, are sent after the change is saved; a mail failure is logged and never undoes the change.
 
 ## 10. Audit log design
 

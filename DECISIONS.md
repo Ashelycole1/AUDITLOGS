@@ -194,3 +194,11 @@ Date, decision, reason. Newest last.
     - **Email notifications** (`apps/core/notify.py`) through Django's mail backend, which is the client SMTP server in production and the console in development. Sent after commit, one message per person, and a failure is logged and never undoes the change. Following design.md 9, messages carry the reference and a link (`APP_URL`), never titles, reasons or comments. The department owner is not emailed: the import carries no address for them.
     - **CIA activity** now also lists approved reassignments.
     - **Seed:** a dummy SIA account, `grace.namutebi@auditlogs.test`.
+
+## 2026-10-23: Owner answers on the open change items
+
+33. **Answers to the open items of DECISIONS 32.**
+    - **Notifications are in the app for now.** New `apps/notifications` (the sender moved there from `apps/core/notify.py`): a `Notification` row per person with a headline and a link to the query or page, and a read time. `GET /notifications` lists your own (newest 100, with the unread count); `POST /notifications/{id}/read` and `/notifications/read-all`. Nobody can see anyone else's. The top bar has a bell with the unread count, and every role has a Notifications page. Email is off; `NOTIFY_BY_EMAIL=true` turns it on once the client SMTP server is connected, with the same reference-and-link content.
+    - **The CIA can also keep a closure proposal in view** (transition table, endpoint and buttons).
+    - **Follow-up, evidence and comments** are added by IA, SIA, PIA and CIA on the queries they can see (an IA or SIA only on their own), and comments by the CEO too. Work by the PIA or CIA does not move the status; only the assigned auditor's first entry starts the query. The auditor is notified of comments by others.
+    - **Left out for now:** "SRA" and the CEO's blank third bullet.

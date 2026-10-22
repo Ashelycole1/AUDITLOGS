@@ -149,7 +149,9 @@ Updated at the end of every session and whenever work is paused (see `agent_work
   - Backend: migrations `accounts 0002`, `queries 0003`, `workflow 0002`, `followup 0002`. New routes `/reassignment-requests`, `/export-requests`, `/queries/{id}/comments`, `/queries/export`, `/status-requests/{id}/keep-in-view`. **512 tests pass** (was 359), with every new route in the permission matrix for all six roles, plus `tests/test_hierarchy.py`. Ruff and black clean.
   - Frontend: both stores (demo and API) updated; new Reviews page for the PIA, Approvals inbox with reassignments and exports for the CIA, Personnel page and comment dialog for the CEO. Builds. Checked in headless Chrome at 1366px and 360px as CIA, PIA, SIA and CEO: no page errors, no sideways overflow.
   - Not built (waiting for the client, system.md 9): SRA, Evidence/Follow-up/"Comments, extra", SIA powers, the CEO's third bullet, CIA setting Kept in View, department-owner emails. SMTP is still not connected on staging, so emails go to the log there.
-  - Not committed yet. Staging needs a deploy, the migrations, and `APP_URL` set on Render.
+  - Staging needs a deploy and the migrations.
+
+- 2026-10-23, **owner answers built** (DECISIONS 33): in-app notifications (bell and Notifications page; email off until `NOTIFY_BY_EMAIL=true`), CIA can keep proposals in view, IA, SIA, PIA and CIA add follow-up, evidence and comments. SRA and the CEO's third bullet left out. New migration `notifications 0001`. **541 backend tests pass**, lint clean, frontend builds, checked in headless Chrome with no page errors. Committed on branch `feature/hierarchy-and-approvals` for the owner to push.
 
 ### In flight
 - Owner to sign in on staging with a demo account (password only).

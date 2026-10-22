@@ -29,10 +29,10 @@ The audit chain, lowest rank first: **IA < SIA < PIA < CIA** (owner, 2026-10-22)
 
 | Role | Sees | Does | Never |
 |---|---|---|---|
-| CIA | Everything, incl. history | Import and confirm final queries, edit queries and ratings, assign and reassign, approve or reject closures, reassignments and exports, export directly, comment | Be exempt from the CIA Activity view |
-| PIA | All queries and progress | Assign IA or SIA, request reassignment (CIA approves), return a closure proposal or keep it in view, request an export (CIA approves) | Import, close a query, export without approval, edit query fields |
-| SIA | Only own assigned queries, with responses and evidence | Record work and evidence, propose status changes. Further permissions to be agreed with the client | See others' queries, assign, approve |
-| IA | Only own assigned queries, with responses and evidence | Record work and evidence, propose status changes | See others' queries, edit ratings or assignments, approve own change |
+| CIA | Everything, incl. history | Import and confirm final queries, edit queries and ratings, assign and reassign, approve or reject closures, reassignments and exports, return or keep proposals in view, export directly, comment | Be exempt from the CIA Activity view |
+| PIA | All queries and progress | Assign IA or SIA, request reassignment (CIA approves), return a closure proposal or keep it in view, add follow-up, evidence and comments, request an export (CIA approves) | Import, close a query, export without approval, edit query fields |
+| SIA | Only own assigned queries, with responses and evidence | Record work, evidence and comments, propose status changes. Further permissions to be agreed with the client | See others' queries, assign, approve |
+| IA | Only own assigned queries, with responses and evidence | Record work, evidence and comments, propose status changes | See others' queries, edit ratings or assignments, approve own change |
 | CEO | Summary with responsible personnel (see design.md section 6) | Monitor, comment on queries and CIA activity | Edit or approve anything |
 | ICT | System settings and operational data | Create and disable accounts, backups, recovery | Edit findings, approve statuses, view audit content without approved, logged, time-limited access |
 
@@ -100,7 +100,7 @@ Imported, Assigned, In Progress, Proposed for Closure, Pending Approval, Kept in
 - Final production host.
 - Sample import files and formats.
 - Final scope of the CEO's visible details.
-- From the 2026-10-22 change notes (auditlogs-required-changes.md section 9): what "SRA" means; whether Evidence, Follow-up and "Comments, extra" are new tabs or fields; SIA permissions beyond working assigned queries; the CEO's third (blank) bullet; whether the CIA may also set Kept in View; the notification recipients, including the department owner's email address, which the import file does not carry.
+- From the 2026-10-22 change notes (auditlogs-required-changes.md section 9): SIA permissions beyond working assigned queries; when to switch notifications to email, and whether the department owner should be notified (they have no account). Left out for now at the owner's request: "SRA" and the CEO's third (blank) bullet. Answered: the CIA may also keep a proposal in view; follow-up, evidence and comments are added by IA, SIA, PIA and CIA; notifications are in-app for now.
 
 ## 10. Related files
 
