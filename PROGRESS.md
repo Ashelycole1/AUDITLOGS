@@ -144,6 +144,13 @@ Updated at the end of every session and whenever work is paused (see `agent_work
   - Page steadiness: the page can no longer be pushed sideways (`overflow-x: clip`); phone fields are 16px so iPhones do not zoom in on tap; double-tap zoom, text inflation on rotation and sideways bounce are off. **Pinch zoom is left on** for accessibility.
   - Checked by an automated audit of all 20 screens for every role at 360px: no page overflow and no hidden sideways scrolling. Screenshots reviewed. The frontend builds. Not committed yet.
 
+- 2026-10-22, **client change notes v2 built** (`auditlogs-required-changes.md`, DECISIONS 32). Confirmed items only:
+  - SIA role and rank; import and batches moved to the CIA; PIA assigns IA or SIA; PIA reassignment needs CIA approval (Pending Approval); PIA returns or keeps closure proposals in view; PIA exports need CIA approval, CIA exports directly; CIA and CEO comments; responsible owner shown under department; CEO Personnel page; email notifications.
+  - Backend: migrations `accounts 0002`, `queries 0003`, `workflow 0002`, `followup 0002`. New routes `/reassignment-requests`, `/export-requests`, `/queries/{id}/comments`, `/queries/export`, `/status-requests/{id}/keep-in-view`. **512 tests pass** (was 359), with every new route in the permission matrix for all six roles, plus `tests/test_hierarchy.py`. Ruff and black clean.
+  - Frontend: both stores (demo and API) updated; new Reviews page for the PIA, Approvals inbox with reassignments and exports for the CIA, Personnel page and comment dialog for the CEO. Builds. Checked in headless Chrome at 1366px and 360px as CIA, PIA, SIA and CEO: no page errors, no sideways overflow.
+  - Not built (waiting for the client, system.md 9): SRA, Evidence/Follow-up/"Comments, extra", SIA powers, the CEO's third bullet, CIA setting Kept in View, department-owner emails. SMTP is still not connected on staging, so emails go to the log there.
+  - Not committed yet. Staging needs a deploy, the migrations, and `APP_URL` set on Render.
+
 ### In flight
 - Owner to sign in on staging with a demo account (password only).
 

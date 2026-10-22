@@ -13,8 +13,9 @@ Goals, in priority order: **secure, correct permissions, simple, cheap to run, e
 | Term | Meaning |
 |---|---|
 | Query | One final audit finding to be followed up until closed |
-| PIA | Principal Internal Auditor. Imports final queries |
-| CIA | Chief Internal Auditor. Process owner; assigns, edits, approves |
+| PIA | Principal Internal Auditor. Assigns queries to IA and SIA, reviews proposals, requests exports |
+| CIA | Chief Internal Auditor. Process owner and final authority; imports, edits, reassigns, approves |
+| SIA | Senior Internal Auditor. Ranked above IA; does follow-up on assigned queries only |
 | IA | Internal Auditor. Does follow-up on assigned queries only |
 | CEO | Top executive. Read-only oversight |
 | ICT | System administrator. Accounts, hosting, backups. No rights over findings |
@@ -24,12 +25,15 @@ Goals, in priority order: **secure, correct permissions, simple, cheap to run, e
 
 ## 3. Roles (identical everywhere in the project)
 
+The audit chain, lowest rank first: **IA < SIA < PIA < CIA** (owner, 2026-10-22). Work flows up the chain; assignment flows down it (a role assigns only to auditors ranked below it); anything needing approval goes to the CIA. CEO and ICT sit outside the chain.
+
 | Role | Sees | Does | Never |
 |---|---|---|---|
-| PIA | All imported queries and progress | Import, preview, confirm final queries | Edit anything after confirmation |
-| CIA | Everything, incl. history | Edit queries and ratings, assign, approve or reject status changes | Be exempt from the CIA Activity view |
+| CIA | Everything, incl. history | Import and confirm final queries, edit queries and ratings, assign and reassign, approve or reject closures, reassignments and exports, export directly, comment | Be exempt from the CIA Activity view |
+| PIA | All queries and progress | Assign IA or SIA, request reassignment (CIA approves), return a closure proposal or keep it in view, request an export (CIA approves) | Import, close a query, export without approval, edit query fields |
+| SIA | Only own assigned queries, with responses and evidence | Record work and evidence, propose status changes. Further permissions to be agreed with the client | See others' queries, assign, approve |
 | IA | Only own assigned queries, with responses and evidence | Record work and evidence, propose status changes | See others' queries, edit ratings or assignments, approve own change |
-| CEO | Read-only summary (see design.md section 6) | Monitor | Edit or approve anything |
+| CEO | Summary with responsible personnel (see design.md section 6) | Monitor, comment on queries and CIA activity | Edit or approve anything |
 | ICT | System settings and operational data | Create and disable accounts, backups, recovery | Edit findings, approve statuses, view audit content without approved, logged, time-limited access |
 
 ## 4. Non-negotiable rules
@@ -65,7 +69,7 @@ Do not add dependencies, services or paid tools without written approval from th
 
 ## 6. Status model
 
-Imported, Assigned, In Progress, Proposed for Closure, Closed, Returned. Allowed transitions are defined only in design.md section 5. Code must reject any other transition.
+Imported, Assigned, In Progress, Proposed for Closure, Pending Approval, Kept in View, Returned, Closed. Allowed transitions are defined only in design.md section 5. Code must reject any other transition.
 
 ## 7. Conventions
 
@@ -96,6 +100,7 @@ Imported, Assigned, In Progress, Proposed for Closure, Closed, Returned. Allowed
 - Final production host.
 - Sample import files and formats.
 - Final scope of the CEO's visible details.
+- From the 2026-10-22 change notes (auditlogs-required-changes.md section 9): what "SRA" means; whether Evidence, Follow-up and "Comments, extra" are new tabs or fields; SIA permissions beyond working assigned queries; the CEO's third (blank) bullet; whether the CIA may also set Kept in View; the notification recipients, including the department owner's email address, which the import file does not carry.
 
 ## 10. Related files
 
