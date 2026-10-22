@@ -65,6 +65,7 @@ INSTALLED_APPS = [
     "apps.queries",
     "apps.workflow",
     "apps.followup",
+    "apps.notifications",
 ]
 
 MIDDLEWARE = [
@@ -144,6 +145,9 @@ OTP_EMAIL_BODY_TEMPLATE = (
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "AuditLogs <no-reply@localhost>")
 OTP_EMAIL_SENDER = DEFAULT_FROM_EMAIL
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+# Notifications are in-app (owner, 2026-10-22). Set NOTIFY_BY_EMAIL=true to also email them
+# through the client SMTP server once it is connected.
+NOTIFY_BY_EMAIL = (env("NOTIFY_BY_EMAIL", "false") or "false").strip().lower() == "true"
 # Where notification emails link to, e.g. https://auditlogs.example.ug. Blank leaves the link out.
 APP_URL = env("APP_URL", "")
 

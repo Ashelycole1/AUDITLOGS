@@ -15,6 +15,7 @@ from apps.auditlog.views import AuditLogListView, VerifyChainView
 from apps.core.views import HealthView
 from apps.followup.views import EvidenceDownloadView
 from apps.imports.views import ImportBatchViewSet
+from apps.notifications.views import NotificationViewSet
 from apps.queries.views import CeoDashboardQueriesView, CiaActivityView, QueryViewSet
 from apps.workflow.views import ExportRequestViewSet, ReassignmentRequestViewSet, StatusRequestViewSet
 
@@ -25,6 +26,7 @@ router.register("queries", QueryViewSet, basename="queries")
 router.register("status-requests", StatusRequestViewSet, basename="status-requests")
 router.register("reassignment-requests", ReassignmentRequestViewSet, basename="reassignment-requests")
 router.register("export-requests", ExportRequestViewSet, basename="export-requests")
+router.register("notifications", NotificationViewSet, basename="notifications")
 
 api = [
     path("health", HealthView.as_view(), name="health"),

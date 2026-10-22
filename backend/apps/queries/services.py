@@ -7,8 +7,8 @@ from django.utils import timezone
 
 from apps.accounts.models import Role, User, can_assign
 from apps.auditlog.services import record
-from apps.core import notify
 from apps.core.validators import MIN_REASON
+from apps.notifications import services as notify
 from apps.workflow.models import Decision, ReassignmentRequest
 from apps.workflow.services import REASSIGNABLE, WorkflowError, transition
 

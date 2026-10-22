@@ -8,9 +8,9 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.auditlog.services import record
-from apps.core import notify
 from apps.core.exceptions import RuleError
 from apps.core.validators import MIN_REASON
+from apps.notifications import services as notify
 from apps.queries.models import Query, Status
 
 from .models import Decision, StatusChangeRequest
@@ -27,7 +27,7 @@ TRANSITIONS: dict[tuple[str, str], set[str]] = {
     (Status.IN_PROGRESS, Status.PROPOSED): AUDITORS,
     (Status.PROPOSED, Status.CLOSED): {"CIA"},
     (Status.PROPOSED, Status.RETURNED): {"PIA", "CIA"},
-    (Status.PROPOSED, Status.KEPT_IN_VIEW): {"PIA"},
+    (Status.PROPOSED, Status.KEPT_IN_VIEW): {"PIA", "CIA"},
     (Status.RETURNED, Status.IN_PROGRESS): AUDITORS,
     (Status.KEPT_IN_VIEW, Status.IN_PROGRESS): AUDITORS,
     (Status.KEPT_IN_VIEW, Status.RETURNED): {"PIA", "CIA"},
@@ -156,8 +156,8 @@ OUTCOMES = {
 def decide(
     *, request_id, actor, approve: bool = False, outcome: str | None = None, reason: str = "", ip=None
 ) -> StatusChangeRequest:
-    """Decide a closure proposal. The CIA closes or returns it; the PIA reviews it and may return it
-    or keep it in view (owner, 2026-10-22). Who may reach which outcome is the transition table's call."""
+    """Decide a closure proposal. The CIA closes it; the CIA or the PIA may return it or keep it in view
+    (owner, 2026-10-22). Who may reach which outcome is the transition table's call."""
     to = outcome or (Status.CLOSED if approve else Status.RETURNED)
     if to not in OUTCOMES:
         raise WorkflowError("A proposal can only be closed, returned or kept in view.")

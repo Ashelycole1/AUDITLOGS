@@ -8,6 +8,7 @@ from django.urls import reverse
 from apps.accounts.models import can_assign
 from apps.auditlog.models import AuditLog
 from apps.auditlog.services import verify_chain
+from apps.notifications.models import Notification
 from apps.queries.models import Query, Status
 from apps.workflow.models import ExportRequest, ReassignmentRequest
 
@@ -38,8 +39,10 @@ def set_status(query, status):
     return query
 
 
-def mail_to(user) -> list[str]:
-    return [m.subject for m in mail.outbox if user.email in m.to]
+def notes_for(user) -> list[str]:
+    """The headlines of this person's in-app notifications, oldest first."""
+    rows = Notification.objects.filter(recipient=user).order_by("created_at")
+    return list(rows.values_list("headline", flat=True))
 
 
 # Rank and assignment ------------------------------------------------------------------------
@@ -77,11 +80,13 @@ def test_pia_assigns_ia_and_sia_and_they_are_emailed(
             == "Assigned"
         )
         assert pia.post(assign_url(second), {"assignee": str(sia.pk)}, format="json").status_code == 200
-    assert mail_to(ia) == [f"AuditLogs: {first.reference} assigned to you"]
-    assert mail_to(sia) == [f"AuditLogs: {second.reference} assigned to you"]
+    assert notes_for(ia) == [f"{first.reference} assigned to you"]
+    assert notes_for(sia) == [f"{second.reference} assigned to you"]
     # Reference and link only: no title, reasons or comments in email (design.md 9).
-    assert first.reference in mail.outbox[0].body
-    assert first.title not in mail.outbox[0].body
+    note = Notification.objects.get(recipient=ia)
+    assert (note.query_id, note.link) == (first.pk, f"/queries/{first.pk}")
+    assert first.title not in note.headline + note.body
+    assert mail.outbox == []  # in-app only unless NOTIFY_BY_EMAIL is switched on
 
 
 def test_pia_cannot_assign_outside_the_auditors(client_for, make_user, make_query):
@@ -139,20 +144,20 @@ def test_pia_reassignment_waits_for_cia_approval(
     assert detail["status"] == Status.PENDING_APPROVAL
     assert detail["current_assignee"] == str(old.pk)  # the current auditor keeps it meanwhile
     assert detail["pending_reassignment"]["to_assignee_name"] == new.full_name
-    assert mail_to(cia.user) == [f"AuditLogs: {query.reference} reassignment waiting for your approval"]
+    assert notes_for(cia.user) == [f"{query.reference} reassignment waiting for your approval"]
 
     request = ReassignmentRequest.objects.get(query=query)
     listed = cia.get(reverse("reassignment-requests-list"), {"decision": "Pending"}).json()["results"]
     assert [r["id"] for r in listed] == [str(request.pk)]
 
-    mail.outbox.clear()
+    Notification.objects.all().delete()
     with django_capture_on_commit_callbacks(execute=True):
         approve = reverse("reassignment-requests-approve", kwargs={"pk": request.pk})
         assert cia.post(approve, {}, format="json").json()["decision"] == "Approved"
     query.refresh_from_db()
     assert (query.status, query.current_assignee_id) == (Status.ASSIGNED, new.pk)
-    assert mail_to(pia.user) == [f"AuditLogs: {query.reference} reassignment approved"]
-    assert mail_to(new) == [f"AuditLogs: {query.reference} reassigned to you"]
+    assert notes_for(pia.user) == [f"{query.reference} reassignment approved"]
+    assert notes_for(new) == [f"{query.reference} reassigned to you"]
     # The old auditor loses access at once.
     assert client_for(old).get(reverse("queries-detail", kwargs={"pk": query.pk})).status_code == 404
     assert actions(query) == ["reassign.request", "status.change", "reassign.approve", "status.change"]
@@ -207,7 +212,7 @@ def test_cia_reassigns_directly(client_for, make_user, make_query, django_captur
             assign_url(query), {"assignee": str(new.pk), "reason": REASON}, format="json"
         ).json()
     assert (detail["status"], detail["current_assignee"]) == (Status.IN_PROGRESS, str(new.pk))
-    assert mail_to(new) == [f"AuditLogs: {query.reference} reassigned to you"]
+    assert notes_for(new) == [f"{query.reference} reassigned to you"]
     assert not ReassignmentRequest.objects.exists()
 
 
@@ -237,8 +242,8 @@ def test_pia_returns_a_proposal(client_for, make_user, make_query, django_captur
     assert body["decided_status"] == Status.RETURNED
     query.refresh_from_db()
     assert query.status == Status.RETURNED
-    assert mail_to(ia.user) == [f"AuditLogs: {query.reference} returned to you"]
-    assert "The bank statement is missing" not in mail.outbox[-1].body
+    assert notes_for(ia.user) == [f"{query.reference} returned to you"]
+    assert "The bank statement is missing" not in Notification.objects.get(recipient=ia.user).body
 
 
 def test_pia_keeps_a_proposal_in_view_and_work_resumes(
@@ -253,7 +258,7 @@ def test_pia_keeps_a_proposal_in_view_and_work_resumes(
         )
     query.refresh_from_db()
     assert query.status == Status.KEPT_IN_VIEW
-    assert mail_to(ia.user) == [f"AuditLogs: {query.reference} kept in view"]
+    assert notes_for(ia.user) == [f"{query.reference} kept in view"]
     assert "status.keep" in actions(query)
 
     ia.post(
@@ -265,13 +270,18 @@ def test_pia_keeps_a_proposal_in_view_and_work_resumes(
     assert query.status == Status.IN_PROGRESS
 
 
-def test_only_the_cia_closes_and_only_the_pia_keeps_in_view(client_for, make_user, make_query):
+def test_only_the_cia_closes(client_for, make_user, make_query):
     query, request, _ = propose(client_for, make_user, make_query)
     approve = reverse("status-requests-approve", kwargs={"pk": request.pk})
-    keep = reverse("status-requests-keep-in-view", kwargs={"pk": request.pk})
     assert client_for("PIA").post(approve, {}, format="json").status_code == 403
-    assert client_for("CIA").post(keep, {"reason": REASON}, format="json").status_code == 403
     assert client_for("CIA").post(approve, {}, format="json").json()["decided_status"] == Status.CLOSED
+
+
+def test_cia_can_keep_in_view_too(client_for, make_user, make_query):
+    query, request, _ = propose(client_for, make_user, make_query)
+    keep = reverse("status-requests-keep-in-view", kwargs={"pk": request.pk})
+    response = client_for("CIA").post(keep, {"reason": REASON}, format="json")
+    assert response.json()["decided_status"] == "Kept in View"
 
 
 # Exports ------------------------------------------------------------------------------------
@@ -290,7 +300,7 @@ def test_pia_export_needs_cia_approval(client_for, make_user, make_query, django
         )
     assert response.status_code == 201
     item = ExportRequest.objects.get()
-    assert mail_to(cia.user) == ["AuditLogs: Export waiting for your approval"]
+    assert notes_for(cia.user) == ["Export waiting for your approval"]
 
     download = reverse("export-requests-download", kwargs={"pk": item.pk})
     assert pia.get(download).status_code == 409
@@ -302,7 +312,7 @@ def test_pia_export_needs_cia_approval(client_for, make_user, make_query, django
             ).status_code
             == 200
         )
-    assert mail_to(pia.user) == ["AuditLogs: Export approved"]
+    assert notes_for(pia.user) == ["Export approved"]
 
     response = pia.get(download)
     assert response.status_code == 200
@@ -372,9 +382,9 @@ def test_cia_and_ceo_comment_and_the_auditor_reads(
         ("CIA", "Please add the bank letter."),
         ("CEO", "Who signs this off?"),
     ]
-    assert mail_to(ia_user) == [
-        f"AuditLogs: {query.reference} new comment from the CIA",
-        f"AuditLogs: {query.reference} new comment from the CEO",
+    assert notes_for(ia_user) == [
+        f"{query.reference} new comment from the CIA",
+        f"{query.reference} new comment from the CEO",
     ]
     assert actions(query).count("comment.add") == 2
     # Commenting changes nothing on the query.
@@ -403,6 +413,7 @@ def test_cia_activity_shows_approved_reassignments(client_for, make_user, make_q
 def test_a_failing_mail_server_does_not_undo_the_change(
     client_for, make_user, make_query, settings, django_capture_on_commit_callbacks
 ):
+    settings.NOTIFY_BY_EMAIL = True
     settings.EMAIL_BACKEND = "tests.test_hierarchy.BrokenBackend"
     query = make_query()
     with django_capture_on_commit_callbacks(execute=True):
@@ -429,3 +440,69 @@ def test_scoping_matrix_includes_sia(make_user, make_query):
     mine = make_query(assignee=sia)
     make_query(assignee=make_user("IA"))
     assert set(Query.objects.for_user(verified(sia)).values_list("pk", flat=True)) == {mine.pk}
+
+
+# In-app notifications, the email switch, and who adds follow-up and comments (owner, 2026-10-22).
+
+
+def test_notifications_are_private_and_can_be_marked_read(client_for, make_user, make_query):
+    ia_user = make_user("IA")
+    query = make_query()
+    client_for("PIA").post(assign_url(query), {"assignee": str(ia_user.pk)}, format="json")
+    ia, other = client_for(ia_user), client_for("IA")
+    body = ia.get(reverse("notifications-list")).json()
+    assert body["unread"] == 1
+    item = body["results"][0]
+    assert (item["reference"], item["link"]) == (query.reference, f"/queries/{query.pk}")
+    assert other.get(reverse("notifications-list")).json() == {"unread": 0, "results": []}
+    assert other.post(reverse("notifications-read", kwargs={"pk": item["id"]})).status_code == 404
+    assert ia.post(reverse("notifications-read", kwargs={"pk": item["id"]})).json()["read_at"]
+    assert ia.get(reverse("notifications-list")).json()["unread"] == 0
+
+    comments = reverse("queries-comments", kwargs={"pk": query.pk})
+    client_for("CIA").post(comments, {"body": "Noted."}, format="json")
+    assert ia.post(reverse("notifications-read-all")).json() == {"marked": 1}
+
+
+def test_email_is_sent_only_when_switched_on(
+    client_for, make_user, make_query, settings, django_capture_on_commit_callbacks
+):
+    ia = make_user("IA")
+    settings.NOTIFY_BY_EMAIL = True
+    settings.APP_URL = "https://auditlogs.example.ug"
+    query = make_query()
+    with django_capture_on_commit_callbacks(execute=True):
+        client_for("PIA").post(assign_url(query), {"assignee": str(ia.pk)}, format="json")
+    assert [m.subject for m in mail.outbox] == [f"AuditLogs: {query.reference} assigned to you"]
+    assert f"https://auditlogs.example.ug/queries/{query.pk}" in mail.outbox[0].body
+
+
+def test_pia_adds_follow_up_and_evidence_without_moving_the_status(client_for, make_user, make_query):
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    query = make_query(assignee=make_user("IA"), status=Status.ASSIGNED)
+    pia = client_for("PIA")
+    note = {"kind": "Note", "body": "Spoke to the Financial Controller."}
+    assert (
+        pia.post(reverse("queries-activities", kwargs={"pk": query.pk}), note, format="json").status_code
+        == 201
+    )
+    upload = {"file": SimpleUploadedFile("minutes.pdf", b"%PDF-1.7 minutes")}
+    url = reverse("queries-evidence", kwargs={"pk": query.pk})
+    assert pia.post(url, upload, format="multipart").status_code == 201
+    query.refresh_from_db()
+    assert query.status == Status.ASSIGNED  # only the auditor's own work starts it
+
+
+def test_everyone_in_the_chain_comments_within_their_scope(client_for, make_user, make_query):
+    sia_user = make_user("SIA")
+    query = make_query(assignee=sia_user)
+    url = reverse("queries-comments", kwargs={"pk": query.pk})
+    for client in (client_for(sia_user), client_for("PIA"), client_for("CIA"), client_for("CEO")):
+        assert client.post(url, {"body": "Comment from the chain."}, format="json").status_code == 201
+    assert client_for("IA").post(url, {"body": "Not mine."}, format="json").status_code == 404
+    assert client_for("ICT").post(url, {"body": "No."}, format="json").status_code == 403
+    # The auditor is told about the comments of others, not about their own.
+    assert notes_for(sia_user) == [
+        f"{query.reference} new comment from the {r}" for r in ("PIA", "CIA", "CEO")
+    ]

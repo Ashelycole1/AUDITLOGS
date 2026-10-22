@@ -44,11 +44,11 @@ MATRIX = [
     ("queries-revisions", "get", "query", READERS),
     ("queries-history", "get", "query", READERS),
     ("queries-activities", "get", "query", READERS),
-    ("queries-activities", "post", "query", {"CIA", "IA", "SIA"}),
+    ("queries-activities", "post", "query", READERS),
     ("queries-evidence", "get", "query", READERS),
-    ("queries-evidence", "post", "query", {"CIA", "IA", "SIA"}),
+    ("queries-evidence", "post", "query", READERS),
     ("queries-comments", "get", "query", READERS | {"CEO"}),
-    ("queries-comments", "post", "query", {"CIA", "CEO"}),
+    ("queries-comments", "post", "query", READERS | {"CEO"}),
     ("queries-propose-status", "post", "query", {"IA", "SIA"}),
     ("queries-change-status", "post", "query", {"CIA"}),
     ("queries-export", "get", None, {"CIA"}),
@@ -56,7 +56,7 @@ MATRIX = [
     ("status-requests-list", "get", None, {"PIA", "CIA"}),
     ("status-requests-approve", "post", "request", {"CIA"}),
     ("status-requests-reject", "post", "request", {"PIA", "CIA"}),
-    ("status-requests-keep-in-view", "post", "request", {"PIA"}),
+    ("status-requests-keep-in-view", "post", "request", {"PIA", "CIA"}),
     ("reassignment-requests-list", "get", None, {"PIA", "CIA"}),
     ("reassignment-requests-approve", "post", "reassignment", {"CIA"}),
     ("reassignment-requests-reject", "post", "reassignment", {"CIA"}),
@@ -66,6 +66,9 @@ MATRIX = [
     ("export-requests-reject", "post", "export", {"CIA"}),
     ("export-requests-download", "get", "export", {"PIA"}),
     ("auditors", "get", None, {"PIA", "CIA"}),
+    ("notifications-list", "get", None, ALL),
+    ("notifications-read-all", "post", None, ALL),
+    ("notifications-read", "post", "notification", ALL),
     ("dashboard-queries", "get", None, {"CEO"}),
     ("dashboard-cia-activity", "get", None, {"CEO"}),
 ]
@@ -138,7 +141,26 @@ def make_export(make_user):
 
 
 @pytest.fixture
-def url_for(make_user, make_batch, make_query, make_evidence, make_request, make_reassignment, make_export):
+def make_notification(make_user):
+    from apps.notifications.models import Notification
+
+    def _make():
+        return Notification.objects.create(recipient=make_user("IA"), headline="Matrix test")
+
+    return _make
+
+
+@pytest.fixture
+def url_for(
+    make_user,
+    make_batch,
+    make_query,
+    make_evidence,
+    make_request,
+    make_reassignment,
+    make_export,
+    make_notification,
+):
     def _url(name: str, target: str | None) -> str:
         if target is None:
             return reverse(name)
@@ -150,6 +172,7 @@ def url_for(make_user, make_batch, make_query, make_evidence, make_request, make
             "request": lambda: make_request(make_query()),
             "reassignment": lambda: make_reassignment(make_query()),
             "export": make_export,
+            "notification": make_notification,
         }[target]()
         return reverse(name, kwargs={"pk": obj.pk})
 

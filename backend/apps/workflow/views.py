@@ -66,14 +66,14 @@ class DecideMixin:
 
 
 class StatusRequestViewSet(DecideMixin, ScopedQuerysetMixin, mixins.ListModelMixin, viewsets.GenericViewSet):
-    """Closure proposals, pending first, oldest first (design.md 6). The CIA closes or returns them;
-    the PIA reviews them and may return them or keep them in view (owner, 2026-10-22)."""
+    """Closure proposals, pending first, oldest first (design.md 6). The CIA closes them; the CIA or
+    the PIA may return them or keep them in view (owner, 2026-10-22)."""
 
     allowed_roles = ("PIA", "CIA")
     action_roles = {
         "approve": ("CIA",),
         "reject": ("PIA", "CIA"),
-        "keep_in_view": ("PIA",),
+        "keep_in_view": ("PIA", "CIA"),
     }
     scoped_model = StatusChangeRequest
     serializer_class = StatusRequestSerializer

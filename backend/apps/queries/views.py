@@ -254,7 +254,9 @@ class DirectStatusSerializer(ReasonSerializer):
 
 
 READ = ("PIA", "CIA", "IA", "SIA")
-WORKERS = ("CIA", "IA", "SIA")
+# Follow-up, evidence and comments can be added by anyone in the audit chain who can see the query
+# (owner, 2026-10-22); an IA or SIA only on their own. The CEO comments too.
+WORKERS = ("PIA", "CIA", "IA", "SIA")
 ASSIGNERS = ("PIA", "CIA")
 
 
@@ -273,7 +275,7 @@ class QueryViewSet(
         "bulk_assign": ASSIGNERS,
         "activities": {"GET": READ, "POST": WORKERS},
         "evidence": {"GET": READ, "POST": WORKERS},
-        "comments": {"GET": (*READ, "CEO"), "POST": ("CIA", "CEO")},
+        "comments": {"GET": (*READ, "CEO"), "POST": (*WORKERS, "CEO")},
         "propose_status": ("IA", "SIA"),
         "change_status": ("CIA",),
         "export": ("CIA",),
@@ -393,7 +395,7 @@ class QueryViewSet(
 
     @action(detail=True, methods=["get", "post"])
     def comments(self, request, pk=None):
-        """Oversight comments by the CIA and the CEO (owner, 2026-10-22). The assigned auditor reads them."""
+        """Comments by anyone in the audit chain and the CEO (owner, 2026-10-22)."""
         query = self.get_object()
         if request.method == "GET":
             return Response(CommentSerializer(query.comments.select_related("author"), many=True).data)

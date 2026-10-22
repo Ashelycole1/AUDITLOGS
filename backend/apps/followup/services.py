@@ -6,9 +6,9 @@ from django.conf import settings
 from django.db import transaction
 
 from apps.auditlog.services import record
-from apps.core import notify
 from apps.core.exceptions import RuleError
 from apps.core.filestore import read_encrypted, save_encrypted, sha256
+from apps.notifications import services as notify
 from apps.queries.models import Query, Status
 from apps.workflow.services import AUDITORS, WorkflowError, transition
 
@@ -116,11 +116,13 @@ def open_evidence(*, evidence: Evidence, actor, ip=None) -> bytes:
 
 @transaction.atomic
 def add_comment(*, query: Query, actor, body: str, ip=None) -> Comment:
-    """An oversight comment by the CIA or the CEO (owner, 2026-10-22). It changes nothing on the
-    query; the auditor who holds it is told by email."""
+    """A comment on a query by anyone in the audit chain or the CEO (owner, 2026-10-22). It changes
+    nothing on the query. The auditor who holds it is notified, unless they wrote it."""
     role = actor.effective_role()
-    if role not in ("CIA", "CEO"):
-        raise WorkflowError("Only the CIA and the CEO can comment.")
+    if role not in ("PIA", "CIA", "IA", "SIA", "CEO"):
+        raise WorkflowError("Your role cannot comment.")
+    if role in AUDITORS and query.current_assignee_id != actor.pk:
+        raise WorkflowError("Only the assigned auditor can comment.")
     body = (body or "").strip()
     if len(body) < 3:
         raise WorkflowError("Write the comment before saving.")

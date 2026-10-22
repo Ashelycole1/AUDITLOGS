@@ -6,8 +6,8 @@ from django.utils import timezone
 
 from apps.accounts.models import Role, User
 from apps.auditlog.services import record
-from apps.core import notify
 from apps.core.validators import MIN_REASON
+from apps.notifications import services as notify
 from apps.queries.filters import FILTER_KEYS, apply_filters, export_csv
 from apps.queries.models import Query
 
@@ -60,7 +60,8 @@ def request_export(*, actor: User, filters: dict, reason: str, ip=None) -> Expor
     notify.send(
         notify.chief_auditors(),
         "Export waiting for your approval",
-        f"{actor.full_name} asks to export queries. Decide it under Approvals in AuditLogs.",
+        f"{actor.full_name} asks to export queries.",
+        link="/approvals",
         exclude=actor,
     )
     return item
@@ -95,11 +96,7 @@ def decide_export(*, request_id, actor: User, approve: bool, reason: str = "", i
     notify.send(
         [item.requested_by],
         "Export approved" if approve else "Export rejected",
-        (
-            "The CIA approved your export. Download it from Approvals in AuditLogs."
-            if approve
-            else "The CIA rejected your export. The reason is under Reviews in AuditLogs."
-        ),
+        ("Download it from Reviews." if approve else "The reason is under Reviews."),
     )
     return item
 
