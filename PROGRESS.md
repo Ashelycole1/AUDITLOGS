@@ -152,6 +152,10 @@ Updated at the end of every session and whenever work is paused (see `agent_work
   - Staging needs a deploy and the migrations.
 
 - 2026-10-23, **owner answers built** (DECISIONS 33): in-app notifications (bell and Notifications page; email off until `NOTIFY_BY_EMAIL=true`), CIA can keep proposals in view, IA, SIA, PIA and CIA add follow-up, evidence and comments. SRA and the CEO's third bullet left out. New migration `notifications 0001`. **541 backend tests pass**, lint clean, frontend builds, checked in headless Chrome with no page errors. Committed on branch `feature/hierarchy-and-approvals` for the owner to push.
+- 2026-10-23, **header, profiles and audit log redesign:**
+  - The CIA's sign-out button had been pushed off the top bar (too many links plus the new bell; the page clips sideways overflow). The user block is now an initials button opening a menu (Your profile, Notifications, Sign out); the name shows beside it on very wide screens. Batches left the CIA's top bar and is linked from the Import page; the date left the top bar. Checked for every role at 1024 to 1920px: the bar fits.
+  - New **Profile** page for every role (`/profile`): name, role, email, place in the audit chain, what the role can do, current work counts, and account security notes.
+  - **Audit log redesigned** without chain graphics: a single seal ring that fills as verification runs (green intact, red at the altered entry), then a ledger grouped by day with time, person, action (colour dot per kind), readable change (names and references, not IDs), reason, and a short fingerprint with a tick once verified. Chain CSS removed; the menu icon is a ledger. Checked in light and dark at 1366px and 360px; no page errors. Not committed yet.
 
 ### In flight
 - Owner to sign in on staging with a demo account (password only).
