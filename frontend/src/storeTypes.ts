@@ -35,6 +35,9 @@ export interface Store {
   // query detail: fetch follow-up, evidence, revisions and history (API); no-op in the demo
   loadQuery: (queryId: string) => Promise<void>;
   evidenceUrl: (evidenceId: string) => string | null;
+  /** In-app notifications (owner, 2026-10-22). Every role has them. */
+  markRead: (notificationId: string) => Promise<void>;
+  markAllRead: () => Promise<void>;
   /** API: fetch a query's comments (the CEO cannot open the full query). No-op in the demo. */
   loadComments: (queryId: string) => Promise<void>;
   // CIA (import moved from the PIA, owner 2026-10-22)
@@ -45,7 +48,7 @@ export interface Store {
   cancelBatch: (batchId: string) => Promise<Result>;
   // PIA + CIA. A PIA's reassignment becomes a request for the CIA to approve.
   assign: (queryId: string, assigneeId: string, reason: string) => Promise<Result>;
-  /** Decide a closure proposal. CIA: Closed or Returned. PIA: Returned or Kept in View. */
+  /** Decide a closure proposal. CIA: Closed, Returned or Kept in View. PIA: Returned or Kept in View. */
   decide: (requestId: string, outcome: Outcome, reason: string) => Promise<Result>;
   // PIA
   requestExport: (filters: ExportFilters, reason: string) => Promise<Result>;
@@ -60,9 +63,9 @@ export interface Store {
   verifyLogged: (result: string) => void;
   /** API only: the server recomputes the chain and logs the check. */
   verifyOnServer: () => Promise<{ ok: boolean; checked: number; brokenAt: number | null } | null>;
-  // CIA + CEO
+  // Everyone in the chain on the queries they see, and the CEO
   addComment: (queryId: string, body: string) => Promise<Result>;
-  // CIA + IA + SIA
+  // PIA, CIA, and IA or SIA on their own queries
   addActivity: (queryId: string, kind: FollowUpActivity["kind"], body: string) => Promise<Result>;
   addEvidence: (queryId: string, file: { name: string; size: number; bytes: Uint8Array; file?: File }) => Promise<Result>;
   // IA + SIA

@@ -13,6 +13,7 @@ import { ImportPage, BatchesPage } from "./pages/Imports";
 import { ApprovalsPage, AuditLogPage, ReportsPage, CompliancePage } from "./pages/Cia";
 import { CiaActivityPage, PersonnelPage } from "./pages/Oversight";
 import { UsersPage, SystemPage } from "./pages/Ict";
+import NotificationsPage from "./pages/Notifications";
 
 type NavItem = { to: string; label: string; icon: IconName };
 
@@ -91,6 +92,7 @@ function Shell() {
         ? state.requests.filter((r) => r.decision === "Pending").length
         : 0;
   const today = new Intl.DateTimeFormat("en-UG", { timeZone: "Africa/Kampala", weekday: "short", day: "numeric", month: "short", year: "numeric" }).format(now);
+  const unread = state.notifications.filter((n) => n.recipient === me.id && !n.readAt).length;
   const canSearch = me.role === "PIA" || me.role === "CIA" || me.role === "IA" || me.role === "SIA";
 
   const search = (e: React.FormEvent) => {
@@ -142,6 +144,15 @@ function Shell() {
             )}
             <p className="eyebrow hidden whitespace-nowrap 2xl:block">{today}</p>
             <ThemeToggle />
+            <NavLink
+              to="/notifications"
+              className="relative grid size-9 place-items-center rounded-md text-faint hover:bg-hover hover:text-ink"
+              aria-label={unread ? `Notifications, ${unread} unread` : "Notifications"}
+              title="Notifications"
+            >
+              <Icon name="bell" className="size-[18px]" />
+              {unread > 0 && <span className="absolute -right-0.5 -top-0.5 min-w-4 rounded-full bg-lake px-1 text-center font-mono text-[0.625rem] leading-4 text-on-accent">{unread > 9 ? "9+" : unread}</span>}
+            </NavLink>
             <div className="hidden items-center gap-2.5 border-l border-line pl-3 lg:flex">
               <Avatar name={me.fullName} className="!size-8 !bg-chip !text-xs !text-ink" />
               <div className="leading-tight">
@@ -209,6 +220,7 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route element={<Shell />}>
           <Route index element={<Home />} />
+          <Route path="/notifications" element={<NotificationsPage />} />
           <Route element={<RoleRoute roles={["PIA", "CIA", "IA", "SIA", "CEO"]} />}>
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/overview" element={<Navigate to="/dashboard" replace />} />

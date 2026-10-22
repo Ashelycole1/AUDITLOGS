@@ -149,6 +149,18 @@ export interface Comment {
   createdAt: string;
 }
 
+/** An in-app message to one person (owner, 2026-10-22). Names the query by reference only. */
+export interface Notification {
+  id: string;
+  recipient: string;
+  headline: string;
+  body: string;
+  queryId: string | null;
+  link: string;
+  readAt: string | null;
+  createdAt: string;
+}
+
 export interface AuditEntry {
   seq: number;
   timestamp: string;

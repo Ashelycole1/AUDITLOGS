@@ -14,6 +14,8 @@ const RANK: Partial<Record<Role, number>> = { IA: 1, SIA: 2, PIA: 3, CIA: 4 };
 /** The roles that work the queries assigned to them. */
 export const AUDITOR_ROLES: Role[] = ["IA", "SIA"];
 export const isAuditor = (role: Role) => AUDITOR_ROLES.includes(role);
+/** Roles that add follow-up, evidence and comments (an IA or SIA only on their own queries). */
+export const canWorkRole = (role: Role) => role === "PIA" || role === "CIA" || isAuditor(role);
 /** Roles that may assign. SIA permissions are still to be agreed with the client. */
 export const canAssignRole = (role: Role) => role === "PIA" || role === "CIA";
 
@@ -33,7 +35,7 @@ export const TRANSITIONS: { from: Status; to: Status; who: Role }[] = [
   ...T("In Progress", "Proposed for Closure", "IA", "SIA"),
   ...T("Proposed for Closure", "Closed", "CIA"),
   ...T("Proposed for Closure", "Returned", "PIA", "CIA"),
-  ...T("Proposed for Closure", "Kept in View", "PIA"),
+  ...T("Proposed for Closure", "Kept in View", "PIA", "CIA"),
   ...T("Returned", "In Progress", "IA", "SIA"),
   ...T("Kept in View", "In Progress", "IA", "SIA"),
   ...T("Kept in View", "Returned", "PIA", "CIA"),

@@ -124,6 +124,7 @@ function RequestCard({ r }: { r: StatusChangeRequest }) {
         ) : isCia ? (
           <>
             <Button kind="danger" onClick={() => setDialog("Returned")}>Return to auditor</Button>
+            <Button kind="secondary" onClick={() => setDialog("Kept in View")}>Keep in view</Button>
             <Button kind="primary" onClick={() => setDialog("Closed")}>Approve closure</Button>
           </>
         ) : (
@@ -147,7 +148,7 @@ function RequestCard({ r }: { r: StatusChangeRequest }) {
       <ReasonDialog
         open={dialog === "Returned"}
         title={`Return ${q.reference} to the auditor`}
-        description="Say what is still missing. The auditor sees this reason on the query and gets an email to look."
+        description="Say what is still missing. The auditor sees this reason on the query and is notified."
         confirmLabel="Return to auditor"
         danger
         onConfirm={async (reason) => { const res = await decide(r.id, "Returned", reason); return res.ok ? null : res.error; }}
@@ -156,7 +157,7 @@ function RequestCard({ r }: { r: StatusChangeRequest }) {
       <ReasonDialog
         open={dialog === "Kept in View"}
         title={`Keep ${q.reference} in view`}
-        description="The query is not closed. It stays under watch until the auditor resumes work. Say what you are waiting for; the auditor is emailed."
+        description="The query is not closed. It stays under watch until the auditor resumes work. Say what you are waiting for; the auditor is notified."
         confirmLabel="Keep in view"
         onConfirm={async (reason) => { const res = await decide(r.id, "Kept in View", reason); return res.ok ? null : res.error; }}
         onClose={() => setDialog(null)}
@@ -186,7 +187,7 @@ function ReassignmentCard({ r }: { r: ReassignmentRequest }) {
       <ReasonDialog
         open={dialog === "approve"}
         title={`Move ${q.reference} to ${userName(r.toAssignee)}`}
-        description="The new auditor sees the full history and is emailed; the current auditor loses access straight away. The query becomes Assigned."
+        description="The new auditor sees the full history and is notified; the current auditor loses access straight away. The query becomes Assigned."
         confirmLabel="Approve reassignment"
         optional
         onConfirm={async (reason) => { const res = await decideReassignment(r.id, true, reason); return res.ok ? null : res.error; }}
@@ -195,7 +196,7 @@ function ReassignmentCard({ r }: { r: ReassignmentRequest }) {
       <ReasonDialog
         open={dialog === "reject"}
         title="Reject the reassignment"
-        description={`The query stays with ${userName(r.fromAssignee)} and goes back to ${r.fromStatus}. The PIA sees your reason in Reviews and gets an email to look.`}
+        description={`The query stays with ${userName(r.fromAssignee)} and goes back to ${r.fromStatus}. The PIA sees your reason in Reviews and is notified.`}
         confirmLabel="Reject"
         danger
         onConfirm={async (reason) => { const res = await decideReassignment(r.id, false, reason); return res.ok ? null : res.error; }}
@@ -238,7 +239,7 @@ function ExportCard({ x }: { x: ExportRequest }) {
       <ReasonDialog
         open={dialog === "reject"}
         title="Reject the export"
-        description="The PIA sees your reason in Reviews and gets an email to look."
+        description="The PIA sees your reason in Reviews and is notified."
         confirmLabel="Reject"
         danger
         onConfirm={async (reason) => { const res = await decideExport(x.id, false, reason); return res.ok ? null : res.error; }}

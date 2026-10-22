@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Button, Empty, Label, Notice, Panel, ReasonDialog, RiskGuide, RiskTag, StatusBadge, StatusMark, StatusRail, cx } from "../components";
 import { RISKS } from "../lib/risk";
-import { EVIDENCE_MAX_BYTES, EVIDENCE_TYPES, ROLE_NAME, STATUSES, canAssign, daysOverdue, fmtBytes, fmtDate, fmtDateTime, isAllowedTransition, isAuditor } from "../lib/rules";
+import { EVIDENCE_MAX_BYTES, EVIDENCE_TYPES, ROLE_NAME, STATUSES, canAssign, canWorkRole, daysOverdue, fmtBytes, fmtDate, fmtDateTime, isAllowedTransition, isAuditor } from "../lib/rules";
 import { useMe, useStore, type Outcome } from "../storeTypes";
 import { CommentThread } from "./Comments";
 import type { EditableField, FollowUpActivity, Query, Risk, Status } from "../types";
@@ -80,7 +80,7 @@ function Workspace({ q }: { q: Query }) {
           <Finding q={q} />
           <FollowUp q={q} />
           <EvidencePanel q={q} />
-          <Panel title="Comments" subtitle="From the CIA and the CEO">
+          <Panel title="Comments" subtitle="From anyone working on or overseeing this query">
             <CommentThread q={q} />
           </Panel>
         </div>
@@ -181,7 +181,7 @@ function FollowUp({ q }: { q: Query }) {
       }),
   ].sort((a, b) => b.at.localeCompare(a.at));
 
-  const canWrite = (me.role === "CIA" || isAuditor(me.role)) && q.status !== "Closed";
+  const canWrite = canWorkRole(me.role) && q.status !== "Closed";
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -265,7 +265,7 @@ function EvidencePanel({ q }: { q: Query }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const files = state.evidence.filter((e) => e.queryId === q.id);
-  const canUpload = (me.role === "CIA" || isAuditor(me.role)) && q.status !== "Closed";
+  const canUpload = canWorkRole(me.role) && q.status !== "Closed";
 
   const onFile = async (f: File | undefined) => {
     if (!f) return;
@@ -334,8 +334,9 @@ function PendingRequest({ requestId }: { requestId: string }) {
         own ? (
           <p className="mt-3 text-sm text-muted">You proposed this, so another CIA must decide it.</p>
         ) : (
-          <div className="mt-4 flex gap-2">
+          <div className="mt-4 flex flex-wrap gap-2">
             <Button kind="primary" onClick={() => setDialog("Closed")}>Approve closure</Button>
+            <Button kind="secondary" onClick={() => setDialog("Kept in View")}>Keep in view</Button>
             <Button kind="danger" onClick={() => setDialog("Returned")}>Return</Button>
           </div>
         )
@@ -352,7 +353,7 @@ function PendingRequest({ requestId }: { requestId: string }) {
       <ReasonDialog
         open={dialog === "Kept in View"}
         title="Keep in view"
-        description="The query is not closed. It stays under watch until the auditor resumes work. The auditor sees your reason on the query and gets an email to look."
+        description="The query is not closed. It stays under watch until the auditor resumes work. The auditor sees your reason on the query and is notified."
         confirmLabel="Keep in view"
         onConfirm={async (reason) => { const res = await decide(r.id, "Kept in View", reason); return res.ok ? null : res.error; }}
         onClose={() => setDialog(null)}
@@ -369,7 +370,7 @@ function PendingRequest({ requestId }: { requestId: string }) {
       <ReasonDialog
         open={dialog === "Returned"}
         title="Return to the auditor"
-        description="Say what is still missing. The auditor sees this reason on the query and gets an email to look."
+        description="Say what is still missing. The auditor sees this reason on the query and is notified."
         confirmLabel="Return query"
         danger
         onConfirm={async (reason) => { const res = await decide(r.id, "Returned", reason); return res.ok ? null : res.error; }}
@@ -398,7 +399,7 @@ function PendingMove({ requestId }: { requestId: string }) {
       <ReasonDialog
         open={dialog === "approve"}
         title={`Move to ${userName(r.toAssignee)}`}
-        description="The new auditor sees the full history and is emailed; the current auditor loses access straight away."
+        description="The new auditor sees the full history and is notified; the current auditor loses access straight away."
         confirmLabel="Approve reassignment"
         optional
         onConfirm={async (reason) => { const res = await decideReassignment(r.id, true, reason); return res.ok ? null : res.error; }}
@@ -444,11 +445,11 @@ function PiaActions({ q }: { q: Query }) {
       <Button kind={reassign ? "secondary" : "primary"} className="w-full" onClick={() => { setAssignee(""); setOpen(true); }}>
         {reassign ? "Request reassignment" : "Assign auditor"}
       </Button>
-      <p className="mt-3 text-[0.8125rem] leading-snug text-faint">{reassign ? "A reassignment needs the CIA's approval. The current auditor keeps the query until then." : "The auditor gets an email with the reference and a link."}</p>
+      <p className="mt-3 text-[0.8125rem] leading-snug text-faint">{reassign ? "A reassignment needs the CIA's approval. The current auditor keeps the query until then." : "The auditor is notified in AuditLogs."}</p>
       <ReasonDialog
         open={open}
         title={reassign ? `Reassign from ${userName(q.currentAssignee)}` : "Assign an auditor"}
-        description={reassign ? "The query becomes Pending Approval until the CIA decides. The CIA is emailed." : "Choose an Internal Auditor or Senior Internal Auditor."}
+        description={reassign ? "The query becomes Pending Approval until the CIA decides. The CIA is notified." : "Choose an Internal Auditor or Senior Internal Auditor."}
         confirmLabel={reassign ? "Send to the CIA" : "Assign"}
         optional={!reassign}
         onConfirm={async (reason) => { if (!assignee) return "Choose an auditor."; const r = await assign(q.id, assignee, reason); return r.ok ? null : r.error; }}
@@ -492,7 +493,7 @@ function CiaActions({ q }: { q: Query }) {
       <ReasonDialog
         open={dialog === "assign"}
         title={reassign ? `Reassign from ${userName(q.currentAssignee)}` : "Assign an auditor"}
-        description={reassign ? "The new auditor sees the full history. The current auditor loses access straight away." : "The auditor gets an email with the reference and a link."}
+        description={reassign ? "The new auditor sees the full history. The current auditor loses access straight away." : "The auditor is notified in AuditLogs."}
         confirmLabel={reassign ? "Reassign" : "Assign"}
         optional={!reassign}
         onConfirm={async (reason) => { if (!assignee) return "Choose an auditor."; const r = await assign(q.id, assignee, reason); return r.ok ? null : r.error; }}

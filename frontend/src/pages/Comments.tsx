@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Button, Empty, Notice, Ref, cx } from "../components";
-import { fmtDateTime } from "../lib/rules";
+import { canWorkRole, fmtDateTime } from "../lib/rules";
 import { useMe, useStore } from "../storeTypes";
 import type { Query } from "../types";
 
-// Oversight comments by the CIA and the CEO (owner, 2026-10-22). They change nothing on the query;
-// the auditor who holds it reads them and is told by email.
+// Comments by anyone in the audit chain who can see the query, and by the CEO (owner, 2026-10-22).
+// They change nothing on the query; the auditor who holds it is notified.
 export function CommentThread({ q }: { q: Query }) {
   const me = useMe();
   const { state, userName, addComment } = useStore();
@@ -13,7 +13,7 @@ export function CommentThread({ q }: { q: Query }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const rows = state.comments.filter((c) => c.queryId === q.id);
-  const canWrite = me.role === "CIA" || me.role === "CEO";
+  const canWrite = canWorkRole(me.role) || me.role === "CEO";
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,14 +41,14 @@ export function CommentThread({ q }: { q: Query }) {
           ))}
         </ul>
       ) : (
-        <Empty title="No comments yet">{canWrite ? undefined : "Comments from the CIA or the CEO appear here."}</Empty>
+        <Empty title="No comments yet">{canWrite ? undefined : "Comments on this query appear here."}</Empty>
       )}
       {canWrite && (
         <form onSubmit={save} className={cx("glass-inset rounded-md p-4", rows.length ? "mt-5" : "mt-3")}>
           <textarea
             className="field min-h-20"
             aria-label="Comment"
-            placeholder="Your comment. The auditor holding this query is emailed."
+            placeholder="Your comment. The auditor holding this query is notified."
             value={body}
             onChange={(e) => setBody(e.target.value)}
           />

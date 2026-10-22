@@ -170,7 +170,7 @@ export default function QueriesPage() {
           empty={!rows.length && (
             <div className="px-5 pb-2 sm:px-6">
               <Empty title={visibleQueries.length ? "No queries match these filters" : isIa ? "Nothing assigned to you yet" : "No queries yet"}>
-                {visibleQueries.length ? "Clear a filter to see more." : isIa ? "Queries assigned to you appear here. You will get an email when one is." : "Confirmed imports appear here."}
+                {visibleQueries.length ? "Clear a filter to see more." : isIa ? "Queries assigned to you appear here. You are notified when one is." : "Confirmed imports appear here."}
               </Empty>
             </div>
           )}
@@ -184,7 +184,7 @@ export default function QueriesPage() {
       <ReasonDialog
         open={bulkOpen}
         title={`Assign ${selected.size} ${selected.size === 1 ? "query" : "queries"} to ${userName(bulkTo || null)}`}
-        description="They will get an email for each query with its reference and a link."
+        description="They are notified of each query in AuditLogs."
         confirmLabel="Assign"
         optional
         onConfirm={runBulk}

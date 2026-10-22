@@ -12,6 +12,7 @@ import type {
   Evidence,
   ExportFilters,
   ExportRequest,
+  Notification,
   FollowUpActivity,
   ImportBatch,
   ImportRow,
@@ -29,7 +30,7 @@ type Raw = Record<string, unknown>;
 const str = (v: unknown) => (v === null || v === undefined ? "" : String(v));
 const strOrNull = (v: unknown) => (v === null || v === undefined ? null : String(v));
 
-const EMPTY: State = { users: [], batches: [], queries: [], revisions: [], activities: [], evidence: [], requests: [], reassignments: [], exports: [], comments: [], accessRequests: [], audit: [] };
+const EMPTY: State = { users: [], batches: [], queries: [], revisions: [], activities: [], evidence: [], requests: [], reassignments: [], exports: [], comments: [], notifications: [], accessRequests: [], audit: [] };
 
 const toQuery = (q: Raw): Query => ({
   id: str(q.id),
@@ -103,6 +104,17 @@ const toComment = (c: Raw, queryId: string): Comment => ({
   authorRole: c.author_role as Role,
   body: str(c.body),
   createdAt: str(c.created_at),
+});
+
+const toNotification = (n: Raw, recipient: string): Notification => ({
+  id: str(n.id),
+  recipient,
+  headline: str(n.headline),
+  body: str(n.body),
+  queryId: strOrNull(n.query),
+  link: str(n.link),
+  readAt: strOrNull(n.read_at),
+  createdAt: str(n.created_at),
 });
 
 const csvName = () => `queries-${new Date().toISOString().slice(0, 10)}.csv`;
@@ -183,7 +195,11 @@ export function ApiStoreProvider({ children }: { children: ReactNode }) {
   const load = useCallback(async (who: User) => {
     const role = who.role;
     const next: State = { ...EMPTY, users: [who] };
-    const jobs: Promise<void>[] = [];
+    const jobs: Promise<void>[] = [
+      api.get<{ results: Raw[] }>("/notifications").then((r) => {
+        next.notifications = r.results.map((n) => toNotification(n, who.id));
+      }),
+    ];
 
     if (role === "PIA" || role === "CIA" || role === "IA" || role === "SIA") {
       jobs.push(
@@ -419,6 +435,15 @@ export function ApiStoreProvider({ children }: { children: ReactNode }) {
 
     loadQuery: (id) => loadQuery(id).catch(() => undefined),
     loadComments: (id) => loadComments(id).catch(() => undefined),
+    async markRead(id) {
+      setState((s) => ({ ...s, notifications: s.notifications.map((n) => (n.id === id && !n.readAt ? { ...n, readAt: new Date().toISOString() } : n)) }));
+      await api.post(`/notifications/${id}/read`).catch(() => undefined);
+    },
+    async markAllRead() {
+      const now = new Date().toISOString();
+      setState((s) => ({ ...s, notifications: s.notifications.map((n) => (n.readAt ? n : { ...n, readAt: now })) }));
+      await api.post("/notifications/read-all").catch(() => undefined);
+    },
     evidenceUrl: (id) => api.url(`/evidence/${id}/download`),
 
     confirmImport: () => notYet("Browser-side import"),

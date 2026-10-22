@@ -120,7 +120,7 @@ export function PersonnelPage() {
 
   return (
     <>
-      <PageHeader title="Responsible personnel" lede="Who answers for each open query: the responsible owner in the department, and the auditor following it up. Comment on any query; the auditor is emailed." />
+      <PageHeader title="Responsible personnel" lede="Who answers for each open query: the responsible owner in the department, and the auditor following it up. Comment on any query; the auditor is notified." />
 
       <Panel title="By department" className="mb-5">
         <Table head={["Department", "Owner", "Auditors", "Open", "Overdue"]} empty={!byDept.length && <div className="px-5 sm:px-6"><Empty title="No queries yet" /></div>}>

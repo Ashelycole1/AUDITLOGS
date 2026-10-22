@@ -62,6 +62,13 @@ function DemoStoreProvider({ children }: { children: ReactNode }) {
     return ok;
   };
 
+  // In-app notifications (owner, 2026-10-22): one per person, never to the person who acted.
+  const notes = (ids: (string | null | undefined)[], headline: string, queryId: string | null, link?: string) =>
+    [...new Set(ids.filter((x): x is string => !!x && x !== me?.id))].map((recipient) => ({
+      id: crypto.randomUUID(), recipient, headline, body: "", queryId, link: link ?? (queryId ? `/queries/${queryId}` : ""), readAt: null, createdAt: new Date().toISOString(),
+    }));
+  const ciaIds = () => state.users.filter((u) => u.role === "CIA" && u.isActive).map((u) => u.id);
+
   const scopedQuery = (queryId: string): Query | undefined =>
     me ? queriesFor(me, state.queries).find((q) => q.id === queryId) : undefined;
 
@@ -111,6 +118,13 @@ function DemoStoreProvider({ children }: { children: ReactNode }) {
 
     async loadQuery() {},
     async loadComments() {},
+    async markRead(id) {
+      setState((s) => ({ ...s, notifications: s.notifications.map((n) => (n.id === id && !n.readAt ? { ...n, readAt: new Date().toISOString() } : n)) }));
+    },
+    async markAllRead() {
+      const now = new Date().toISOString();
+      setState((s) => ({ ...s, notifications: s.notifications.map((n) => (n.recipient === me?.id && !n.readAt ? { ...n, readAt: now } : n)) }));
+    },
     evidenceUrl: () => null,
     async uploadImport() {
       return fail("The demo reads files in the browser.");
@@ -219,6 +233,7 @@ function DemoStoreProvider({ children }: { children: ReactNode }) {
             ...s,
             reassignments: [...s.reassignments, { id, queryId, fromAssignee: q.currentAssignee!, toAssignee: assigneeId, fromStatus: q.status, requestedBy: me!.id, reason, decision: "Pending", decidedBy: null, decisionReason: null, decidedAt: null, createdAt: now }],
             queries: s.queries.map((x) => (x.id === queryId ? { ...x, status: "Pending Approval" } : x)),
+            notifications: [...notes(ciaIds(), `${q.reference} reassignment waiting for your approval`, queryId), ...s.notifications],
           },
           log: [
             entry(me, { action: "reassign.request", objectType: "Query", objectId: queryId, oldValue: { assignee: q.currentAssignee }, newValue: { assignee: assigneeId, request: id }, reason }),
@@ -235,7 +250,8 @@ function DemoStoreProvider({ children }: { children: ReactNode }) {
         log.push(entry(me, { action: "status.change", objectType: "Query", objectId: queryId, oldValue: { status: q.status }, newValue: { status: "Assigned" }, reason: "" }));
         status = "Assigned";
       }
-      commit((s) => ({ next: { ...s, queries: s.queries.map((x) => (x.id === queryId ? { ...x, currentAssignee: assigneeId, status } : x)) }, log }));
+      const headline = `${q.reference} ${reassign ? "reassigned" : "assigned"} to you`;
+      commit((s) => ({ next: { ...s, queries: s.queries.map((x) => (x.id === queryId ? { ...x, currentAssignee: assigneeId, status } : x)), notifications: [...notes([assigneeId], headline, queryId), ...s.notifications] }, log }));
       return ok;
     },
 
@@ -259,6 +275,7 @@ function DemoStoreProvider({ children }: { children: ReactNode }) {
           ...s,
           requests: s.requests.map((x) => (x.id === requestId ? { ...x, decision: approve ? "Approved" : "Rejected", decidedBy: me!.id, decisionReason: reason || null, decidedAt: now, decidedStatus: to } : x)),
           queries: s.queries.map((x) => (x.id === q.id ? { ...x, status: to, closedAt: approve ? now : null } : x)),
+          notifications: approve ? s.notifications : [...notes([q.currentAssignee], `${q.reference} ${to === "Returned" ? "returned to you" : "kept in view"}`, q.id), ...s.notifications],
         },
         log: [entry(me, { action, objectType: "Query", objectId: q.id, oldValue: { status: q.status }, newValue: { status: to }, reason })],
       }));
@@ -286,6 +303,11 @@ function DemoStoreProvider({ children }: { children: ReactNode }) {
           ...s,
           reassignments: s.reassignments.map((x) => (x.id === requestId ? { ...x, decision: approve ? "Approved" : "Rejected", decidedBy: me!.id, decisionReason: reason || null, decidedAt: now } : x)),
           queries: s.queries.map((x) => (x.id === q.id ? { ...x, status: to, currentAssignee: approve ? req.toAssignee : x.currentAssignee } : x)),
+          notifications: [
+            ...notes([req.requestedBy], `${q.reference} reassignment ${approve ? "approved" : "rejected"}`, q.id),
+            ...(approve ? notes([req.toAssignee], `${q.reference} reassigned to you`, q.id) : []),
+            ...s.notifications,
+          ],
         },
         log,
       }));
@@ -300,7 +322,11 @@ function DemoStoreProvider({ children }: { children: ReactNode }) {
       if (state.exports.some((x) => x.requestedBy === me!.id && x.decision === "Pending")) return fail("You already have an export waiting for the CIA.");
       const id = crypto.randomUUID();
       commit((s) => ({
-        next: { ...s, exports: [...s.exports, { id, requestedBy: me!.id, filters, reason, decision: "Pending", decidedBy: null, decisionReason: null, decidedAt: null, downloads: 0, createdAt: new Date().toISOString() }] },
+        next: {
+          ...s,
+          exports: [...s.exports, { id, requestedBy: me!.id, filters, reason, decision: "Pending", decidedBy: null, decisionReason: null, decidedAt: null, downloads: 0, createdAt: new Date().toISOString() }],
+          notifications: [...notes(ciaIds(), "Export waiting for your approval", null, "/approvals"), ...s.notifications],
+        },
         log: [entry(me, { action: "export.request", objectType: "ExportRequest", objectId: id, oldValue: null, newValue: { filters }, reason })],
       }));
       return ok;
@@ -317,7 +343,11 @@ function DemoStoreProvider({ children }: { children: ReactNode }) {
       }
       const decision = approve ? "Approved" : "Rejected";
       commit((s) => ({
-        next: { ...s, exports: s.exports.map((x) => (x.id === exportId ? { ...x, decision, decidedBy: me!.id, decisionReason: reason || null, decidedAt: new Date().toISOString() } : x)) },
+        next: {
+          ...s,
+          exports: s.exports.map((x) => (x.id === exportId ? { ...x, decision, decidedBy: me!.id, decisionReason: reason || null, decidedAt: new Date().toISOString() } : x)),
+          notifications: [...notes([item.requestedBy], approve ? "Export approved" : "Export rejected", null, "/approvals"), ...s.notifications],
+        },
         log: [entry(me, { action: approve ? "export.approve" : "export.reject", objectType: "ExportRequest", objectId: exportId, oldValue: { decision: "Pending" }, newValue: { decision }, reason })],
       }));
       return ok;
@@ -339,14 +369,19 @@ function DemoStoreProvider({ children }: { children: ReactNode }) {
     },
 
     async addComment(queryId, body) {
-      const r = requireRole("CIA", "CEO");
+      const r = requireRole("PIA", "CIA", "IA", "SIA", "CEO");
       if (!r.ok) return r;
-      const q = state.queries.find((x) => x.id === queryId);
+      // The CEO reaches every query through the summary; everyone else only the queries they can see.
+      const q = me!.role === "CEO" ? state.queries.find((x) => x.id === queryId) : scopedQuery(queryId);
       if (!q) return fail("Query not found.");
       if (body.trim().length < 3) return fail("Write the comment before saving.");
       const id = crypto.randomUUID();
       commit((s) => ({
-        next: { ...s, comments: [...s.comments, { id, queryId, author: me!.id, authorRole: me!.role, body: body.trim(), createdAt: new Date().toISOString() }] },
+        next: {
+          ...s,
+          comments: [...s.comments, { id, queryId, author: me!.id, authorRole: me!.role, body: body.trim(), createdAt: new Date().toISOString() }],
+          notifications: [...notes([q.currentAssignee], `${q.reference} new comment from the ${me!.role}`, queryId), ...s.notifications],
+        },
         log: [entry(me, { action: "comment.add", objectType: "Query", objectId: queryId, oldValue: null, newValue: { comment: id }, reason: "" })],
       }));
       return ok;
@@ -405,7 +440,7 @@ function DemoStoreProvider({ children }: { children: ReactNode }) {
     },
 
     async addActivity(queryId, kind, body) {
-      const r = requireRole("CIA", "IA", "SIA");
+      const r = requireRole("PIA", "CIA", "IA", "SIA");
       if (!r.ok) return r;
       const q = scopedQuery(queryId);
       if (!q) return fail("Query not found.");
@@ -430,7 +465,7 @@ function DemoStoreProvider({ children }: { children: ReactNode }) {
     },
 
     async addEvidence(queryId, file) {
-      const r = requireRole("CIA", "IA", "SIA");
+      const r = requireRole("PIA", "CIA", "IA", "SIA");
       if (!r.ok) return r;
       const q = scopedQuery(queryId);
       if (!q) return fail("Query not found.");

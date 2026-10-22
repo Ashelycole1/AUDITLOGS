@@ -7,6 +7,7 @@ import type {
   Comment,
   Evidence,
   ExportRequest,
+  Notification,
   FollowUpActivity,
   ImportBatch,
   Query,
@@ -29,6 +30,7 @@ export interface State {
   reassignments: ReassignmentRequest[];
   exports: ExportRequest[];
   comments: Comment[];
+  notifications: Notification[];
   accessRequests: AccessRequest[];
   audit: AuditEntry[];
 }
@@ -111,6 +113,9 @@ export function seed(): State {
   const reassignments: ReassignmentRequest[] = [];
   const exports: ExportRequest[] = [];
   const comments: Comment[] = [];
+  const notifications: Notification[] = [];
+  const notify = (recipient: string, headline: string, ts: string, queryId: string | null, link?: string) =>
+    notifications.unshift({ id: `n-${notifications.length + 1}`, recipient, headline, body: "", queryId, link: link ?? (queryId ? `/queries/${queryId}` : ""), readAt: null, createdAt: ts });
   let audit: AuditEntry[] = [];
   const role = (id: string) => users.find((u) => u.id === id)!.role;
 
@@ -248,6 +253,7 @@ export function seed(): State {
   // The SIA's work, a PIA review kept in view, a reassignment waiting for the CIA, a CIA comment
   // and an export waiting for approval (owner's changes, 2026-10-22).
   assign("IA/2026/032", "u-sia", 2, "u-pia");
+  later(at(2, 11), () => notify("u-sia", "IA/2026/032 assigned to you", at(2, 11), q("IA/2026/032").id));
   note("IA/2026/032", "u-sia", "Note", "ICT has booked a restore test of the finance backup for Friday.", 1);
   note("IA/2026/019", "u-ia2", "ManagementResponse", "A second payroll account has been requested from the vendor.", 6);
   propose("IA/2026/019", "u-ia2", "Vendor has the request; separate accounts expected next month.", 5);
@@ -259,17 +265,20 @@ export function seed(): State {
     reassignments.push({ id: "ra-1", queryId: query.id, fromAssignee: "u-ia1", toAssignee: "u-ia3", fromStatus: query.status, requestedBy: "u-pia", reason, decision: "Pending", decidedBy: null, decisionReason: null, decidedAt: null, createdAt: ts });
     log(ts, "u-pia", "reassign.request", "Query", query.id, { assignee: "u-ia1" }, { assignee: "u-ia3", request: "ra-1" }, reason);
     setStatus(query, "Pending Approval", "u-pia", ts, reason);
+    notify("u-cia", "IA/2026/016 reassignment waiting for your approval", ts, query.id);
   });
   later(at(1, 9), () => {
     const query = q("IA/2026/020");
     const body = "Please attach a sample of the new requisitions once the first month is done.";
     comments.push({ id: "c-1", queryId: query.id, author: "u-cia", authorRole: "CIA", body, createdAt: at(1, 9) });
     log(at(1, 9), "u-cia", "comment.add", "Query", query.id, null, { comment: "c-1" });
+    notify("u-ia3", "IA/2026/020 new comment from the CIA", at(1, 9), query.id);
   });
   later(at(0, 8), () => {
     const reason = "Overdue list for the audit committee pack.";
     exports.push({ id: "x-1", requestedBy: "u-pia", filters: { overdue: "1" }, reason, decision: "Pending", decidedBy: null, decisionReason: null, decidedAt: null, downloads: 0, createdAt: at(0, 8) });
     log(at(0, 8), "u-pia", "export.request", "ExportRequest", "x-1", null, { filters: { overdue: "1" } }, reason);
+    notify("u-cia", "Export waiting for your approval", at(0, 8), null, "/approvals");
   });
 
   later(at(3), () => log(at(3), "u-cia", "import.upload", "ImportBatch", "b-2", null, { filename: batches[1].sourceFilename, rows: 4 }));
@@ -282,5 +291,5 @@ export function seed(): State {
 
   queue.sort((a, b) => a.ts.localeCompare(b.ts)).forEach((e) => e.run());
 
-  return { users: [...users], batches, queries, revisions, activities, evidence, requests, reassignments, exports, comments, accessRequests, audit };
+  return { users: [...users], batches, queries, revisions, activities, evidence, requests, reassignments, exports, comments, notifications, accessRequests, audit };
 }
