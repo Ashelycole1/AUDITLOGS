@@ -44,21 +44,21 @@ def put_in_progress(query, ia, cia):
 
 
 def test_import_to_closed_end_to_end(client_for, make_user):
-    """PIA imports, CIA assigns, IA follows up and proposes, CIA approves. Every step is logged."""
+    """CIA imports, PIA assigns, IA follows up and proposes, CIA approves. Every step is logged."""
     pia, cia, ia = client_for("PIA"), client_for("CIA"), client_for(make_user("IA"))
 
     header = "reference,title,description,risk_rating,deadline,responsible_officer,department"
     row = f"IA/2026/200,Bank accounts not reconciled,Two accounts unreconciled since June.,High,{(timezone.localdate() + timedelta(days=30)).isoformat()},Financial Controller,Finance"
-    batch = pia.post(
+    batch = cia.post(
         reverse("imports-list"),
         {"file": SimpleUploadedFile("q.csv", f"{header}\n{row}".encode())},
         format="multipart",
     ).json()
-    assert pia.post(reverse("imports-confirm", kwargs={"pk": batch["id"]})).status_code == 200
+    assert cia.post(reverse("imports-confirm", kwargs={"pk": batch["id"]})).status_code == 200
     query = Query.objects.get(reference="IA/2026/200")
     assert query.status == Status.IMPORTED
 
-    response = cia.post(
+    response = pia.post(
         reverse("queries-assign", kwargs={"pk": query.pk}), {"assignee": str(ia.user.pk)}, format="json"
     )
     assert response.json()["status"] == Status.ASSIGNED

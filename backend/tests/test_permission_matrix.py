@@ -17,6 +17,7 @@ from .conftest import ROLES
 ALL = set(ROLES)
 
 # (url name, method, target object or None, roles allowed)
+READERS = {"PIA", "CIA", "IA", "SIA"}
 MATRIX = [
     ("auth-logout", "post", None, ALL),
     ("auth-me", "get", None, ALL),
@@ -28,30 +29,43 @@ MATRIX = [
     ("users-enable", "post", "user", {"ICT"}),
     ("audit-log", "get", None, {"CIA"}),
     ("audit-log-verify", "post", None, {"CIA", "ICT"}),
-    ("imports-list", "get", None, {"PIA"}),
-    ("imports-list", "post", None, {"PIA"}),
-    ("imports-preview", "get", "batch", {"PIA"}),
-    ("imports-confirm", "post", "batch", {"PIA"}),
-    ("imports-cancel", "post", "batch", {"PIA"}),
-    ("queries-list", "get", None, {"PIA", "CIA", "IA"}),
-    # An IA who is not the assignee gets 404 here, which the scoping tests check.
-    ("queries-detail", "get", "query", {"PIA", "CIA", "IA"}),
+    # Import moved from the PIA to the CIA (owner, 2026-10-22).
+    ("imports-list", "get", None, {"CIA"}),
+    ("imports-list", "post", None, {"CIA"}),
+    ("imports-preview", "get", "batch", {"CIA"}),
+    ("imports-confirm", "post", "batch", {"CIA"}),
+    ("imports-cancel", "post", "batch", {"CIA"}),
+    ("queries-list", "get", None, READERS),
+    # An IA or SIA who is not the assignee gets 404 here, which the scoping tests check.
+    ("queries-detail", "get", "query", READERS),
     ("queries-detail", "patch", "query", {"CIA"}),
-    ("queries-assign", "post", "query", {"CIA"}),
-    ("queries-bulk-assign", "post", None, {"CIA"}),
-    ("queries-revisions", "get", "query", {"PIA", "CIA", "IA"}),
-    ("queries-history", "get", "query", {"PIA", "CIA", "IA"}),
-    ("queries-activities", "get", "query", {"PIA", "CIA", "IA"}),
-    ("queries-activities", "post", "query", {"CIA", "IA"}),
-    ("queries-evidence", "get", "query", {"PIA", "CIA", "IA"}),
-    ("queries-evidence", "post", "query", {"CIA", "IA"}),
-    ("queries-propose-status", "post", "query", {"IA"}),
+    ("queries-assign", "post", "query", {"PIA", "CIA"}),
+    ("queries-bulk-assign", "post", None, {"PIA", "CIA"}),
+    ("queries-revisions", "get", "query", READERS),
+    ("queries-history", "get", "query", READERS),
+    ("queries-activities", "get", "query", READERS),
+    ("queries-activities", "post", "query", {"CIA", "IA", "SIA"}),
+    ("queries-evidence", "get", "query", READERS),
+    ("queries-evidence", "post", "query", {"CIA", "IA", "SIA"}),
+    ("queries-comments", "get", "query", READERS | {"CEO"}),
+    ("queries-comments", "post", "query", {"CIA", "CEO"}),
+    ("queries-propose-status", "post", "query", {"IA", "SIA"}),
     ("queries-change-status", "post", "query", {"CIA"}),
-    ("evidence-download", "get", "evidence", {"PIA", "CIA", "IA"}),
-    ("status-requests-list", "get", None, {"CIA"}),
+    ("queries-export", "get", None, {"CIA"}),
+    ("evidence-download", "get", "evidence", READERS),
+    ("status-requests-list", "get", None, {"PIA", "CIA"}),
     ("status-requests-approve", "post", "request", {"CIA"}),
-    ("status-requests-reject", "post", "request", {"CIA"}),
-    ("auditors", "get", None, {"CIA"}),
+    ("status-requests-reject", "post", "request", {"PIA", "CIA"}),
+    ("status-requests-keep-in-view", "post", "request", {"PIA"}),
+    ("reassignment-requests-list", "get", None, {"PIA", "CIA"}),
+    ("reassignment-requests-approve", "post", "reassignment", {"CIA"}),
+    ("reassignment-requests-reject", "post", "reassignment", {"CIA"}),
+    ("export-requests-list", "get", None, {"PIA", "CIA"}),
+    ("export-requests-list", "post", None, {"PIA"}),
+    ("export-requests-approve", "post", "export", {"CIA"}),
+    ("export-requests-reject", "post", "export", {"CIA"}),
+    ("export-requests-download", "get", "export", {"PIA"}),
+    ("auditors", "get", None, {"PIA", "CIA"}),
     ("dashboard-queries", "get", None, {"CEO"}),
     ("dashboard-cia-activity", "get", None, {"CEO"}),
 ]
@@ -97,7 +111,34 @@ def make_request(make_user):
 
 
 @pytest.fixture
-def url_for(make_user, make_batch, make_query, make_evidence, make_request):
+def make_reassignment(make_user):
+    from apps.workflow.models import ReassignmentRequest
+
+    def _make(query):
+        return ReassignmentRequest.objects.create(
+            query=query,
+            from_assignee=make_user("IA"),
+            to_assignee=make_user("SIA"),
+            from_status="Assigned",
+            requested_by=make_user("PIA"),
+            reason="Matrix test reassignment",
+        )
+
+    return _make
+
+
+@pytest.fixture
+def make_export(make_user):
+    from apps.workflow.models import ExportRequest
+
+    def _make():
+        return ExportRequest.objects.create(requested_by=make_user("PIA"), reason="Matrix test export")
+
+    return _make
+
+
+@pytest.fixture
+def url_for(make_user, make_batch, make_query, make_evidence, make_request, make_reassignment, make_export):
     def _url(name: str, target: str | None) -> str:
         if target is None:
             return reverse(name)
@@ -107,6 +148,8 @@ def url_for(make_user, make_batch, make_query, make_evidence, make_request):
             "query": make_query,
             "evidence": lambda: make_evidence(make_query()),
             "request": lambda: make_request(make_query()),
+            "reassignment": lambda: make_reassignment(make_query()),
+            "export": make_export,
         }[target]()
         return reverse(name, kwargs={"pk": obj.pk})
 

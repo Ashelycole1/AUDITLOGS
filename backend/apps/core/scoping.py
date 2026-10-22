@@ -18,7 +18,9 @@ SCOPED_MODEL_LABELS = [
     "queries.QueryRevision",
     "followup.FollowUpActivity",
     "followup.Evidence",
+    "followup.Comment",
     "workflow.StatusChangeRequest",
+    "workflow.ReassignmentRequest",
 ]
 
 

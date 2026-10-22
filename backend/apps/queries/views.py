@@ -1,4 +1,4 @@
-from django.db.models import Q
+from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import generics, mixins, serializers, status, viewsets
 from rest_framework.decorators import action
@@ -12,15 +12,26 @@ from apps.core.requests import client_ip
 from apps.core.scoping import ScopedQuerysetMixin
 from apps.core.validators import ReasonSerializer, validate_reason
 from apps.followup import services as followup
-from apps.followup.models import Evidence, FollowUpActivity
+from apps.followup.models import Comment, Evidence, FollowUpActivity
+from apps.workflow import exports
 from apps.workflow import services as workflow
 
 from . import services
+from .filters import apply_filters
 from .models import Query, QueryRevision, Risk, Status
+
+
+def csv_response(content: bytes) -> HttpResponse:
+    response = HttpResponse(content, content_type="text/csv; charset=utf-8")
+    response["Content-Disposition"] = f'attachment; filename="queries-{timezone.localdate().isoformat()}.csv"'
+    response["X-Content-Type-Options"] = "nosniff"
+    response["Cache-Control"] = "no-store"
+    return response
 
 
 class QueryListSerializer(serializers.ModelSerializer):
     assignee_name = serializers.CharField(source="current_assignee.full_name", default=None, read_only=True)
+    assignee_role = serializers.CharField(source="current_assignee.role", default=None, read_only=True)
     batch_filename = serializers.CharField(source="batch.source_filename", read_only=True)
     imported_at = serializers.DateTimeField(source="batch.confirmed_at", read_only=True)
 
@@ -37,6 +48,7 @@ class QueryListSerializer(serializers.ModelSerializer):
             "department",
             "current_assignee",
             "assignee_name",
+            "assignee_role",
             "batch",
             "batch_filename",
             "imported_at",
@@ -60,6 +72,7 @@ def _request_summary(item) -> dict | None:
         "decided_by_name": item.decided_by.full_name if item.decided_by_id else None,
         "decision_reason": item.decision_reason,
         "decided_at": item.decided_at,
+        "decided_status": item.decided_status or None,
         "created_at": item.created_at,
     }
 
@@ -67,6 +80,7 @@ def _request_summary(item) -> dict | None:
 class QueryDetailSerializer(QueryListSerializer):
     pending_request = serializers.SerializerMethodField()
     last_decision = serializers.SerializerMethodField()
+    pending_reassignment = serializers.SerializerMethodField()
 
     class Meta(QueryListSerializer.Meta):
         fields = [
@@ -74,6 +88,7 @@ class QueryDetailSerializer(QueryListSerializer):
             "description_original",
             "pending_request",
             "last_decision",
+            "pending_reassignment",
             "created_at",
             "updated_at",
         ]
@@ -94,10 +109,32 @@ class QueryDetailSerializer(QueryListSerializer):
         )
         return _request_summary(decided)
 
+    def get_pending_reassignment(self, obj) -> dict | None:
+        item = (
+            obj.reassignment_requests.filter(decision="Pending")
+            .select_related("requested_by", "to_assignee")
+            .first()
+        )
+        if item is None:
+            return None
+        return {
+            "id": str(item.pk),
+            "requested_by": str(item.requested_by_id),
+            "requested_by_name": item.requested_by.full_name,
+            "to_assignee": str(item.to_assignee_id),
+            "to_assignee_name": item.to_assignee.full_name,
+            "from_status": item.from_status,
+            "reason": item.reason,
+            "created_at": item.created_at,
+        }
+
 
 class CeoQuerySerializer(serializers.ModelSerializer):
-    """The fields the CEO may see (design.md 6): no assignee, no wording, no evidence or responses."""
+    """The fields the CEO may see (design.md 6): no wording, no evidence or responses. The responsible
+    personnel, including the auditor, were added at the owner's request (2026-10-22)."""
 
+    assignee_name = serializers.CharField(source="current_assignee.full_name", default=None, read_only=True)
+    assignee_role = serializers.CharField(source="current_assignee.role", default=None, read_only=True)
     imported_at = serializers.DateTimeField(source="batch.confirmed_at", read_only=True)
 
     class Meta:
@@ -111,6 +148,9 @@ class CeoQuerySerializer(serializers.ModelSerializer):
             "deadline",
             "responsible_officer",
             "department",
+            "current_assignee",
+            "assignee_name",
+            "assignee_role",
             "imported_at",
             "closed_at",
         ]
@@ -200,12 +240,22 @@ class EvidenceSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class CommentSerializer(serializers.ModelSerializer):
+    author_name = serializers.CharField(source="author.full_name", read_only=True)
+
+    class Meta:
+        model = Comment
+        fields = ["id", "body", "author", "author_name", "author_role", "created_at"]
+        read_only_fields = ["id", "author", "author_name", "author_role", "created_at"]
+
+
 class DirectStatusSerializer(ReasonSerializer):
     to_status = serializers.ChoiceField(choices=Status.choices)
 
 
-READ = ("PIA", "CIA", "IA")
-WORKERS = ("CIA", "IA")
+READ = ("PIA", "CIA", "IA", "SIA")
+WORKERS = ("CIA", "IA", "SIA")
+ASSIGNERS = ("PIA", "CIA")
 
 
 class QueryViewSet(
@@ -219,12 +269,14 @@ class QueryViewSet(
     allowed_roles = READ
     action_roles = {
         "partial_update": ("CIA",),
-        "assign": ("CIA",),
-        "bulk_assign": ("CIA",),
+        "assign": ASSIGNERS,
+        "bulk_assign": ASSIGNERS,
         "activities": {"GET": READ, "POST": WORKERS},
         "evidence": {"GET": READ, "POST": WORKERS},
-        "propose_status": ("IA",),
+        "comments": {"GET": (*READ, "CEO"), "POST": ("CIA", "CEO")},
+        "propose_status": ("IA", "SIA"),
         "change_status": ("CIA",),
+        "export": ("CIA",),
     }
     scoped_model = Query
     parser_classes = [JSONParser, MultiPartParser]
@@ -239,27 +291,7 @@ class QueryViewSet(
         qs = super().get_queryset().select_related("current_assignee", "batch")
         if self.action != "list":
             return qs
-        p = self.request.query_params
-        if p.get("status"):
-            qs = qs.filter(status=p["status"])
-        if p.get("risk"):
-            qs = qs.filter(risk_rating_current=p["risk"])
-        if p.get("department"):
-            qs = qs.filter(department=p["department"])
-        if p.get("assignee") == "none":
-            qs = qs.filter(current_assignee__isnull=True)
-        elif p.get("assignee"):
-            qs = qs.filter(current_assignee_id=p["assignee"])
-        if p.get("overdue") in ("1", "true"):
-            qs = qs.filter(deadline__lt=timezone.localdate()).exclude(status=Status.CLOSED)
-        if p.get("q"):
-            term = p["q"].strip()
-            qs = qs.filter(
-                Q(reference__icontains=term)
-                | Q(title__icontains=term)
-                | Q(description_current__icontains=term)
-            )
-        return qs
+        return apply_filters(qs, self.request.query_params)
 
     def _detail(self, query: Query) -> Response:
         return Response(
@@ -290,7 +322,13 @@ class QueryViewSet(
         query = self.get_object()
         data = AssignSerializer(data=request.data)
         data.is_valid(raise_exception=True)
-        services.assign(query=query, actor=request.user, ip=self._ip(), **data.validated_data)
+        if query.current_assignee_id and request.user.effective_role() != "CIA":
+            # A PIA's reassignment waits for the CIA (owner, 2026-10-22).
+            services.request_reassignment(
+                query=query, actor=request.user, ip=self._ip(), **data.validated_data
+            )
+        else:
+            services.assign(query=query, actor=request.user, ip=self._ip(), **data.validated_data)
         return self._detail(query)
 
     @action(detail=False, methods=["post"], url_path="bulk-assign")
@@ -353,6 +391,26 @@ class QueryViewSet(
         )
         return Response(EvidenceSerializer(item).data, status=status.HTTP_201_CREATED)
 
+    @action(detail=True, methods=["get", "post"])
+    def comments(self, request, pk=None):
+        """Oversight comments by the CIA and the CEO (owner, 2026-10-22). The assigned auditor reads them."""
+        query = self.get_object()
+        if request.method == "GET":
+            return Response(CommentSerializer(query.comments.select_related("author"), many=True).data)
+        data = CommentSerializer(data=request.data)
+        data.is_valid(raise_exception=True)
+        comment = followup.add_comment(
+            query=query, actor=request.user, body=data.validated_data["body"], ip=self._ip()
+        )
+        return Response(CommentSerializer(comment).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=["get"])
+    def export(self, request):
+        """CIA export as CSV, with the list's filters. Logged (system.md 4.9). A PIA asks through
+        /export-requests instead."""
+        content, _ = exports.export_now(actor=request.user, filters=request.query_params, ip=self._ip())
+        return csv_response(content)
+
     @action(detail=True, methods=["post"], url_path="propose-status")
     def propose_status(self, request, pk=None):
         query = self.get_object()
@@ -388,11 +446,11 @@ class CeoDashboardQueriesView(ScopedQuerysetMixin, generics.ListAPIView):
     pagination_class = None
 
     def get_queryset(self):
-        return super().get_queryset().select_related("batch")
+        return super().get_queryset().select_related("batch", "current_assignee")
 
 
 # Direct CIA changes shown to the CEO (design.md 11): the control on the person who edits and approves.
-CIA_ACTIVITY_ACTIONS = ("status.direct", "query.edit", "query.reassign", "status.approve")
+CIA_ACTIVITY_ACTIONS = ("status.direct", "query.edit", "query.reassign", "reassign.approve", "status.approve")
 
 
 class CiaActivitySerializer(serializers.ModelSerializer):

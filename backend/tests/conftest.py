@@ -13,7 +13,7 @@ from apps.accounts.models import User
 # Generated per test run: no password is ever written in the repository.
 PASSWORD = secrets.token_urlsafe(16)
 WRONG_PASSWORD = secrets.token_urlsafe(16)
-ROLES = ["PIA", "CIA", "IA", "CEO", "ICT"]
+ROLES = ["PIA", "CIA", "IA", "SIA", "CEO", "ICT"]
 MODEL_BACKEND = "django.contrib.auth.backends.ModelBackend"
 
 
@@ -89,7 +89,7 @@ def make_batch(make_user):
 
     def _make(status: str = BatchStatus.CONFIRMED) -> ImportBatch:
         return ImportBatch.objects.create(
-            imported_by=make_user("PIA"),
+            imported_by=make_user("CIA"),
             source_filename="final-queries.csv",
             source_file_path="unused",
             source_sha256="0" * 64,

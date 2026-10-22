@@ -13,6 +13,10 @@ class Status(models.TextChoices):
     PROPOSED = "Proposed for Closure"
     CLOSED = "Closed"
     RETURNED = "Returned"
+    # Added at the owner's request (2026-10-22): a reassignment waiting for the CIA, and a query the
+    # PIA keeps under watch instead of closing.
+    PENDING_APPROVAL = "Pending Approval"
+    KEPT_IN_VIEW = "Kept in View"
 
 
 class Risk(models.TextChoices):
@@ -45,7 +49,7 @@ class QueryQuerySet(models.QuerySet):
         if role in ("CIA", "PIA", "CEO"):
             # PIA reads everything; CEO reaches only summary endpoints, which choose the fields.
             return self
-        if role == "IA":
+        if role in ("IA", "SIA"):
             return self.filter(current_assignee=user)
         # ICT has no rights over findings without an approved, logged, time-limited grant.
         return self.none()

@@ -20,7 +20,7 @@ from apps.core.requests import client_ip
 from apps.core.validators import ReasonSerializer
 
 from . import services
-from .models import Role, User
+from .models import AUDITORS, Role, User, can_assign
 from .serializers import (
     LoginSerializer,
     MeSerializer,
@@ -312,10 +312,16 @@ class UserViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.Gen
 
 
 class AuditorListView(APIView):
-    """Active Internal Auditors, for the assign and reassign choices of the CIA."""
+    """The auditors this person may assign to: active IAs and SIAs ranked below them (owner, 2026-10-22)."""
 
-    allowed_roles = ("CIA",)
+    allowed_roles = ("PIA", "CIA")
 
     def get(self, request):
-        auditors = User.objects.filter(role=Role.IA, is_active=True).order_by("full_name")
-        return Response([{"id": str(u.pk), "full_name": u.full_name} for u in auditors])
+        auditors = User.objects.filter(role__in=AUDITORS, is_active=True).order_by("full_name")
+        return Response(
+            [
+                {"id": str(u.pk), "full_name": u.full_name, "role": u.role}
+                for u in auditors
+                if can_assign(request.user, u)
+            ]
+        )

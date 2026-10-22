@@ -16,13 +16,15 @@ from apps.core.views import HealthView
 from apps.followup.views import EvidenceDownloadView
 from apps.imports.views import ImportBatchViewSet
 from apps.queries.views import CeoDashboardQueriesView, CiaActivityView, QueryViewSet
-from apps.workflow.views import StatusRequestViewSet
+from apps.workflow.views import ExportRequestViewSet, ReassignmentRequestViewSet, StatusRequestViewSet
 
 router = SimpleRouter(trailing_slash=False)
 router.register("users", UserViewSet, basename="users")
 router.register("imports", ImportBatchViewSet, basename="imports")
 router.register("queries", QueryViewSet, basename="queries")
 router.register("status-requests", StatusRequestViewSet, basename="status-requests")
+router.register("reassignment-requests", ReassignmentRequestViewSet, basename="reassignment-requests")
+router.register("export-requests", ExportRequestViewSet, basename="export-requests")
 
 api = [
     path("health", HealthView.as_view(), name="health"),

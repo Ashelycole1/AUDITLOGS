@@ -9,8 +9,24 @@ class Role(models.TextChoices):
     PIA = "PIA", "Principal Internal Auditor"
     CIA = "CIA", "Chief Internal Auditor"
     IA = "IA", "Internal Auditor"
+    SIA = "SIA", "Senior Internal Auditor"
     CEO = "CEO", "Chief Executive"
     ICT = "ICT", "ICT administrator"
+
+
+# The audit chain, lowest first (owner's hierarchy, 2026-10-22). CEO and ICT sit outside it.
+RANK = {Role.IA: 1, Role.SIA: 2, Role.PIA: 3, Role.CIA: 4}
+# The roles that work queries assigned to them.
+AUDITORS = (Role.IA, Role.SIA)
+
+
+def rank(role: str) -> int:
+    return RANK.get(role, 0)
+
+
+def can_assign(actor: "User", target: "User") -> bool:
+    """Assignment flows down the chain: only to an active auditor ranked below the actor."""
+    return target.is_active and target.role in AUDITORS and rank(target.role) < rank(actor.effective_role())
 
 
 class UserManager(BaseUserManager):

@@ -31,4 +31,4 @@ def test_if_enabled_does_nothing_unless_switched_on(monkeypatch):
     with override_settings(ENVIRONMENT="staging"):
         call_command("seed_dev_users", "--if-enabled")
         call_command("seed_dev_users", "--if-enabled")  # runs on every start: must not duplicate
-    assert User.objects.count() == 7
+    assert User.objects.count() == 8

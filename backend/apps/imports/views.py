@@ -42,9 +42,9 @@ class CancelSerializer(serializers.Serializer):
 
 
 class ImportBatchViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
-    """Import of final queries. PIA only (design.md 2): after confirmation the PIA can no longer edit."""
+    """Import of final queries. CIA only: moved from the PIA at the owner's request (2026-10-22)."""
 
-    allowed_roles = ("PIA",)
+    allowed_roles = ("CIA",)
     queryset = ImportBatch.objects.select_related("imported_by")
     serializer_class = ImportBatchSerializer
     parser_classes = [MultiPartParser, JSONParser]

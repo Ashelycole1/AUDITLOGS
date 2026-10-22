@@ -104,9 +104,12 @@ def test_no_view_reads_audit_content_without_for_user():
                 ), f"{cls.__name__} bypasses for_user"
 
 
-def test_ceo_summary_has_no_assignee_wording_or_evidence(client_for, make_user, make_query):
-    make_query(assignee=make_user("IA"))
+def test_ceo_summary_has_personnel_but_no_wording_or_evidence(client_for, make_user, make_query):
+    """The CEO sees who is responsible, including the auditor (owner, 2026-10-22), but no wording."""
+    auditor = make_user("SIA")
+    make_query(assignee=auditor)
     row = client_for("CEO").get(reverse("dashboard-queries")).json()[0]
+    assert (row["assignee_name"], row["assignee_role"]) == (auditor.full_name, "SIA")
     assert set(row) == {
         "id",
         "reference",
@@ -116,6 +119,9 @@ def test_ceo_summary_has_no_assignee_wording_or_evidence(client_for, make_user, 
         "deadline",
         "responsible_officer",
         "department",
+        "current_assignee",
+        "assignee_name",
+        "assignee_role",
         "imported_at",
         "closed_at",
     }

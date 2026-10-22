@@ -15,6 +15,7 @@ DEMO_USERS = [
     ("sarah.nabirye@auditlogs.test", "Sarah Nabirye", "IA"),
     ("peter.mugisha@auditlogs.test", "Peter Mugisha", "IA"),
     ("joan.atim@auditlogs.test", "Joan Atim", "IA"),
+    ("grace.namutebi@auditlogs.test", "Grace Namutebi", "SIA"),
     ("moses.kiggundu@auditlogs.test", "Moses Kiggundu", "CEO"),
     ("brian.ssali@auditlogs.test", "Brian Ssali", "ICT"),
 ]

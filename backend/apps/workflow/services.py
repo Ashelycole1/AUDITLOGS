@@ -8,27 +8,42 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.auditlog.services import record
+from apps.core import notify
 from apps.core.exceptions import RuleError
 from apps.core.validators import MIN_REASON
 from apps.queries.models import Query, Status
 
 from .models import Decision, StatusChangeRequest
 
-# design.md 5. (from, to) -> roles that may make the move. Anything else is rejected.
+AUDITORS = {"IA", "SIA"}
+# Statuses a reassignment can start from and, if the CIA rejects it, return to.
+REASSIGNABLE = (Status.ASSIGNED, Status.IN_PROGRESS, Status.RETURNED, Status.KEPT_IN_VIEW)
+
+# design.md 5, with the owner's changes of 2026-10-22. (from, to) -> roles that may make the move.
+# Anything else is rejected.
 TRANSITIONS: dict[tuple[str, str], set[str]] = {
-    (Status.IMPORTED, Status.ASSIGNED): {"CIA"},
-    (Status.ASSIGNED, Status.IN_PROGRESS): {"IA"},
-    (Status.IN_PROGRESS, Status.PROPOSED): {"IA"},
+    (Status.IMPORTED, Status.ASSIGNED): {"PIA", "CIA"},
+    (Status.ASSIGNED, Status.IN_PROGRESS): AUDITORS,
+    (Status.IN_PROGRESS, Status.PROPOSED): AUDITORS,
     (Status.PROPOSED, Status.CLOSED): {"CIA"},
-    (Status.PROPOSED, Status.RETURNED): {"CIA"},
-    (Status.RETURNED, Status.IN_PROGRESS): {"IA"},
+    (Status.PROPOSED, Status.RETURNED): {"PIA", "CIA"},
+    (Status.PROPOSED, Status.KEPT_IN_VIEW): {"PIA"},
+    (Status.RETURNED, Status.IN_PROGRESS): AUDITORS,
+    (Status.KEPT_IN_VIEW, Status.IN_PROGRESS): AUDITORS,
+    (Status.KEPT_IN_VIEW, Status.RETURNED): {"PIA", "CIA"},
     (Status.CLOSED, Status.IN_PROGRESS): {"CIA"},
+    # A PIA's reassignment waits for the CIA, who approves (Assigned) or rejects (back where it was).
+    **{(s, Status.PENDING_APPROVAL): {"PIA"} for s in REASSIGNABLE},
+    **{(Status.PENDING_APPROVAL, s): {"CIA"} for s in REASSIGNABLE},
 }
 # Moves that must carry a reason.
 REASON_REQUIRED = {
     (Status.IN_PROGRESS, Status.PROPOSED),
     (Status.PROPOSED, Status.RETURNED),
+    (Status.PROPOSED, Status.KEPT_IN_VIEW),
+    (Status.KEPT_IN_VIEW, Status.RETURNED),
     (Status.CLOSED, Status.IN_PROGRESS),
+    *((s, Status.PENDING_APPROVAL) for s in REASSIGNABLE),
 }
 
 
@@ -68,8 +83,12 @@ def transition(
             raise WorkflowError(f"Give a reason of at least {MIN_REASON} characters for a direct change.")
         if to_status == Status.PROPOSED:
             raise WorkflowError("Only the assigned auditor can propose closure.")
+        if Status.PENDING_APPROVAL in (from_status, to_status):
+            raise WorkflowError(
+                "Pending Approval belongs to a reassignment request. Decide the request instead."
+            )
         action = "status.direct"
-    if to_status in (Status.ASSIGNED, Status.IN_PROGRESS, Status.RETURNED) and not query.current_assignee_id:
+    if to_status not in (Status.IMPORTED, Status.CLOSED) and not query.current_assignee_id:
         raise WorkflowError("Assign an auditor first.")
     if not direct:
         allowed = TRANSITIONS.get((from_status, to_status))
@@ -125,25 +144,51 @@ def propose_closure(*, query: Query, actor, reason: str, ip=None) -> StatusChang
     return request
 
 
+# A closure proposal's possible outcomes and the audit action each one writes.
+OUTCOMES = {
+    Status.CLOSED: "status.approve",
+    Status.RETURNED: "status.reject",
+    Status.KEPT_IN_VIEW: "status.keep",
+}
+
+
 @transaction.atomic
-def decide(*, request_id, actor, approve: bool, reason: str = "", ip=None) -> StatusChangeRequest:
+def decide(
+    *, request_id, actor, approve: bool = False, outcome: str | None = None, reason: str = "", ip=None
+) -> StatusChangeRequest:
+    """Decide a closure proposal. The CIA closes or returns it; the PIA reviews it and may return it
+    or keep it in view (owner, 2026-10-22). Who may reach which outcome is the transition table's call."""
+    to = outcome or (Status.CLOSED if approve else Status.RETURNED)
+    if to not in OUTCOMES:
+        raise WorkflowError("A proposal can only be closed, returned or kept in view.")
     request = StatusChangeRequest.objects.select_for_update().select_related("query").get(pk=request_id)
     if request.decision != Decision.PENDING:
         raise WorkflowError(f"This proposal was already {request.decision.lower()}.")
     if request.proposed_by_id == actor.pk:
         # No self-approval, ever (system.md 4.3), including an IA who holds acting-CIA rights.
         raise WorkflowError("You proposed this, so someone else must decide it.")
-    if not approve and not _has_reason(reason):
+    if to != Status.CLOSED and not _has_reason(reason):
         raise WorkflowError(f"Say what is still missing, in at least {MIN_REASON} characters.")
-    to = Status.CLOSED if approve else Status.RETURNED
-    transition(
-        request.query, to, actor, reason, action="status.approve" if approve else "status.reject", ip=ip
-    )
-    request.decision = Decision.APPROVED if approve else Decision.REJECTED
+    query = transition(request.query, to, actor, reason, action=OUTCOMES[to], ip=ip)
+    request.decision = Decision.APPROVED if to == Status.CLOSED else Decision.REJECTED
     request.decided_by = actor
     request.decision_reason = (reason or "").strip()
     request.decided_at = timezone.now()
-    request.save(update_fields=["decision", "decided_by", "decision_reason", "decided_at", "updated_at"])
+    request.decided_status = to
+    request.save(
+        update_fields=[
+            "decision",
+            "decided_by",
+            "decision_reason",
+            "decided_at",
+            "decided_status",
+            "updated_at",
+        ]
+    )
+    if to == Status.RETURNED:
+        notify.about_query([query.current_assignee], query, "Returned to you", "The reason is on the query.")
+    elif to == Status.KEPT_IN_VIEW:
+        notify.about_query([query.current_assignee], query, "Kept in view", "The reason is on the query.")
     return request
 
 
@@ -151,4 +196,6 @@ def decide(*, request_id, actor, approve: bool, reason: str = "", ip=None) -> St
 def change_directly(*, query: Query, actor, to_status: str, reason: str, ip=None) -> Query:
     if StatusChangeRequest.objects.filter(query=query, decision=Decision.PENDING).exists():
         raise WorkflowError("Decide the waiting closure proposal first.")
+    if query.status == Status.PENDING_APPROVAL:
+        raise WorkflowError("Decide the waiting reassignment request first.")
     return transition(query, to_status, actor, reason, direct=True, ip=ip)

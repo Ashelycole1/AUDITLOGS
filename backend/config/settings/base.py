@@ -144,6 +144,8 @@ OTP_EMAIL_BODY_TEMPLATE = (
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "AuditLogs <no-reply@localhost>")
 OTP_EMAIL_SENDER = DEFAULT_FROM_EMAIL
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+# Where notification emails link to, e.g. https://auditlogs.example.ug. Blank leaves the link out.
+APP_URL = env("APP_URL", "")
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework.authentication.SessionAuthentication"],

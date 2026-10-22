@@ -11,7 +11,7 @@ from .models import Evidence
 class EvidenceDownloadView(ScopedQuerysetMixin, GenericAPIView):
     """Evidence leaves only through here, never a public URL (architecture.md 5.5). CEO never sees it."""
 
-    allowed_roles = ("PIA", "CIA", "IA")
+    allowed_roles = ("PIA", "CIA", "IA", "SIA")
     scoped_model = Evidence
 
     def get(self, request, pk=None):

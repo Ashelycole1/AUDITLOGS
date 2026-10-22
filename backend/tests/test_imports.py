@@ -35,8 +35,8 @@ def upload(client, file):
 
 
 def test_valid_file_previews_then_confirms(client_for):
-    pia = client_for("PIA")
-    response = upload(pia, csv_file(good_line("IA/2026/041"), good_line("IA/2026/042")))
+    cia = client_for("CIA")
+    response = upload(cia, csv_file(good_line("IA/2026/041"), good_line("IA/2026/042")))
     assert response.status_code == 201
     preview = response.json()
     assert preview["status"] == "Previewed"
@@ -45,7 +45,7 @@ def test_valid_file_previews_then_confirms(client_for):
     assert preview["rows"][0]["data"]["risk_rating"] == "High"  # normalised from "high"
     assert not Query.objects.exists()  # Nothing is created before confirmation.
 
-    response = pia.post(reverse("imports-confirm", kwargs={"pk": preview["id"]}))
+    response = cia.post(reverse("imports-confirm", kwargs={"pk": preview["id"]}))
     assert response.status_code == 200
     assert response.json()["status"] == "Confirmed"
     queries = Query.objects.order_by("reference")
@@ -60,7 +60,7 @@ def test_valid_file_previews_then_confirms(client_for):
 
 def test_source_file_is_kept_with_its_fingerprint(client_for):
     content = "\n".join([HEADER, good_line("IA/2026/050")]).encode()
-    response = upload(client_for("PIA"), SimpleUploadedFile("q.csv", content))
+    response = upload(client_for("CIA"), SimpleUploadedFile("q.csv", content))
     batch = ImportBatch.objects.get(pk=response.json()["id"])
     assert batch.source_sha256 == hashlib.sha256(content).hexdigest()
     assert content not in Path(batch.source_file_path).read_bytes()  # encrypted at rest
@@ -69,9 +69,9 @@ def test_source_file_is_kept_with_its_fingerprint(client_for):
 
 def test_problems_are_listed_per_row_and_block_confirmation(client_for, make_query):
     make_query(reference="IA/2026/001")
-    pia = client_for("PIA")
+    cia = client_for("CIA")
     response = upload(
-        pia,
+        cia,
         csv_file(
             good_line("IA/2026/001"),  # already imported
             good_line("IA/2026/002"),
@@ -97,27 +97,27 @@ def test_problems_are_listed_per_row_and_block_confirmation(client_for, make_que
     } <= set(rows[8])
     assert response.json()["error_count"] == 6
 
-    confirm = pia.post(reverse("imports-confirm", kwargs={"pk": response.json()["id"]}))
+    confirm = cia.post(reverse("imports-confirm", kwargs={"pk": response.json()["id"]}))
     assert confirm.status_code == 409
     assert Query.objects.count() == 1
 
 
 def test_past_deadline_warns_but_does_not_block(client_for):
-    pia = client_for("PIA")
-    preview = upload(pia, csv_file(good_line("IA/2026/060", deadline=PAST))).json()
+    cia = client_for("CIA")
+    preview = upload(cia, csv_file(good_line("IA/2026/060", deadline=PAST))).json()
     assert preview["rows"][0]["errors"] == []
     assert preview["rows"][0]["warnings"] == ["Deadline is before the import date"]
-    assert pia.post(reverse("imports-confirm", kwargs={"pk": preview["id"]})).status_code == 200
+    assert cia.post(reverse("imports-confirm", kwargs={"pk": preview["id"]})).status_code == 200
 
 
 def test_all_four_risk_tiers_are_read(client_for):
     """The Standard Risk Matrix Color Mapping Reference scale: Low, Medium, High, Critical."""
-    pia = client_for("PIA")
+    cia = client_for("CIA")
     lines = [
         f"IA/2026/07{i},Title,Text,{raw},{FUTURE},Officer,Dept"
         for i, raw in enumerate(("low", "MEDIUM", "High", "critical", "Extreme"))
     ]
-    preview = upload(pia, csv_file(*lines)).json()
+    preview = upload(cia, csv_file(*lines)).json()
     assert [r["errors"] for r in preview["rows"]] == [[]] * 5
     assert [r["data"]["risk_rating"] for r in preview["rows"]] == [
         "Low",
@@ -126,13 +126,13 @@ def test_all_four_risk_tiers_are_read(client_for):
         "Critical",
         "Critical",
     ]
-    assert pia.post(reverse("imports-confirm", kwargs={"pk": preview["id"]})).status_code == 200
+    assert cia.post(reverse("imports-confirm", kwargs={"pk": preview["id"]})).status_code == 200
     saved = Query.objects.get(reference="IA/2026/073")
     assert (saved.risk_rating_original, saved.risk_rating_current) == ("Critical", "Critical")
 
 
 def test_day_first_dates_are_read(client_for):
-    preview = upload(client_for("PIA"), csv_file(good_line("IA/2026/061", deadline="15/12/2030"))).json()
+    preview = upload(client_for("CIA"), csv_file(good_line("IA/2026/061", deadline="15/12/2030"))).json()
     assert preview["rows"][0]["data"]["deadline"] == "2030-12-15"
 
 
@@ -153,20 +153,20 @@ def test_excel_files_are_read(client_for):
     )
     buffer = io.BytesIO()
     book.save(buffer)
-    preview = upload(client_for("PIA"), SimpleUploadedFile("final.xlsx", buffer.getvalue())).json()
+    preview = upload(client_for("CIA"), SimpleUploadedFile("final.xlsx", buffer.getvalue())).json()
     assert preview["error_count"] == 0
     assert preview["rows"][0]["data"]["deadline"] == "2030-06-30"
 
 
 def test_unreadable_or_wrong_files_are_refused(client_for):
-    pia = client_for("PIA")
-    assert upload(pia, SimpleUploadedFile("findings.pdf", b"%PDF-1.7")).status_code == 400
-    assert upload(pia, SimpleUploadedFile("notes.txt", b"hello")).status_code == 400
+    cia = client_for("CIA")
+    assert upload(cia, SimpleUploadedFile("findings.pdf", b"%PDF-1.7")).status_code == 400
+    assert upload(cia, SimpleUploadedFile("notes.txt", b"hello")).status_code == 400
     missing = SimpleUploadedFile("q.csv", b"reference,title\nIA/1,Thing")
-    response = upload(pia, missing)
+    response = upload(cia, missing)
     assert response.status_code == 400
     assert "missing these columns" in response.json()["detail"]
-    assert pia.post(reverse("imports-list"), {}, format="multipart").status_code == 400
+    assert cia.post(reverse("imports-list"), {}, format="multipart").status_code == 400
     assert not ImportBatch.objects.exists()
 
 
@@ -176,36 +176,36 @@ def test_header_aliases_are_configurable(client_for, settings):
         "query ref,title,description,risk_rating,deadline,responsible_officer,department",
         good_line("IA/2026/080"),
     ]
-    preview = upload(client_for("PIA"), SimpleUploadedFile("q.csv", "\n".join(lines).encode())).json()
+    preview = upload(client_for("CIA"), SimpleUploadedFile("q.csv", "\n".join(lines).encode())).json()
     assert preview["rows"][0]["data"]["reference"] == "IA/2026/080"
 
 
 def test_cancel_leaves_no_queries_and_cannot_be_undone(client_for):
-    pia = client_for("PIA")
-    batch_id = upload(pia, csv_file(good_line("IA/2026/090"))).json()["id"]
-    response = pia.post(
+    cia = client_for("CIA")
+    batch_id = upload(cia, csv_file(good_line("IA/2026/090"))).json()["id"]
+    response = cia.post(
         reverse("imports-cancel", kwargs={"pk": batch_id}), {"reason": "Wrong file"}, format="json"
     )
     assert response.json()["status"] == "Cancelled"
-    assert pia.post(reverse("imports-confirm", kwargs={"pk": batch_id})).status_code == 409
+    assert cia.post(reverse("imports-confirm", kwargs={"pk": batch_id})).status_code == 409
     assert not Query.objects.exists()
     assert AuditLog.objects.filter(action="import.cancel").exists()
 
 
 def test_a_batch_confirms_only_once(client_for):
-    pia = client_for("PIA")
-    batch_id = upload(pia, csv_file(good_line("IA/2026/100"))).json()["id"]
-    assert pia.post(reverse("imports-confirm", kwargs={"pk": batch_id})).status_code == 200
-    assert pia.post(reverse("imports-confirm", kwargs={"pk": batch_id})).status_code == 409
+    cia = client_for("CIA")
+    batch_id = upload(cia, csv_file(good_line("IA/2026/100"))).json()["id"]
+    assert cia.post(reverse("imports-confirm", kwargs={"pk": batch_id})).status_code == 200
+    assert cia.post(reverse("imports-confirm", kwargs={"pk": batch_id})).status_code == 409
     assert Query.objects.count() == 1
 
 
 def test_references_are_checked_again_at_confirmation(client_for):
-    pia = client_for("PIA")
-    first = upload(pia, csv_file(good_line("IA/2026/110"))).json()["id"]
-    second = upload(pia, csv_file(good_line("IA/2026/110"))).json()["id"]
-    assert pia.post(reverse("imports-confirm", kwargs={"pk": first})).status_code == 200
-    response = pia.post(reverse("imports-confirm", kwargs={"pk": second}))
+    cia = client_for("CIA")
+    first = upload(cia, csv_file(good_line("IA/2026/110"))).json()["id"]
+    second = upload(cia, csv_file(good_line("IA/2026/110"))).json()["id"]
+    assert cia.post(reverse("imports-confirm", kwargs={"pk": first})).status_code == 200
+    response = cia.post(reverse("imports-confirm", kwargs={"pk": second}))
     assert response.status_code == 409
     assert "IA/2026/110" in response.json()["detail"]
     assert Query.objects.count() == 1

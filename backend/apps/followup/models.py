@@ -70,3 +70,30 @@ class Evidence(models.Model):
 
     def delete(self, *args, **kwargs):
         raise PermissionError("Evidence is never deleted. Disposal follows the retention rules.")
+
+
+class Comment(models.Model):
+    """An oversight comment on a query by the CIA or the CEO (owner, 2026-10-22). Never edited."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    query = models.ForeignKey("queries.Query", on_delete=models.PROTECT, related_name="comments")
+    author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="+")
+    author_role = models.CharField(max_length=3)
+    body = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    objects = AppendOnlyQuerySet.as_manager()
+
+    class Meta:
+        ordering = ["created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.query} comment by {self.author}"
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise PermissionError("Saved comments cannot be edited.")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise PermissionError("Saved comments cannot be deleted.")

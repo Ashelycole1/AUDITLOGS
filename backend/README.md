@@ -9,7 +9,7 @@ cd backend
 uv venv --python 3.12 .venv
 uv pip install --python .venv -r requirements.txt -r requirements-dev.txt
 .venv/Scripts/python manage.py migrate          # .venv/bin/python on Linux/macOS
-.venv/Scripts/python manage.py seed_dev_users   # 7 dummy accounts; prints a random password unless DEV_SEED_PASSWORD is set
+.venv/Scripts/python manage.py seed_dev_users   # 8 dummy accounts; prints a random password unless DEV_SEED_PASSWORD is set
 .venv/Scripts/python manage.py runserver
 ```
 
