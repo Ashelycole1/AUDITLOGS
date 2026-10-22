@@ -323,10 +323,6 @@ body {
   .stack-table tbody td:empty {
     display: none;
   }
-  /* The audit log's chain line between rows only makes sense in the wide table. */
-  .stack-table tbody td > .absolute {
-    display: none;
-  }
 }
 
 @layer components {
@@ -398,21 +394,6 @@ table {
 :focus-visible {
   outline: 2px solid var(--color-lake);
   outline-offset: 2px;
-}
-
-/* Verifying the chain: each link is ticked in turn. */
-@keyframes link-tick {
-  from {
-    transform: scale(0.4);
-    opacity: 0;
-  }
-  to {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-.link-tick {
-  animation: link-tick 180ms cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
 }
 
 @media (prefers-reduced-motion: reduce) {

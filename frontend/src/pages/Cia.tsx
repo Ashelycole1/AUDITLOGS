@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Button, Check, Empty, Label, Notice, PageHeader, Panel, ReasonDialog, Ref, RiskTag, StatusBadge, Table, cx } from "../components";
+import { Avatar, Button, Check, Empty, Label, Notice, PageHeader, Panel, ReasonDialog, Ref, RiskTag, StatusBadge, Table, cx } from "../components";
+import { Icon } from "../icons";
 import { verifyChain } from "../lib/auditChain";
-import { STATUSES, daysOverdue, describeFilters, fmtDate, fmtDateTime, matchesFilters } from "../lib/rules";
+import { ROLE_NAME, STATUSES, daysOverdue, describeFilters, fmtDate, fmtDateTime, matchesFilters } from "../lib/rules";
 import { useMe, useStore, type Outcome } from "../storeTypes";
 import type { AuditEntry, Decision, ExportFilters, ExportRequest, Query, ReassignmentRequest, StatusChangeRequest } from "../types";
 
@@ -391,37 +392,110 @@ export const ACTION_LABEL: Record<string, string> = {
   "breakglass.request": "Requested access",
   "breakglass.approve": "Approved access",
   "breakglass.reject": "Refused access",
-  "auditlog.verify": "Verified chain",
+  "auditlog.verify": "Verified the log",
   "user.create": "Created account",
   "user.enable": "Enabled account",
   "user.disable": "Disabled account",
   "user.reset_mfa": "Reset MFA",
 };
 
-function describeChange(e: AuditEntry): string {
+// Field names as a reader would say them; people and queries by name and reference, not by ID.
+const FIELD: Record<string, string> = { queryId: "query", assignee: "auditor", riskRatingCurrent: "risk", descriptionCurrent: "wording", isActive: "active" };
+const HIDDEN = new Set(["request", "comment", "activity", "evidence"]);
+
+function describeChange(e: AuditEntry, name: (key: string, value: string) => string = (_, v) => v): string {
+  const value = (k: string, x: unknown): string =>
+    x === null || x === undefined
+      ? "none"
+      : typeof x === "object"
+        ? Object.entries(x as Record<string, unknown>).map(([kk, xx]) => `${FIELD[kk] ?? kk} ${value(kk, xx)}`).join(", ") || "all"
+        : name(k, String(x));
   const fmt = (v: unknown) =>
     v && typeof v === "object"
-      ? Object.entries(v as Record<string, unknown>).map(([k, x]) => `${k}: ${String(x)}`).join(", ")
+      ? Object.entries(v as Record<string, unknown>)
+          .filter(([k]) => !HIDDEN.has(k))
+          .map(([k, x]) => `${FIELD[k] ?? k}: ${value(k, x)}`)
+          .join(", ")
       : v === null || v === undefined ? "" : String(v);
   const o = fmt(e.oldValue);
   const n = fmt(e.newValue);
   return o && n ? `${o} → ${n}` : n || o;
 }
 
-// How a link looks while the chain is checked: not yet reached, ticked, the first mismatch, or after it.
-type LinkState = "idle" | "ok" | "broken" | "after";
+// How an entry stands while the log is checked: not yet reached, matched, the first mismatch, or after it.
+type EntryState = "idle" | "ok" | "broken" | "after";
 
-function linkState(seq: number, checkedTo: number, brokenAt: number | null): LinkState {
+function entryState(seq: number, checkedTo: number, brokenAt: number | null): EntryState {
   if (brokenAt !== null && seq === brokenAt && checkedTo >= seq) return "broken";
   if (brokenAt !== null && seq > brokenAt && checkedTo >= brokenAt) return "after";
   return seq <= checkedTo ? "ok" : "idle";
 }
 
-function segmentTone(a: LinkState, b: LinkState | undefined, adjacent: boolean): string {
-  if (!adjacent) return "border-dashed border-rule";
-  if (a === "broken" || a === "after" || b === "broken" || b === "after") return "border-dashed border-danger/45";
-  if (a === "ok" && b === "ok") return "border-good";
-  return "border-rule";
+// A small colour per kind of action, so a day's ledger can be scanned at a glance.
+const KIND_TONE: Record<string, string> = {
+  auth: "bg-mark-neutral",
+  import: "bg-mark-imported",
+  query: "bg-mark-assigned",
+  reassign: "bg-mark-assigned",
+  status: "bg-mark-warn",
+  activity: "bg-lake",
+  evidence: "bg-lake",
+  comment: "bg-lake",
+  export: "bg-mark-good",
+  auditlog: "bg-mark-good",
+  breakglass: "bg-mark-critical",
+  user: "bg-mark-neutral",
+};
+
+const KAMPALA_DAY = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Kampala", year: "numeric", month: "2-digit", day: "2-digit" });
+const DAY_TITLE = new Intl.DateTimeFormat("en-UG", { timeZone: "Africa/Kampala", weekday: "long", day: "numeric", month: "long", year: "numeric" });
+const TIME = new Intl.DateTimeFormat("en-UG", { timeZone: "Africa/Kampala", hour: "2-digit", minute: "2-digit", hour12: false });
+
+function dayTitle(key: string): string {
+  const today = KAMPALA_DAY.format(new Date());
+  const yesterday = KAMPALA_DAY.format(new Date(Date.now() - 86_400_000));
+  if (key === today) return "Today";
+  if (key === yesterday) return "Yesterday";
+  return DAY_TITLE.format(new Date(`${key}T12:00:00+03:00`));
+}
+
+// The seal: one ring that fills as each entry's fingerprint is recomputed. It is the page's only flourish.
+function Seal({ total, checked, state }: { total: number; checked: number; state: "idle" | "running" | "ok" | "broken" }) {
+  const r = 52;
+  const length = 2 * Math.PI * r;
+  const share = total ? Math.min(1, checked / total) : 0;
+  const tone = state === "broken" ? "text-danger" : state === "ok" ? "text-good" : "text-lake";
+  return (
+    <div className="relative grid size-[8.5rem] shrink-0 place-items-center" role="img" aria-label={`${checked} of ${total} entries checked`}>
+      <svg viewBox="0 0 128 128" className="absolute inset-0 -rotate-90">
+        <circle cx="64" cy="64" r={r} fill="none" className="stroke-line" strokeWidth="6" />
+        <circle
+          cx="64"
+          cy="64"
+          r={r}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="6"
+          strokeLinecap="round"
+          strokeDasharray={length}
+          strokeDashoffset={length * (1 - share)}
+          className={cx(tone, "transition-[stroke-dashoffset] duration-100 motion-reduce:transition-none", state === "idle" && "opacity-0")}
+        />
+        {/* Fine ticks around the rim, like the milled edge of a seal. */}
+        {Array.from({ length: 48 }, (_, i) => (
+          <line key={i} x1="64" y1="3" x2="64" y2={i % 4 ? "6" : "8"} className="stroke-rule" strokeWidth="1" transform={`rotate(${i * 7.5} 64 64)`} />
+        ))}
+      </svg>
+      <div className="text-center">
+        {state === "ok" || state === "broken" ? (
+          <Icon name={state === "ok" ? "check" : "close"} className={cx("mx-auto size-7", tone)} />
+        ) : (
+          <span className="block text-[1.75rem] font-medium leading-none tracking-[-0.03em] tabular-nums">{state === "running" ? checked : total}</span>
+        )}
+        <span className="mt-1 block text-xs text-muted">{state === "running" ? `of ${total}` : state === "idle" ? "entries" : state === "ok" ? "intact" : "broken"}</span>
+      </div>
+    </div>
+  );
 }
 
 export function AuditLogPage() {
@@ -435,12 +509,10 @@ export function AuditLogPage() {
   const [checkedAt, setCheckedAt] = useState<string | null>(null);
   const [checkedTo, setCheckedTo] = useState(0);
   const [running, setRunning] = useState(false);
-  const [hover, setHover] = useState<number | null>(null);
   const timer = useRef<number | null>(null);
 
   useEffect(() => () => { if (timer.current) window.clearInterval(timer.current); }, []);
 
-  const filtered = !!(actor || action || object || from);
   const entries = useMemo(
     () =>
       state.audit
@@ -454,11 +526,21 @@ export function AuditLogPage() {
         .reverse(),
     [state.audit, actor, action, object, from],
   );
+  const days = useMemo(() => {
+    const groups: { key: string; rows: AuditEntry[] }[] = [];
+    for (const e of entries) {
+      const key = KAMPALA_DAY.format(new Date(e.timestamp));
+      if (groups[groups.length - 1]?.key !== key) groups.push({ key, rows: [] });
+      groups[groups.length - 1].rows.push(e);
+    }
+    return groups;
+  }, [entries]);
 
   const total = state.audit.length;
   const brokenAt = result && !result.ok ? result.brokenAt : null;
+  const filtered = !!(actor || action || object || from);
 
-  // The check itself is instant; the walk along the chain shows what it did, one link at a time.
+  // The check itself is instant; the seal fills as it goes so the reader sees what it did.
   const verify = async () => {
     let r: ReturnType<typeof verifyChain>;
     setVerifyError(null);
@@ -499,159 +581,139 @@ export function AuditLogPage() {
     }, 28);
   };
 
+  const sealState = running ? "running" : result === null ? "idle" : result.ok ? "ok" : "broken";
   const objectTypes = [...new Set(state.audit.map((e) => e.objectType))].sort();
   const actionGroups = [...new Set(state.audit.map((e) => e.action.split(".")[0]))].sort();
-  const verdict = running
-    ? "Checking the chain"
-    : result === null
-      ? "Not checked this session"
-      : result.ok
-        ? "Chain intact"
-        : `Chain broken at entry ${result.brokenAt}`;
+  const people = [...new Map(state.audit.filter((e) => e.actor).map((e) => [e.actor!, userName(e.actor)])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  const first = state.audit[0];
+  const last = state.audit[state.audit.length - 1];
 
   return (
     <>
-      <PageHeader
-        title="Audit log"
-        lede="Every action in the system, in order. Entries cannot be edited or deleted. Each one is sealed with the fingerprint of the one before it, so changing any entry breaks every link after it."
-      />
+      <PageHeader title="Audit log" lede="Every action in the system, in order. Entries cannot be edited or deleted, and each one carries a fingerprint of everything before it." />
 
-      <section className={cx("sheet mb-6 rounded-xl p-5 sm:p-6", result && !result.ok && "!border-danger/50")}>
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="max-w-[58ch]" aria-live="polite">
-            <h2 className={cx("text-[1.375rem] font-medium tracking-[-0.02em]", result && !result.ok && "text-danger", result?.ok && "text-good")}>{verdict}</h2>
-            <p className={cx("mt-1 text-sm leading-relaxed", result && !result.ok ? "text-danger" : "text-muted")}>
-              {running
-                ? `Recomputing fingerprints: ${checkedTo} of ${total}.`
-                : result === null
-                  ? `The nightly check recomputes all ${total} fingerprints. Run it now to confirm nothing has changed since.`
-                  : result.ok
-                    ? `All ${result.checked} entries match their fingerprints. Checked ${fmtDateTime(checkedAt!)}.`
-                    : `Entry ${result.brokenAt} does not match its fingerprint, so every entry after it is unproven. The CIA and ICT have been alerted and a breach register draft written.`}
+      <section className={cx("card mb-8 flex flex-col gap-6 rounded-xl p-5 sm:flex-row sm:items-center sm:p-7", result && !result.ok && "!border-danger/50")}>
+        <Seal total={total} checked={sealState === "idle" ? 0 : checkedTo} state={sealState} />
+        <div className="min-w-0 flex-1" aria-live="polite">
+          <h2 className={cx("text-[1.5rem] font-medium tracking-[-0.025em]", sealState === "ok" && "text-good", sealState === "broken" && "text-danger")}>
+            {sealState === "running" ? "Checking every fingerprint" : sealState === "idle" ? "Not checked this session" : sealState === "ok" ? "The log is intact" : `Entry ${brokenAt} has been altered`}
+          </h2>
+          <p className={cx("mt-1.5 max-w-[60ch] text-sm leading-relaxed", sealState === "broken" ? "text-danger" : "text-muted")}>
+            {sealState === "running"
+              ? `Recomputed ${checkedTo} of ${total}.`
+              : sealState === "idle"
+                ? `A nightly check recomputes all ${total} fingerprints. Run it now to confirm nothing has changed since.`
+                : sealState === "ok"
+                  ? `All ${total} entries match their fingerprints. Checked ${fmtDateTime(checkedAt!)}.`
+                  : `Its fingerprint no longer matches, so nothing recorded after it can be trusted until it is explained. The CIA and ICT have been alerted and a breach register draft written.`}
+          </p>
+          {first && last && (
+            <p className="mt-3 text-[0.8125rem] text-faint">
+              First entry {fmtDate(first.timestamp)}, latest {fmtDateTime(last.timestamp)}.
             </p>
-          </div>
-          <Button kind="primary" onClick={verify} disabled={running}>{running ? "Verifying" : result ? "Verify again" : "Verify chain"}</Button>
+          )}
+          {verifyError && <div className="mt-3"><Notice tone="error">{verifyError}</Notice></div>}
         </div>
-
-        {verifyError && <div className="mt-4"><Notice tone="error">{verifyError}</Notice></div>}
-        {/* The whole chain, oldest first. Each link fills in as it is checked. */}
-        <ol className="mt-6 flex flex-wrap items-center gap-y-3 pl-2" aria-hidden>
-          {state.audit.map((e, i) => {
-            const s = linkState(e.seq, checkedTo, brokenAt);
-            return (
-              <li
-                key={e.seq}
-                title={`#${e.seq} ${ACTION_LABEL[e.action] ?? e.action}`}
-                className={cx(
-                  "-ml-2 w-7 rounded-full border-2 transition-colors duration-150", i % 2 ? "h-3" : "h-[1.125rem]",
-                  s === "idle" && "border-rule",
-                  s === "ok" && "border-good",
-                  s === "broken" && "link-tick border-danger bg-danger",
-                  s === "after" && "border-dashed border-danger/45 bg-transparent",
-                )}
-              />
-            );
-          })}
-        </ol>
+        <Button kind="primary" onClick={verify} disabled={running} className="self-start sm:self-center">
+          {running ? "Verifying" : result ? "Verify again" : "Verify the log"}
+        </Button>
       </section>
 
-      <Panel>
-        <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div>
-            <Label htmlFor="al-user">Person</Label>
-            <select id="al-user" className="field" value={actor} onChange={(e) => setActor(e.target.value)}>
-              <option value="">Anyone</option>
-              {state.users.map((u) => <option key={u.id} value={u.id}>{u.fullName}</option>)}
-            </select>
-          </div>
-          <div>
-            <Label htmlFor="al-action">Action</Label>
-            <select id="al-action" className="field" value={action} onChange={(e) => setAction(e.target.value)}>
-              <option value="">Any action</option>
-              {actionGroups.map((g) => <option key={g} value={g}>{g}</option>)}
-            </select>
-          </div>
-          <div>
-            <Label htmlFor="al-object">Object</Label>
-            <select id="al-object" className="field" value={object} onChange={(e) => setObject(e.target.value)}>
-              <option value="">Any object</option>
-              {objectTypes.map((t) => <option key={t}>{t}</option>)}
-            </select>
-          </div>
-          <div>
-            <Label htmlFor="al-from">From</Label>
-            <input id="al-from" type="date" className="field" value={from} onChange={(e) => setFrom(e.target.value)} />
-          </div>
+      <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div>
+          <Label htmlFor="al-user">Person</Label>
+          <select id="al-user" className="field" value={actor} onChange={(e) => setActor(e.target.value)}>
+            <option value="">Anyone</option>
+            {people.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+          </select>
         </div>
-        {filtered && <p className="-mt-2 mb-4 text-[0.8125rem] text-muted">Filtered. Entries shown here are not all next to each other in the chain, so the links between them are dashed.</p>}
+        <div>
+          <Label htmlFor="al-action">Kind of action</Label>
+          <select id="al-action" className="field" value={action} onChange={(e) => setAction(e.target.value)}>
+            <option value="">Any action</option>
+            {actionGroups.map((g) => <option key={g} value={g}>{g}</option>)}
+          </select>
+        </div>
+        <div>
+          <Label htmlFor="al-object">Applies to</Label>
+          <select id="al-object" className="field" value={object} onChange={(e) => setObject(e.target.value)}>
+            <option value="">Anything</option>
+            {objectTypes.map((t) => <option key={t}>{t}</option>)}
+          </select>
+        </div>
+        <div>
+          <Label htmlFor="al-from">From</Label>
+          <input id="al-from" type="date" className="field" value={from} onChange={(e) => setFrom(e.target.value)} />
+        </div>
+      </div>
+      {filtered && <p className="-mt-3 mb-5 text-[0.8125rem] text-muted">Showing {entries.length} of {total} entries.</p>}
 
-        <Table head={["Entry", "When", "Who", "Action", "Change", "Reason", "Fingerprint"]}>
-          {entries.map((e, i) => {
-            const s = linkState(e.seq, checkedTo, brokenAt);
-            const above = entries[i - 1];
-            const below = entries[i + 1];
-            const sBelow = below && linkState(below.seq, checkedTo, brokenAt);
-            const sAbove = above && linkState(above.seq, checkedTo, brokenAt);
-            return (
-              <tr
-                key={e.seq}
-                className={cx("align-top", s === "broken" && "bg-danger-wash/70", hover === e.seq && "bg-paper/60")}
-                onMouseEnter={() => setHover(e.seq)}
-                onMouseLeave={() => setHover(null)}
-              >
-                <td className="relative w-[5.5rem]">
-                  {above && <span aria-hidden className={cx("absolute left-[calc(1.25rem+7px)] top-0 h-3 border-l-[1.5px] sm:left-[calc(1.5rem+7px)]", segmentTone(s, sAbove, !filtered && above.seq === e.seq + 1))} />}
-                  {below && <span aria-hidden className={cx("absolute bottom-0 left-[calc(1.25rem+7px)] top-[1.6rem] border-l-[1.5px] sm:left-[calc(1.5rem+7px)]", segmentTone(s, sBelow, !filtered && below.seq === e.seq - 1))} />}
-                  <span className="relative flex items-center gap-2">
-                    <LinkNode state={s} />
-                    <span className="font-mono text-xs text-muted">{e.seq}</span>
-                  </span>
-                </td>
-                <td className="whitespace-nowrap">{fmtDateTime(e.timestamp)}</td>
-                <td className="whitespace-nowrap">
-                  {userName(e.actor)}
-                  {e.actorRole && <span className="block text-[0.8125rem] text-muted">{e.actorRole}</span>}
-                </td>
-                <td className="whitespace-nowrap">
-                  {ACTION_LABEL[e.action] ?? e.action}
-                  <span className="block text-[0.8125rem] text-muted">{e.objectType}</span>
-                </td>
-                <td className="min-w-[12rem] max-w-[18rem] text-[0.8125rem] text-muted [overflow-wrap:anywhere]">{describeChange(e)}</td>
-                <td className="min-w-[12rem] max-w-[20rem] text-[0.8125rem]">{e.reason || <span className="text-faint">None</span>}</td>
-                <td className="whitespace-nowrap font-mono text-xs" title={`entry ${e.entryHash}\nprev ${e.prevHash}`}>
-                  {/* Hovering a row lights up its seal and the fingerprint it is sealed to in the row below. */}
-                  <span className={cx("rounded-sm px-1 py-px", hover !== null && e.seq === hover - 1 ? "bg-lake-wash text-lake-deep" : "text-ink")}>{e.entryHash.slice(0, 10)}</span>
-                  <span className="mt-1 block px-1 text-faint">
-                    <span className="font-sans">sealed to</span> <span className={cx("rounded-sm", hover === e.seq && "bg-lake-wash text-lake-deep")}>{e.prevHash.slice(0, 10)}</span>
-                  </span>
-                </td>
-              </tr>
-            );
-          })}
-        </Table>
-      </Panel>
+      {days.length ? (
+        <div className="space-y-8">
+          {days.map((d) => (
+            <section key={d.key} aria-label={dayTitle(d.key)}>
+              <h3 className="sticky top-16 z-10 -mx-1 mb-2 flex items-baseline justify-between bg-paper/95 px-1 py-2 backdrop-blur">
+                <span className="text-base font-medium tracking-[-0.01em]">{dayTitle(d.key)}</span>
+                <span className="text-[0.8125rem] text-faint">{d.rows.length} {d.rows.length === 1 ? "entry" : "entries"}</span>
+              </h3>
+              <ol className="card divide-y divide-line overflow-hidden rounded-xl">
+                {d.rows.map((e) => (
+                  <LedgerRow key={e.seq} e={e} state={entryState(e.seq, checkedTo, brokenAt)} name={userName(e.actor)} />
+                ))}
+              </ol>
+            </section>
+          ))}
+        </div>
+      ) : (
+        <Empty title="No entries match">Clear a filter to see more.</Empty>
+      )}
     </>
   );
 }
 
-function LinkNode({ state }: { state: LinkState }) {
-  const label = { idle: "Not checked", ok: "Fingerprint matches", broken: "Fingerprint does not match", after: "Unproven" }[state];
+function LedgerRow({ e, state, name }: { e: AuditEntry; state: EntryState; name: string }) {
+  const { state: store, userName } = useStore();
+  const kind = e.action.split(".")[0];
+  const change = describeChange(e, (key, v) => {
+    if (key === "assignee") return userName(v);
+    if (key === "queryId") return store.queries.find((q) => q.id === v)?.reference ?? v;
+    return v;
+  });
   return (
-    <span role="img" aria-label={label} className="grid size-[15px] shrink-0 place-items-center">
-      {state === "ok" ? (
-        <svg viewBox="0 0 16 16" className="link-tick size-[15px] text-good">
-          <circle cx="8" cy="8" r="7.5" fill="currentColor" />
-          <path d="M4.6 8.3 7 10.6l4.4-5" fill="none" className="stroke-sheet" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      ) : state === "broken" ? (
-        <svg viewBox="0 0 16 16" className="link-tick size-[15px] text-danger">
-          <circle cx="8" cy="8" r="7.5" fill="currentColor" />
-          <path d="m5.3 5.3 5.4 5.4M10.7 5.3l-5.4 5.4" className="stroke-sheet" strokeWidth="1.8" strokeLinecap="round" />
-        </svg>
-      ) : (
-        <span className={cx("size-[11px] rounded-full border-[1.5px] bg-sheet", state === "after" ? "border-dashed border-danger/60" : "border-rule")} />
+    <li
+      className={cx(
+        "grid gap-x-5 gap-y-1.5 px-4 py-3.5 sm:px-5 md:grid-cols-[3.5rem_minmax(10rem,13rem)_minmax(0,1fr)_7.5rem] md:items-start",
+        state === "broken" && "bg-danger-wash/70",
+        state === "after" && "opacity-60",
       )}
-    </span>
+    >
+      <time dateTime={e.timestamp} className="pt-0.5 text-sm tabular-nums text-muted">{TIME.format(new Date(e.timestamp))}</time>
+
+      <div className="flex min-w-0 items-center gap-2.5">
+        {e.actor ? <Avatar name={name} className="!size-7 !text-[0.6875rem]" /> : <span className="grid size-7 shrink-0 place-items-center rounded-full border border-dashed border-rule text-[0.6875rem] text-faint" aria-hidden>—</span>}
+        <span className="min-w-0 leading-tight">
+          <span className="block truncate text-sm">{e.actor ? name : "Not signed in"}</span>
+          {e.actorRole && <span className="block text-xs text-faint">{ROLE_NAME[e.actorRole]}</span>}
+        </span>
+      </div>
+
+      <div className="min-w-0">
+        <p className="flex items-center gap-2 text-[0.9375rem]">
+          <span className={cx("size-2 shrink-0 rounded-full", KIND_TONE[kind] ?? "bg-mark-neutral")} aria-hidden />
+          <span className="font-medium">{ACTION_LABEL[e.action] ?? e.action}</span>
+          <span className="text-sm text-faint">{e.objectType}</span>
+        </p>
+        {change && <p className="mt-0.5 pl-4 text-[0.8125rem] text-muted [overflow-wrap:anywhere]">{change}</p>}
+        {e.reason && <p className="mt-1 pl-4 text-sm leading-relaxed">“{e.reason}”</p>}
+      </div>
+
+      <div className="flex items-center gap-1.5 md:justify-end md:pt-0.5" title={`Entry ${e.seq}\nFingerprint ${e.entryHash}\nBuilt on ${e.prevHash}`}>
+        <span className={cx("font-mono text-xs", state === "broken" ? "text-danger" : "text-muted")}>{e.entryHash.slice(0, 8)}</span>
+        {state === "ok" && <Icon name="check" className="size-3.5 text-good" />}
+        {state === "broken" && <span className="text-xs font-medium text-danger">altered</span>}
+        <span className="sr-only">{state === "ok" ? "fingerprint matches" : state === "broken" ? "fingerprint does not match" : state === "after" ? "not proven" : "not checked"}</span>
+      </div>
+    </li>
   );
 }
 

@@ -150,6 +150,7 @@ export function ImportPage() {
       <PageHeader
         title="Import final queries"
         lede="Upload the final queries file, check every line, then confirm. Confirmed queries are locked; after that, corrections are made on each query and kept as revisions."
+        actions={<Link to="/batches" className="inline-flex min-h-10 items-center rounded-[5px] border border-rule px-4 text-sm font-medium hover:bg-hover">Batch history</Link>}
       />
       {done && <div className="mb-4"><Notice tone="ok">{done} <Link to="/queries" className="font-medium underline">View all queries</Link></Notice></div>}
 
