@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Button, Empty, Label, Notice, Panel, ReasonDialog, RiskGuide, RiskTag, StatusBadge, StatusMark, StatusRail, cx } from "../components";
 import { RISKS } from "../lib/risk";
-import { EVIDENCE_MAX_BYTES, EVIDENCE_TYPES, STATUSES, daysOverdue, fmtBytes, fmtDate, fmtDateTime, isAllowedTransition } from "../lib/rules";
-import { useMe, useStore } from "../storeTypes";
+import { EVIDENCE_MAX_BYTES, EVIDENCE_TYPES, ROLE_NAME, STATUSES, canAssign, daysOverdue, fmtBytes, fmtDate, fmtDateTime, isAllowedTransition, isAuditor } from "../lib/rules";
+import { useMe, useStore, type Outcome } from "../storeTypes";
+import { CommentThread } from "./Comments";
 import type { EditableField, FollowUpActivity, Query, Risk, Status } from "../types";
 
 const FIELD_LABEL: Record<EditableField, string> = {
@@ -40,10 +41,13 @@ function Workspace({ q }: { q: Query }) {
   }, [q.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const late = daysOverdue(q);
   const isCia = me.role === "CIA";
-  const isIa = me.role === "IA";
+  const isPia = me.role === "PIA";
+  const isIa = isAuditor(me.role);
   const batch = state.batches.find((b) => b.id === q.batchId);
   const pending = state.requests.find((r) => r.queryId === q.id && r.decision === "Pending");
+  const pendingMove = state.reassignments.find((r) => r.queryId === q.id && r.decision === "Pending");
   const lastRejected = [...state.requests].reverse().find((r) => r.queryId === q.id && r.decision === "Rejected");
+  const assigneeRole = q.assigneeRole ?? state.users.find((u) => u.id === q.currentAssignee)?.role;
 
   return (
     <>
@@ -63,10 +67,10 @@ function Workspace({ q }: { q: Query }) {
 
       <StatusRail status={q.status} />
 
-      {q.status === "Returned" && lastRejected && (
+      {(q.status === "Returned" || q.status === "Kept in View") && lastRejected && (
         <div className="mt-4">
-          <Notice tone="error">
-            <span className="font-medium">Returned by {userName(lastRejected.decidedBy)}:</span> {lastRejected.decisionReason}
+          <Notice tone={q.status === "Returned" ? "error" : "warn"}>
+            <span className="font-medium">{q.status === "Returned" ? "Returned" : "Kept in view"} by {userName(lastRejected.decidedBy)}:</span> {lastRejected.decisionReason}
           </Notice>
         </div>
       )}
@@ -76,22 +80,29 @@ function Workspace({ q }: { q: Query }) {
           <Finding q={q} />
           <FollowUp q={q} />
           <EvidencePanel q={q} />
+          <Panel title="Comments" subtitle="From the CIA and the CEO">
+            <CommentThread q={q} />
+          </Panel>
         </div>
 
         <div className="space-y-5">
           <Panel title="Details">
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2.5 text-sm">
               <dt className="text-muted">Department</dt>
-              <dd>{q.department}</dd>
-              <dt className="text-muted">Responsible</dt>
-              <dd>{q.responsibleOfficer}</dd>
+              <dd>
+                {q.department}
+                <span className="block text-muted">Responsible owner: {q.responsibleOfficer}</span>
+              </dd>
               <dt className="text-muted">Deadline</dt>
               <dd>
                 {fmtDate(q.deadline)}
                 {late > 0 && <span className="block font-medium text-danger">{late} days overdue</span>}
               </dd>
               <dt className="text-muted">Auditor</dt>
-              <dd className={cx(!q.currentAssignee && "text-faint")}>{q.currentAssignee ? userName(q.currentAssignee) : "Not assigned"}</dd>
+              <dd className={cx(!q.currentAssignee && "text-faint")}>
+                {q.currentAssignee ? userName(q.currentAssignee) : "Not assigned"}
+                {q.currentAssignee && assigneeRole && <span className="block text-muted">{ROLE_NAME[assigneeRole]}</span>}
+              </dd>
               <dt className="text-muted">Risk</dt>
               <dd>
                 <RiskTag risk={q.riskRatingCurrent} />
@@ -104,7 +115,9 @@ function Workspace({ q }: { q: Query }) {
           </Panel>
 
           {pending && <PendingRequest requestId={pending.id} />}
+          {pendingMove && <PendingMove requestId={pendingMove.id} />}
           {isCia && <CiaActions q={q} />}
+          {isPia && <PiaActions q={q} />}
           {isIa && <Propose q={q} hasPending={!!pending} />}
           <Revisions q={q} />
         </div>
@@ -140,6 +153,10 @@ const ACTION_TITLE: Record<string, string> = {
   "status.approve": "Closure approved",
   "status.reject": "Returned",
   "status.direct": "Status changed directly by the CIA",
+  "status.keep": "Kept in view",
+  "reassign.request": "Reassignment requested",
+  "reassign.approve": "Reassignment approved",
+  "reassign.reject": "Reassignment rejected",
 };
 
 function FollowUp({ q }: { q: Query }) {
@@ -164,7 +181,7 @@ function FollowUp({ q }: { q: Query }) {
       }),
   ].sort((a, b) => b.at.localeCompare(a.at));
 
-  const canWrite = (me.role === "CIA" || me.role === "IA") && q.status !== "Closed";
+  const canWrite = (me.role === "CIA" || isAuditor(me.role)) && q.status !== "Closed";
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -202,7 +219,7 @@ function FollowUp({ q }: { q: Query }) {
           {error && <div className="mt-2"><Notice tone="error">{error}</Notice></div>}
           <div className="mt-3 flex items-center justify-between gap-3">
             <p className="text-[0.8125rem] text-faint">
-              {me.role === "IA" && (q.status === "Assigned" || q.status === "Returned") ? "Saving moves this query to In Progress." : "Saved entries cannot be edited."}
+              {isAuditor(me.role) && isAllowedTransition(q.status, "In Progress", me.role) ? "Saving moves this query to In Progress." : "Saved entries cannot be edited."}
             </p>
             <Button kind="primary" type="submit">Save {kind === "Note" ? "note" : "response"}</Button>
           </div>
@@ -248,7 +265,7 @@ function EvidencePanel({ q }: { q: Query }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const files = state.evidence.filter((e) => e.queryId === q.id);
-  const canUpload = (me.role === "CIA" || me.role === "IA") && q.status !== "Closed";
+  const canUpload = (me.role === "CIA" || isAuditor(me.role)) && q.status !== "Closed";
 
   const onFile = async (f: File | undefined) => {
     if (!f) return;
@@ -304,11 +321,11 @@ function PendingRequest({ requestId }: { requestId: string }) {
   const me = useMe();
   const { state, userName, decide } = useStore();
   const r = state.requests.find((x) => x.id === requestId)!;
-  const [dialog, setDialog] = useState<"approve" | "reject" | null>(null);
+  const [dialog, setDialog] = useState<Outcome | null>(null);
   const own = r.proposedBy === me.id;
 
   return (
-    <Panel title="Waiting for the CIA" className="!border-warn-ring !bg-warn-wash/40">
+    <Panel title="Proposed for closure" className="!border-warn-ring !bg-warn-wash/40">
       <p className="text-sm text-muted">
         {userName(r.proposedBy)} proposed closure on {fmtDateTime(r.createdAt)}.
       </p>
@@ -318,42 +335,140 @@ function PendingRequest({ requestId }: { requestId: string }) {
           <p className="mt-3 text-sm text-muted">You proposed this, so another CIA must decide it.</p>
         ) : (
           <div className="mt-4 flex gap-2">
-            <Button kind="primary" onClick={() => setDialog("approve")}>Approve closure</Button>
-            <Button kind="danger" onClick={() => setDialog("reject")}>Return</Button>
+            <Button kind="primary" onClick={() => setDialog("Closed")}>Approve closure</Button>
+            <Button kind="danger" onClick={() => setDialog("Returned")}>Return</Button>
           </div>
         )
       )}
+      {me.role === "PIA" && (
+        <>
+          <p className="mt-3 text-sm text-muted">The CIA closes it. You can return it for more work or keep it in view.</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button kind="secondary" onClick={() => setDialog("Kept in View")}>Keep in view</Button>
+            <Button kind="danger" onClick={() => setDialog("Returned")}>Return</Button>
+          </div>
+        </>
+      )}
       <ReasonDialog
-        open={dialog === "approve"}
+        open={dialog === "Kept in View"}
+        title="Keep in view"
+        description="The query is not closed. It stays under watch until the auditor resumes work. The auditor sees your reason on the query and gets an email to look."
+        confirmLabel="Keep in view"
+        onConfirm={async (reason) => { const res = await decide(r.id, "Kept in View", reason); return res.ok ? null : res.error; }}
+        onClose={() => setDialog(null)}
+      />
+      <ReasonDialog
+        open={dialog === "Closed"}
         title="Approve closure"
         description="The query moves to Closed. The auditor can no longer add follow-up."
         confirmLabel="Approve closure"
         optional
-        onConfirm={async (reason) => { const res = await decide(r.id, true, reason); return res.ok ? null : res.error; }}
+        onConfirm={async (reason) => { const res = await decide(r.id, "Closed", reason); return res.ok ? null : res.error; }}
         onClose={() => setDialog(null)}
       />
       <ReasonDialog
-        open={dialog === "reject"}
+        open={dialog === "Returned"}
         title="Return to the auditor"
-        description="Say what is still missing. The auditor sees this reason on the query and by email."
+        description="Say what is still missing. The auditor sees this reason on the query and gets an email to look."
         confirmLabel="Return query"
         danger
-        onConfirm={async (reason) => { const res = await decide(r.id, false, reason); return res.ok ? null : res.error; }}
+        onConfirm={async (reason) => { const res = await decide(r.id, "Returned", reason); return res.ok ? null : res.error; }}
         onClose={() => setDialog(null)}
       />
     </Panel>
   );
 }
 
+// A PIA's reassignment waiting for the CIA (owner, 2026-10-22).
+function PendingMove({ requestId }: { requestId: string }) {
+  const me = useMe();
+  const { state, userName, decideReassignment } = useStore();
+  const r = state.reassignments.find((x) => x.id === requestId)!;
+  const [dialog, setDialog] = useState<"approve" | "reject" | null>(null);
+  return (
+    <Panel title="Reassignment waiting for the CIA" className="!border-warn-ring !bg-warn-wash/40">
+      <p className="text-sm text-muted">{userName(r.requestedBy)} asked on {fmtDateTime(r.createdAt)} to move it to <span className="font-medium text-ink">{userName(r.toAssignee)}</span>.</p>
+      <p className="mt-2 leading-relaxed">{r.reason}</p>
+      {me.role === "CIA" && (
+        <div className="mt-4 flex gap-2">
+          <Button kind="primary" onClick={() => setDialog("approve")}>Approve</Button>
+          <Button kind="danger" onClick={() => setDialog("reject")}>Reject</Button>
+        </div>
+      )}
+      <ReasonDialog
+        open={dialog === "approve"}
+        title={`Move to ${userName(r.toAssignee)}`}
+        description="The new auditor sees the full history and is emailed; the current auditor loses access straight away."
+        confirmLabel="Approve reassignment"
+        optional
+        onConfirm={async (reason) => { const res = await decideReassignment(r.id, true, reason); return res.ok ? null : res.error; }}
+        onClose={() => setDialog(null)}
+      />
+      <ReasonDialog
+        open={dialog === "reject"}
+        title="Reject the reassignment"
+        description={`The query stays with the current auditor and goes back to ${r.fromStatus}.`}
+        confirmLabel="Reject"
+        danger
+        onConfirm={async (reason) => { const res = await decideReassignment(r.id, false, reason); return res.ok ? null : res.error; }}
+        onClose={() => setDialog(null)}
+      />
+    </Panel>
+  );
+}
+
+function AuditorPicker({ q, value, onChange }: { q: Query; value: string; onChange: (id: string) => void }) {
+  const me = useMe();
+  const { state } = useStore();
+  const auditors = state.users.filter((u) => canAssign(me, u) && u.id !== q.currentAssignee);
+  return (
+    <div>
+      <Label htmlFor="assignee">Auditor</Label>
+      <select id="assignee" className="field" value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">Choose an IA or SIA</option>
+        {auditors.map((u) => <option key={u.id} value={u.id}>{u.fullName} ({u.role})</option>)}
+      </select>
+    </div>
+  );
+}
+
+// The PIA assigns IA or SIA; a reassignment goes to the CIA for approval (owner, 2026-10-22).
+function PiaActions({ q }: { q: Query }) {
+  const { assign, userName } = useStore();
+  const [open, setOpen] = useState(false);
+  const [assignee, setAssignee] = useState("");
+  const reassign = !!q.currentAssignee;
+  if (q.status === "Closed" || q.status === "Pending Approval") return null;
+  return (
+    <Panel title="Assignment">
+      <Button kind={reassign ? "secondary" : "primary"} className="w-full" onClick={() => { setAssignee(""); setOpen(true); }}>
+        {reassign ? "Request reassignment" : "Assign auditor"}
+      </Button>
+      <p className="mt-3 text-[0.8125rem] leading-snug text-faint">{reassign ? "A reassignment needs the CIA's approval. The current auditor keeps the query until then." : "The auditor gets an email with the reference and a link."}</p>
+      <ReasonDialog
+        open={open}
+        title={reassign ? `Reassign from ${userName(q.currentAssignee)}` : "Assign an auditor"}
+        description={reassign ? "The query becomes Pending Approval until the CIA decides. The CIA is emailed." : "Choose an Internal Auditor or Senior Internal Auditor."}
+        confirmLabel={reassign ? "Send to the CIA" : "Assign"}
+        optional={!reassign}
+        onConfirm={async (reason) => { if (!assignee) return "Choose an auditor."; const r = await assign(q.id, assignee, reason); return r.ok ? null : r.error; }}
+        onClose={() => setOpen(false)}
+      >
+        <AuditorPicker q={q} value={assignee} onChange={setAssignee} />
+      </ReasonDialog>
+    </Panel>
+  );
+}
+
 function CiaActions({ q }: { q: Query }) {
-  const { state, assign, editQuery, setStatusDirect, userName } = useStore();
+  const { assign, editQuery, setStatusDirect, userName } = useStore();
   const [dialog, setDialog] = useState<"assign" | "edit" | "status" | null>(null);
   const [assignee, setAssignee] = useState("");
   const [field, setField] = useState<EditableField>("riskRatingCurrent");
   const [value, setValue] = useState("");
   const [to, setTo] = useState<Status>("In Progress");
-  const auditors = state.users.filter((u) => u.role === "IA" && u.isActive && u.id !== q.currentAssignee);
   const reassign = !!q.currentAssignee;
+  const waiting = q.status === "Pending Approval";
 
   const openEdit = (f: EditableField) => {
     setField(f);
@@ -364,11 +479,11 @@ function CiaActions({ q }: { q: Query }) {
   return (
     <Panel title="CIA actions">
       <div className="grid gap-2">
-        <Button kind={reassign ? "secondary" : "primary"} onClick={() => { setAssignee(""); setDialog("assign"); }}>
+        <Button kind={reassign ? "secondary" : "primary"} disabled={waiting} onClick={() => { setAssignee(""); setDialog("assign"); }}>
           {reassign ? "Reassign" : "Assign auditor"}
         </Button>
         <Button kind="secondary" onClick={() => openEdit("riskRatingCurrent")}>Edit query</Button>
-        <Button kind="secondary" onClick={() => { setTo(q.status === "Closed" ? "In Progress" : "Closed"); setDialog("status"); }}>
+        <Button kind="secondary" disabled={waiting} onClick={() => { setTo(q.status === "Closed" ? "In Progress" : "Closed"); setDialog("status"); }}>
           {q.status === "Closed" ? "Reopen" : "Change status"}
         </Button>
       </div>
@@ -383,13 +498,7 @@ function CiaActions({ q }: { q: Query }) {
         onConfirm={async (reason) => { if (!assignee) return "Choose an auditor."; const r = await assign(q.id, assignee, reason); return r.ok ? null : r.error; }}
         onClose={() => setDialog(null)}
       >
-        <div>
-          <Label htmlFor="assignee">Auditor</Label>
-          <select id="assignee" className="field" value={assignee} onChange={(e) => setAssignee(e.target.value)}>
-            <option value="">Choose an auditor</option>
-            {auditors.map((u) => <option key={u.id} value={u.id}>{u.fullName}</option>)}
-          </select>
-        </div>
+        <AuditorPicker q={q} value={assignee} onChange={setAssignee} />
       </ReasonDialog>
 
       <ReasonDialog
@@ -436,7 +545,7 @@ function CiaActions({ q }: { q: Query }) {
         <div>
           <Label htmlFor="to-status">New status</Label>
           <select id="to-status" className="field" value={to} onChange={(e) => setTo(e.target.value as Status)}>
-            {STATUSES.filter((s) => s !== q.status).map((s) => <option key={s}>{s}</option>)}
+            {STATUSES.filter((s) => s !== q.status && s !== "Pending Approval").map((s) => <option key={s}>{s}</option>)}
           </select>
         </div>
       </ReasonDialog>
@@ -445,9 +554,10 @@ function CiaActions({ q }: { q: Query }) {
 }
 
 function Propose({ q, hasPending }: { q: Query; hasPending: boolean }) {
+  const me = useMe();
   const { proposeClosure } = useStore();
   const [open, setOpen] = useState(false);
-  const allowed = isAllowedTransition(q.status, "Proposed for Closure", "IA");
+  const allowed = isAllowedTransition(q.status, "Proposed for Closure", me.role);
   if (hasPending || q.status === "Closed") return null;
 
   return (
@@ -455,8 +565,10 @@ function Propose({ q, hasPending }: { q: Query; hasPending: boolean }) {
       <p className="text-sm leading-relaxed text-muted">
         {allowed
           ? "When the finding is resolved, propose closure. The CIA reviews your evidence and decides."
-          : q.status === "Returned"
+          : q.status === "Returned" || q.status === "Kept in View"
             ? "Add a note or response to resume work before proposing again."
+            : q.status === "Pending Approval"
+            ? "A reassignment is waiting for the CIA. Keep working while it is decided."
             : "Record your first follow-up to start work on this query."}
       </p>
       <Button kind="primary" className="mt-4 w-full" disabled={!allowed} onClick={() => setOpen(true)}>Propose closure</Button>

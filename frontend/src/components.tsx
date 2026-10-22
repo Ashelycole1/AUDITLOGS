@@ -71,6 +71,8 @@ const STATUS_STYLE: Record<Status, { pill: string; dot: string }> = {
   "Proposed for Closure": { pill: "bg-warn-wash text-warn ring-warn-ring", dot: "bg-mark-warn" },
   Closed: { pill: "bg-good-wash text-good ring-good-ring", dot: "bg-mark-good" },
   Returned: { pill: "bg-danger-wash text-danger ring-danger-ring", dot: "bg-mark-critical" },
+  "Pending Approval": { pill: "bg-warn-wash text-warn ring-warn-ring", dot: "bg-mark-warn" },
+  "Kept in View": { pill: "bg-chip text-ink ring-rule-strong", dot: "bg-mark-neutral" },
 };
 
 export function statusDot(s: Status): string {
@@ -86,6 +88,8 @@ export function StatusMark({ status, className }: { status: Status; className?: 
     "Proposed for Closure": "text-warn",
     Closed: "text-good",
     Returned: "text-danger",
+    "Pending Approval": "text-warn",
+    "Kept in View": "text-muted",
   };
   return (
     <svg viewBox="0 0 16 16" className={cx("size-4 shrink-0", tone[status], className)} aria-hidden>
@@ -95,6 +99,8 @@ export function StatusMark({ status, className }: { status: Status; className?: 
       {status === "Proposed for Closure" && <path d="M3 8.5 6.3 12 13 3.5" {...common} />}
       {status === "Closed" && (<><circle cx="8" cy="8" r="6" fill="currentColor" /><path d="m5.2 8.2 2 2 3.8-4.2" fill="none" className="stroke-sheet" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" /></>)}
       {status === "Returned" && <path d="m4 4 8 8M12 4l-8 8" {...common} />}
+      {status === "Pending Approval" && (<><circle cx="8" cy="8" r="5.5" {...common} strokeWidth={1.5} /><path d="M8 5v3.2l2 1.3" {...common} strokeWidth={1.5} /></>)}
+      {status === "Kept in View" && (<><path d="M1.8 8S4.2 3.8 8 3.8 14.2 8 14.2 8 11.8 12.2 8 12.2 1.8 8 1.8 8Z" {...common} strokeWidth={1.5} /><circle cx="8" cy="8" r="1.8" fill="currentColor" /></>)}
     </svg>
   );
 }
@@ -274,12 +280,25 @@ export function ReasonDialog({
   );
 }
 
-// The query's place in the workflow as a stepper. Returned loops back into In Progress.
+// The query's place in the workflow as a stepper. Returned and Kept in View loop back into In
+// Progress; Pending Approval holds the query where it is until the CIA decides a reassignment.
 const RAIL: Status[] = ["Imported", "Assigned", "In Progress", "Proposed for Closure", "Closed"];
+const OFF_RAIL: Partial<Record<Status, { note: string; tone: "danger" | "warn" | "muted" }>> = {
+  Returned: { note: "Returned for more work. It moves back to In Progress when work resumes.", tone: "danger" },
+  "Kept in View": { note: "Kept in view by the PIA. It moves back to In Progress when work resumes.", tone: "muted" },
+  "Pending Approval": { note: "A reassignment is waiting for the CIA's approval. The current auditor keeps the query until then.", tone: "warn" },
+};
+const OFF_TONE = {
+  danger: { ring: "bg-danger-wash ring-2 ring-danger", dot: "bg-danger", text: "text-danger" },
+  warn: { ring: "bg-warn-wash ring-2 ring-warn", dot: "bg-warn", text: "text-warn" },
+  muted: { ring: "bg-chip ring-2 ring-rule-strong", dot: "bg-muted", text: "text-ink" },
+};
 
 export function StatusRail({ status }: { status: Status }) {
-  const returned = status === "Returned";
-  const idx = returned ? 2 : RAIL.indexOf(status);
+  const off = OFF_RAIL[status];
+  const tone = off && OFF_TONE[off.tone];
+  const returned = !!off;
+  const idx = off ? 2 : RAIL.indexOf(status);
   return (
     <div className="card rounded-xl px-4 py-5 sm:px-6">
       <ol className="grid grid-cols-5" aria-label="Workflow position">
@@ -293,20 +312,20 @@ export function StatusRail({ status }: { status: Status }) {
                 className={cx(
                   "relative z-10 grid size-6 place-items-center rounded-full",
                   done && "bg-lake text-on-accent",
-                  current && (returned ? "bg-danger-wash ring-2 ring-danger" : "bg-lake-wash ring-2 ring-lake"),
+                  current && (tone ? tone.ring : "bg-lake-wash ring-2 ring-lake"),
                   !done && !current && "bg-sheet ring-2 ring-line",
                 )}
               >
-                {done ? <Icon name="check" className="size-3.5" /> : <span className={cx("size-2 rounded-full", current ? (returned ? "bg-danger" : "bg-lake") : "bg-line")} />}
+                {done ? <Icon name="check" className="size-3.5" /> : <span className={cx("size-2 rounded-full", current ? (tone ? tone.dot : "bg-lake") : "bg-line")} />}
               </span>
-              <span className={cx("mt-2 px-1 text-xs leading-tight sm:text-[0.8125rem]", current ? (returned ? "font-medium text-danger" : "font-medium text-lake-deep") : done ? "font-medium text-ink" : "text-faint")}>
-                {current && returned ? "Returned" : s}
+              <span className={cx("mt-2 px-1 text-xs leading-tight sm:text-[0.8125rem]", current ? (tone ? `font-medium ${tone.text}` : "font-medium text-lake-deep") : done ? "font-medium text-ink" : "text-faint")}>
+                {current && returned ? status : s}
               </span>
             </li>
           );
         })}
       </ol>
-      {returned && <p className="mt-4 text-center text-sm text-danger">Returned by the CIA. It moves back to In Progress when work resumes.</p>}
+      {off && tone && <p className={cx("mt-4 text-center text-sm", tone.text)}>{off.note}</p>}
     </div>
   );
 }

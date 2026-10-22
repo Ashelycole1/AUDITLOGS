@@ -1,14 +1,44 @@
-import type { Query, Role, Status, User } from "../types";
+import type { ExportFilters, Query, Role, Status, User } from "../types";
 
-// Allowed transitions: design.md section 5. Any other transition is rejected.
+export const ROLE_NAME: Record<Role, string> = {
+  PIA: "Principal Internal Auditor",
+  CIA: "Chief Internal Auditor",
+  IA: "Internal Auditor",
+  SIA: "Senior Internal Auditor",
+  CEO: "Chief Executive",
+  ICT: "ICT administrator",
+};
+
+// The audit chain, lowest first (owner, 2026-10-22). CEO and ICT sit outside it.
+const RANK: Partial<Record<Role, number>> = { IA: 1, SIA: 2, PIA: 3, CIA: 4 };
+/** The roles that work the queries assigned to them. */
+export const AUDITOR_ROLES: Role[] = ["IA", "SIA"];
+export const isAuditor = (role: Role) => AUDITOR_ROLES.includes(role);
+/** Roles that may assign. SIA permissions are still to be agreed with the client. */
+export const canAssignRole = (role: Role) => role === "PIA" || role === "CIA";
+
+/** Assignment flows down the chain: only to an active auditor ranked below the actor. Mirrors the server. */
+export function canAssign(actor: User, target: User): boolean {
+  return target.isActive && isAuditor(target.role) && (RANK[target.role] ?? 0) < (RANK[actor.role] ?? 0);
+}
+
+// Statuses a PIA's reassignment can start from, and return to if the CIA rejects it.
+export const REASSIGNABLE: Status[] = ["Assigned", "In Progress", "Returned", "Kept in View"];
+
+// Allowed transitions: design.md section 5, with the owner's changes of 2026-10-22. Any other is rejected.
+const T = (from: Status, to: Status, ...who: Role[]) => who.map((w) => ({ from, to, who: w }));
 export const TRANSITIONS: { from: Status; to: Status; who: Role }[] = [
-  { from: "Imported", to: "Assigned", who: "CIA" },
-  { from: "Assigned", to: "In Progress", who: "IA" },
-  { from: "In Progress", to: "Proposed for Closure", who: "IA" },
-  { from: "Proposed for Closure", to: "Closed", who: "CIA" },
-  { from: "Proposed for Closure", to: "Returned", who: "CIA" },
-  { from: "Returned", to: "In Progress", who: "IA" },
-  { from: "Closed", to: "In Progress", who: "CIA" },
+  ...T("Imported", "Assigned", "PIA", "CIA"),
+  ...T("Assigned", "In Progress", "IA", "SIA"),
+  ...T("In Progress", "Proposed for Closure", "IA", "SIA"),
+  ...T("Proposed for Closure", "Closed", "CIA"),
+  ...T("Proposed for Closure", "Returned", "PIA", "CIA"),
+  ...T("Proposed for Closure", "Kept in View", "PIA"),
+  ...T("Returned", "In Progress", "IA", "SIA"),
+  ...T("Kept in View", "In Progress", "IA", "SIA"),
+  ...T("Kept in View", "Returned", "PIA", "CIA"),
+  ...T("Closed", "In Progress", "CIA"),
+  ...REASSIGNABLE.flatMap((s) => [...T(s, "Pending Approval", "PIA"), ...T("Pending Approval", s, "CIA")]),
 ];
 
 export const STATUSES: Status[] = [
@@ -16,8 +46,10 @@ export const STATUSES: Status[] = [
   "Assigned",
   "In Progress",
   "Proposed for Closure",
-  "Closed",
+  "Pending Approval",
+  "Kept in View",
   "Returned",
+  "Closed",
 ];
 
 export function isAllowedTransition(from: Status, to: Status, role: Role): boolean {
@@ -40,10 +72,36 @@ export function queriesFor(user: User, all: Query[]): Query[] {
     case "CEO":
       return all;
     case "IA":
+    case "SIA":
       return all.filter((q) => q.currentAssignee === user.id);
     case "ICT":
       return [];
   }
+}
+
+/** The query-list filters, as the server applies them to the list and to exports. */
+export function matchesFilters(q: Query, f: ExportFilters): boolean {
+  const term = (f.q ?? "").trim().toLowerCase();
+  return (
+    (!f.status || q.status === f.status) &&
+    (!f.risk || q.riskRatingCurrent === f.risk) &&
+    (!f.department || q.department === f.department) &&
+    (!f.assignee || (f.assignee === "none" ? !q.currentAssignee : q.currentAssignee === f.assignee)) &&
+    (!(f.overdue === "1" || f.overdue === "true") || daysOverdue(q) > 0) &&
+    (!term || q.reference.toLowerCase().includes(term) || q.title.toLowerCase().includes(term) || q.descriptionCurrent.toLowerCase().includes(term))
+  );
+}
+
+export function describeFilters(f: ExportFilters, name: (id: string) => string): string {
+  const parts = [
+    f.status && `status ${f.status}`,
+    f.risk && `${f.risk} risk`,
+    f.department && f.department,
+    f.assignee && (f.assignee === "none" ? "not assigned" : `auditor ${name(f.assignee)}`),
+    (f.overdue === "1" || f.overdue === "true") && "overdue only",
+    f.q && `matching "${f.q}"`,
+  ].filter(Boolean);
+  return parts.length ? parts.join(", ") : "all queries";
 }
 
 export function daysOverdue(q: Query, now = new Date()): number {

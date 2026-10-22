@@ -4,13 +4,14 @@ import { CRITICAL, ChartCard, Columns, GOOD, Heatmap, LegendKey, Meter, SERIES, 
 import { Avatar, Empty, PageHeader, Ref, RiskTag, StatusBadge, cx, useStackLabels } from "../components";
 import { RISKS, riskRank } from "../lib/risk";
 import { Icon, type IconName } from "../icons";
-import { STATUSES, daysOverdue, dueWithin, fmtDate, fmtDateTime } from "../lib/rules";
+import { STATUSES, daysOverdue, dueWithin, fmtDate, fmtDateTime, isAuditor } from "../lib/rules";
 import { useMe, useStore } from "../storeTypes";
 import type { Query, Risk, Status } from "../types";
 import { ACTION_LABEL } from "./Cia";
 
 const DAY = 86_400_000;
-const OPEN_STATUSES: Status[] = ["Imported", "Assigned", "In Progress", "Proposed for Closure", "Returned"];
+const OPEN_STATUSES: Status[] = ["Imported", "Assigned", "In Progress", "Proposed for Closure", "Pending Approval", "Kept in View", "Returned"];
+const SHORT: Partial<Record<Status, string>> = { "Proposed for Closure": "Proposed", "In Progress": "In progress", "Pending Approval": "Pending", "Kept in View": "Kept in view" };
 const short = (t: number) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "Africa/Kampala" }).format(t);
 const endOfDeadline = (q: Query) => new Date(q.deadline + "T23:59:59+03:00").getTime();
 
@@ -65,11 +66,13 @@ export default function DashboardPage() {
   const overdueQs = openQs.filter((q) => daysOverdue(q) > 0).sort((a, b) => riskRank(a.riskRatingCurrent) - riskRank(b.riskRatingCurrent) || daysOverdue(b) - daysOverdue(a));
   const dueSoon = openQs.filter((q) => dueWithin(q, 7)).sort((a, b) => riskRank(a.riskRatingCurrent) - riskRank(b.riskRatingCurrent) || a.deadline.localeCompare(b.deadline));
   const closed = qs.length - openQs.length;
-  const pending = state.requests.filter((r) => r.decision === "Pending" && qs.some((q) => q.id === r.queryId));
+  const proposals = state.requests.filter((r) => r.decision === "Pending" && qs.some((q) => q.id === r.queryId));
+  // The CIA also decides reassignments and exports (owner, 2026-10-22).
+  const pending: { createdAt: string }[] = me.role === "CIA" ? [...proposals, ...state.reassignments.filter((r) => r.decision === "Pending"), ...state.exports.filter((x) => x.decision === "Pending")] : proposals;
   const ago = (arr: number[], n: number) => arr[Math.max(0, arr.length - 1 - n)];
 
   const isCia = me.role === "CIA";
-  const isIa = me.role === "IA";
+  const isIa = isAuditor(me.role);
   const canOpen = me.role !== "CEO";
   const title = isIa ? "My dashboard" : "Dashboard";
   const lede = isIa
@@ -80,8 +83,10 @@ export default function DashboardPage() {
 
   const fourth: Tile = isCia
     ? { icon: "approvals", label: "Awaiting your decision", value: pending.length, note: pending.length ? waitingNote(pending.reduce((a, r) => (r.createdAt < a ? r.createdAt : a), pending[0].createdAt)) : "Nothing waiting", to: "/approvals", tone: pending.length ? "warn" : undefined }
+    : me.role === "PIA"
+      ? { icon: "approvals", label: "Proposals to review", value: pending.length, note: pending.length ? waitingNote(pending.reduce((a, r) => (r.createdAt < a ? r.createdAt : a), pending[0].createdAt)) : "Nothing waiting", to: "/approvals", tone: pending.length ? "warn" : undefined }
     : isIa
-      ? { icon: "alert", label: "Returned to you", value: qs.filter((q) => q.status === "Returned").length, note: "Read the CIA's reason and continue", to: "/queries", tone: qs.some((q) => q.status === "Returned") ? "danger" : undefined }
+      ? { icon: "alert", label: "Returned to you", value: qs.filter((q) => q.status === "Returned").length, note: "Read the reason and continue", to: "/queries", tone: qs.some((q) => q.status === "Returned") ? "danger" : undefined }
       : { icon: "clock", label: "Due in the next 7 days", value: dueSoon.length, note: dueSoon[0] ? `Next: ${fmtDate(dueSoon[0].deadline)}` : "Nothing due this week", tone: dueSoon.length ? "warn" : undefined };
 
   const lateDelta = trend.late[trend.late.length - 1] - ago(trend.late, 30);
@@ -101,7 +106,7 @@ export default function DashboardPage() {
     .filter((r) => r.closed + r.open + r.overdue > 0)
     .sort((a, b) => b.overdue - a.overdue || b.open + b.overdue - (a.open + a.overdue));
 
-  const auditors = state.users.filter((u) => u.role === "IA");
+  const auditors = state.users.filter((u) => isAuditor(u.role));
   const workload = auditors
     .map((u) => {
       const mine = openQs.filter((q) => q.currentAssignee === u.id);
@@ -194,7 +199,7 @@ export default function DashboardPage() {
         >
           {/* Statuses down, the four risk tiers across: four narrow columns fit a phone, five status columns did not. */}
           <Heatmap
-            rows={OPEN_STATUSES.map((s) => ({ key: s, name: s, label: s === "Proposed for Closure" ? "Proposed" : s === "In Progress" ? "In progress" : s }))}
+            rows={OPEN_STATUSES.map((s) => ({ key: s, name: s, label: SHORT[s] ?? s }))}
             cols={RISKS.map((r) => ({ key: r, name: `${r} risk`, label: <RiskTag risk={r} compact /> }))}
             value={(s, r) => openQs.filter((q) => q.riskRatingCurrent === r && q.status === s).length}
           />

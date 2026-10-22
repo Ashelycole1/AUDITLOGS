@@ -1,17 +1,10 @@
 import { useState } from "react";
 import { Button, Check, Empty, Label, Notice, PageHeader, Panel, ReasonDialog, Table, cx } from "../components";
-import { fmtDateTime } from "../lib/rules";
+import { ROLE_NAME, fmtDateTime } from "../lib/rules";
 import { useMe, useStore } from "../storeTypes";
 import type { Role } from "../types";
 
-const ROLES: Role[] = ["PIA", "CIA", "IA", "CEO", "ICT"];
-const ROLE_NAME: Record<Role, string> = {
-  PIA: "Principal Internal Auditor",
-  CIA: "Chief Internal Auditor",
-  IA: "Internal Auditor",
-  CEO: "Chief Executive",
-  ICT: "ICT administrator",
-};
+const ROLES: Role[] = ["CIA", "PIA", "SIA", "IA", "CEO", "ICT"];
 
 export function UsersPage() {
   const me = useMe();

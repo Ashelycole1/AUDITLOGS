@@ -1,4 +1,4 @@
-export type Role = "PIA" | "CIA" | "IA" | "CEO" | "ICT";
+export type Role = "PIA" | "CIA" | "IA" | "SIA" | "CEO" | "ICT";
 
 export type Status =
   | "Imported"
@@ -6,7 +6,9 @@ export type Status =
   | "In Progress"
   | "Proposed for Closure"
   | "Closed"
-  | "Returned";
+  | "Returned"
+  | "Pending Approval"
+  | "Kept in View";
 
 export type Risk = "Critical" | "High" | "Medium" | "Low";
 
@@ -43,6 +45,8 @@ export interface Query {
   responsibleOfficer: string;
   department: string;
   currentAssignee: string | null;
+  /** IA or SIA (API). The demo looks it up from its users. */
+  assigneeRole?: Role | null;
   closedAt: string | null;
   /** When the batch was confirmed (API). The demo works it out from its batches. */
   importedAt?: string | null;
@@ -93,10 +97,56 @@ export interface StatusChangeRequest {
   decidedBy: string | null;
   decisionReason: string | null;
   decidedAt: string | null;
+  /** Where the decision took the query: Closed, Returned or Kept in View. */
+  decidedStatus?: Status | null;
   createdAt: string;
   /** Counts supplied by the API's approvals inbox. */
   responses?: number;
   evidenceFiles?: number;
+}
+
+export type Decision = "Pending" | "Approved" | "Rejected";
+
+/** A PIA's request to move a query to another auditor, decided by the CIA. */
+export interface ReassignmentRequest {
+  id: string;
+  queryId: string;
+  fromAssignee: string;
+  toAssignee: string;
+  fromStatus: Status;
+  requestedBy: string;
+  reason: string;
+  decision: Decision;
+  decidedBy: string | null;
+  decisionReason: string | null;
+  decidedAt: string | null;
+  createdAt: string;
+}
+
+export type ExportFilters = Partial<Record<"status" | "risk" | "department" | "assignee" | "overdue" | "q", string>>;
+
+/** A PIA's request to export queries. Downloadable once the CIA approves. */
+export interface ExportRequest {
+  id: string;
+  requestedBy: string;
+  filters: ExportFilters;
+  reason: string;
+  decision: Decision;
+  decidedBy: string | null;
+  decisionReason: string | null;
+  decidedAt: string | null;
+  downloads: number;
+  createdAt: string;
+}
+
+/** An oversight comment on a query by the CIA or the CEO. */
+export interface Comment {
+  id: string;
+  queryId: string;
+  author: string;
+  authorRole: Role;
+  body: string;
+  createdAt: string;
 }
 
 export interface AuditEntry {

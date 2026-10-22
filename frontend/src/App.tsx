@@ -4,52 +4,51 @@ import { Avatar, cx, ThemeToggle, Wordmark } from "./components";
 import { Icon, type IconName } from "./icons";
 import { useStore } from "./storeTypes";
 import type { Role } from "./types";
+import { ROLE_NAME } from "./lib/rules";
 import Login from "./pages/Login";
 import DashboardPage from "./pages/Dashboard";
 import QueriesPage from "./pages/Queries";
 import QueryDetail from "./pages/QueryDetail";
 import { ImportPage, BatchesPage } from "./pages/Imports";
 import { ApprovalsPage, AuditLogPage, ReportsPage, CompliancePage } from "./pages/Cia";
-import { CiaActivityPage } from "./pages/Oversight";
+import { CiaActivityPage, PersonnelPage } from "./pages/Oversight";
 import { UsersPage, SystemPage } from "./pages/Ict";
 
 type NavItem = { to: string; label: string; icon: IconName };
 
+// Import and Batches moved from the PIA to the CIA (owner, 2026-10-22).
+const AUDITOR_NAV: NavItem[] = [
+  { to: "/dashboard", label: "Dashboard", icon: "dashboard" },
+  { to: "/queries", label: "My queries", icon: "queries" },
+];
+
 const NAV: Record<Role, NavItem[]> = {
   PIA: [
     { to: "/dashboard", label: "Dashboard", icon: "dashboard" },
-    { to: "/import", label: "Import", icon: "upload" },
-    { to: "/batches", label: "Batches", icon: "layers" },
     { to: "/queries", label: "All queries", icon: "queries" },
+    { to: "/approvals", label: "Reviews", icon: "approvals" },
   ],
   CIA: [
     { to: "/dashboard", label: "Dashboard", icon: "dashboard" },
     { to: "/queries", label: "Queries", icon: "queries" },
     { to: "/approvals", label: "Approvals", icon: "approvals" },
+    { to: "/import", label: "Import", icon: "upload" },
+    { to: "/batches", label: "Batches", icon: "layers" },
     { to: "/audit-log", label: "Audit log", icon: "chain" },
     { to: "/reports", label: "Reports", icon: "reports" },
     { to: "/compliance", label: "Compliance", icon: "compliance" },
   ],
-  IA: [
-    { to: "/dashboard", label: "Dashboard", icon: "dashboard" },
-    { to: "/queries", label: "My queries", icon: "queries" },
-  ],
+  IA: AUDITOR_NAV,
+  SIA: AUDITOR_NAV,
   CEO: [
     { to: "/dashboard", label: "Dashboard", icon: "dashboard" },
+    { to: "/personnel", label: "Personnel", icon: "users" },
     { to: "/cia-activity", label: "CIA activity", icon: "activity" },
   ],
   ICT: [
     { to: "/users", label: "Users", icon: "users" },
     { to: "/system", label: "System", icon: "server" },
   ],
-};
-
-const ROLE_NAME: Record<Role, string> = {
-  PIA: "Principal Internal Auditor",
-  CIA: "Chief Internal Auditor",
-  IA: "Internal Auditor",
-  CEO: "Chief Executive",
-  ICT: "ICT administrator",
 };
 
 const IDLE_MINUTES = 30;
@@ -84,9 +83,15 @@ function Shell() {
   // Wait for the session check so a reload does not bounce a signed-in person to the sign-in page.
   if (!ready) return <div className="grid min-h-dvh place-items-center text-sm text-muted" role="status">Loading</div>;
   if (!me) return <Navigate to="/login" replace />;
-  const pending = state.requests.filter((r) => r.decision === "Pending").length;
+  // What waits on this person: the CIA decides proposals, reassignments and exports; the PIA reviews proposals.
+  const pending =
+    me.role === "CIA"
+      ? [...state.requests, ...state.reassignments, ...state.exports].filter((r) => r.decision === "Pending").length
+      : me.role === "PIA"
+        ? state.requests.filter((r) => r.decision === "Pending").length
+        : 0;
   const today = new Intl.DateTimeFormat("en-UG", { timeZone: "Africa/Kampala", weekday: "short", day: "numeric", month: "short", year: "numeric" }).format(now);
-  const canSearch = me.role === "PIA" || me.role === "CIA" || me.role === "IA";
+  const canSearch = me.role === "PIA" || me.role === "CIA" || me.role === "IA" || me.role === "SIA";
 
   const search = (e: React.FormEvent) => {
     e.preventDefault();
@@ -204,25 +209,26 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route element={<Shell />}>
           <Route index element={<Home />} />
-          <Route element={<RoleRoute roles={["PIA", "CIA", "IA", "CEO"]} />}>
+          <Route element={<RoleRoute roles={["PIA", "CIA", "IA", "SIA", "CEO"]} />}>
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/overview" element={<Navigate to="/dashboard" replace />} />
           </Route>
-          <Route element={<RoleRoute roles={["PIA", "CIA", "IA"]} />}>
+          <Route element={<RoleRoute roles={["PIA", "CIA", "IA", "SIA"]} />}>
             <Route path="/queries" element={<QueriesPage />} />
             <Route path="/queries/:id" element={<QueryDetail />} />
           </Route>
-          <Route element={<RoleRoute roles={["PIA"]} />}>
-            <Route path="/import" element={<ImportPage />} />
-            <Route path="/batches" element={<BatchesPage />} />
+          <Route element={<RoleRoute roles={["PIA", "CIA"]} />}>
+            <Route path="/approvals" element={<ApprovalsPage />} />
           </Route>
           <Route element={<RoleRoute roles={["CIA"]} />}>
-            <Route path="/approvals" element={<ApprovalsPage />} />
+            <Route path="/import" element={<ImportPage />} />
+            <Route path="/batches" element={<BatchesPage />} />
             <Route path="/audit-log" element={<AuditLogPage />} />
             <Route path="/reports" element={<ReportsPage />} />
             <Route path="/compliance" element={<CompliancePage />} />
           </Route>
           <Route element={<RoleRoute roles={["CEO"]} />}>
+            <Route path="/personnel" element={<PersonnelPage />} />
             <Route path="/cia-activity" element={<CiaActivityPage />} />
           </Route>
           <Route element={<RoleRoute roles={["ICT"]} />}>

@@ -149,7 +149,7 @@ export function ImportPage() {
     <>
       <PageHeader
         title="Import final queries"
-        lede="Upload the final queries file, check every line, then confirm. Confirmed queries are locked. After that, only the CIA can correct them."
+        lede="Upload the final queries file, check every line, then confirm. Confirmed queries are locked; after that, corrections are made on each query and kept as revisions."
       />
       {done && <div className="mb-4"><Notice tone="ok">{done} <Link to="/queries" className="font-medium underline">View all queries</Link></Notice></div>}
 
@@ -301,7 +301,7 @@ export function BatchesPage() {
       <Panel>
         <Table
           head={["File", "Queries", "Status", "Imported by", "When"]}
-          empty={!batches.length && <div className="px-5 pb-2 sm:px-6"><Empty title="No imports yet">Files the PIA confirms appear here.</Empty></div>}
+          empty={!batches.length && <div className="px-5 pb-2 sm:px-6"><Empty title="No imports yet">Files the CIA confirms appear here.</Empty></div>}
         >
           {batches.map((b) => (
             <tr key={b.id} className={cx(b.status === "Cancelled" && "text-muted")}>

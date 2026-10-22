@@ -2,26 +2,56 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button, Check, Empty, Label, Notice, PageHeader, Panel, ReasonDialog, Ref, RiskTag, StatusBadge, Table, cx } from "../components";
 import { verifyChain } from "../lib/auditChain";
-import { STATUSES, daysOverdue, fmtDate, fmtDateTime } from "../lib/rules";
-import { useMe, useStore } from "../storeTypes";
-import type { AuditEntry, StatusChangeRequest } from "../types";
+import { STATUSES, daysOverdue, describeFilters, fmtDate, fmtDateTime, matchesFilters } from "../lib/rules";
+import { useMe, useStore, type Outcome } from "../storeTypes";
+import type { AuditEntry, Decision, ExportFilters, ExportRequest, Query, ReassignmentRequest, StatusChangeRequest } from "../types";
 
+// CIA: the approvals inbox for closure proposals, reassignments and exports.
+// PIA: reviews of closure proposals (return or keep in view), and their own requests (owner, 2026-10-22).
 export function ApprovalsPage() {
+  const me = useMe();
   const { state } = useStore();
-  const pending = state.requests.filter((r) => r.decision === "Pending").sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const isCia = me.role === "CIA";
+  const oldest = <T extends { createdAt: string }>(a: T, b: T) => a.createdAt.localeCompare(b.createdAt);
+  const proposals = state.requests.filter((r) => r.decision === "Pending").sort(oldest);
+  const moves = state.reassignments.filter((r) => r.decision === "Pending").sort(oldest);
+  const exportsWaiting = state.exports.filter((r) => r.decision === "Pending").sort(oldest);
   const decided = state.requests.filter((r) => r.decision !== "Pending").sort((a, b) => (b.decidedAt ?? "").localeCompare(a.decidedAt ?? "")).slice(0, 6);
+  const waiting = isCia ? proposals.length + moves.length + exportsWaiting.length : proposals.length;
 
   return (
     <>
       <PageHeader
-        title="Approvals"
-        lede={pending.length ? `${pending.length} ${pending.length === 1 ? "proposal is" : "proposals are"} waiting for your decision, oldest first.` : "Nothing is waiting for you."}
+        title={isCia ? "Approvals" : "Reviews"}
+        lede={
+          isCia
+            ? waiting ? `${waiting} ${waiting === 1 ? "item is" : "items are"} waiting for your decision, oldest first.` : "Nothing is waiting for you."
+            : "Review the auditors' closure proposals: return them for more work or keep them in view. Only the CIA can close a query. Your reassignment and export requests are below."
+        }
       />
-      <div className="space-y-5">
-        {pending.length ? pending.map((r) => <RequestCard key={r.id} r={r} />) : <Empty title="No proposals waiting">When an auditor proposes closing a query, it appears here for your decision.</Empty>}
-      </div>
+
+      <Section title="Closure proposals" count={proposals.length}>
+        {proposals.length ? proposals.map((r) => <RequestCard key={r.id} r={r} />) : <Empty title="No proposals waiting">When an auditor proposes closing a query, it appears here{isCia ? " for your decision" : " for your review"}.</Empty>}
+      </Section>
+
+      {isCia ? (
+        <>
+          <Section title="Reassignments" count={moves.length}>
+            {moves.length ? moves.map((r) => <ReassignmentCard key={r.id} r={r} />) : <Empty title="No reassignments waiting">When the PIA asks to move a query to another auditor, it appears here.</Empty>}
+          </Section>
+          <Section title="Exports" count={exportsWaiting.length}>
+            {exportsWaiting.length ? exportsWaiting.map((x) => <ExportCard key={x.id} x={x} />) : <Empty title="No exports waiting">When the PIA asks to export queries, it appears here.</Empty>}
+          </Section>
+        </>
+      ) : (
+        <>
+          <MyReassignments />
+          <MyExports />
+        </>
+      )}
+
       {decided.length > 0 && (
-        <Panel title="Recently decided" className="mt-8">
+        <Panel title="Recently decided proposals" className="mt-8">
           <ul className="divide-y divide-line">
             {decided.map((r) => <DecidedRow key={r.id} r={r} />)}
           </ul>
@@ -31,31 +61,50 @@ export function ApprovalsPage() {
   );
 }
 
+function Section({ title, count, children }: { title: string; count: number; children: React.ReactNode }) {
+  return (
+    <section className="mb-8">
+      <h2 className="mb-3 flex items-center gap-2 text-base font-medium tracking-[-0.01em]">
+        {title}
+        {count > 0 && <span className="min-w-5 rounded-full bg-lake px-1.5 text-center font-mono text-[0.6875rem] leading-5 text-on-accent">{count}</span>}
+      </h2>
+      <div className="space-y-5">{children}</div>
+    </section>
+  );
+}
+
 function waitingFor(iso: string): string {
   const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
   return days < 1 ? "Waiting since today" : `Waiting ${days} ${days === 1 ? "day" : "days"}`;
+}
+
+function SheetHeader({ q, since }: { q: Query; since: string }) {
+  const days = Math.floor((Date.now() - new Date(since).getTime()) / 86_400_000);
+  return (
+    <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2 border-b border-line px-5 py-4 sm:px-6">
+      <div className="min-w-0 max-w-[60ch]">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1"><Ref>{q.reference}</Ref><RiskTag risk={q.riskRatingCurrent} /></div>
+        <Link to={`/queries/${q.id}`} className="mt-1 block text-[1.1875rem] font-medium leading-snug tracking-[-0.015em] hover:text-lake hover:underline">{q.title}</Link>
+      </div>
+      <p className={cx("text-sm font-medium", days >= 5 ? "text-danger" : "text-warn")}>{waitingFor(since)}</p>
+    </header>
+  );
 }
 
 // A review sheet: what the auditor says, the checks the closure rule needs, then the decision.
 function RequestCard({ r }: { r: StatusChangeRequest }) {
   const me = useMe();
   const { state, userName, decide } = useStore();
-  const [dialog, setDialog] = useState<"approve" | "reject" | null>(null);
+  const [dialog, setDialog] = useState<Outcome | null>(null);
   const q = state.queries.find((x) => x.id === r.queryId)!;
   const responses = r.responses ?? state.activities.filter((a) => a.queryId === q.id && a.kind === "ManagementResponse").length;
   const files = r.evidenceFiles ?? state.evidence.filter((e) => e.queryId === q.id).length;
   const own = r.proposedBy === me.id;
-  const days = Math.floor((Date.now() - new Date(r.createdAt).getTime()) / 86_400_000);
+  const isCia = me.role === "CIA";
 
   return (
     <article className="sheet overflow-hidden rounded-xl">
-      <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2 border-b border-line px-5 py-4 sm:px-6">
-        <div className="min-w-0 max-w-[60ch]">
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1"><Ref>{q.reference}</Ref><RiskTag risk={q.riskRatingCurrent} /></div>
-          <Link to={`/queries/${q.id}`} className="mt-1 block text-[1.1875rem] font-medium leading-snug tracking-[-0.015em] hover:text-lake hover:underline">{q.title}</Link>
-        </div>
-        <p className={cx("text-sm font-medium", days >= 5 ? "text-danger" : "text-warn")}>{waitingFor(r.createdAt)}</p>
-      </header>
+      <SheetHeader q={q} since={r.createdAt} />
 
       <div className="grid gap-6 px-5 py-5 sm:px-6 md:grid-cols-[minmax(0,1fr)_16rem]">
         <div>
@@ -72,48 +121,237 @@ function RequestCard({ r }: { r: StatusChangeRequest }) {
       <footer className="flex flex-wrap items-center justify-end gap-2 border-t border-line bg-subtle px-5 py-3.5 sm:px-6">
         {own ? (
           <p className="mr-auto text-sm text-muted">You cannot decide your own proposal. Another CIA must decide it.</p>
+        ) : isCia ? (
+          <>
+            <Button kind="danger" onClick={() => setDialog("Returned")}>Return to auditor</Button>
+            <Button kind="primary" onClick={() => setDialog("Closed")}>Approve closure</Button>
+          </>
         ) : (
           <>
-            <Button kind="danger" onClick={() => setDialog("reject")}>Return to auditor</Button>
-            <Button kind="primary" onClick={() => setDialog("approve")}>Approve closure</Button>
+            <p className="mr-auto text-sm text-muted">Leave it for the CIA to close, or:</p>
+            <Button kind="secondary" onClick={() => setDialog("Kept in View")}>Keep in view</Button>
+            <Button kind="danger" onClick={() => setDialog("Returned")}>Return to auditor</Button>
           </>
         )}
       </footer>
 
       <ReasonDialog
-        open={dialog === "approve"}
+        open={dialog === "Closed"}
         title={`Approve closure of ${q.reference}`}
         description="The query moves to Closed and your decision is written to the audit log."
         confirmLabel="Approve closure"
         optional
-        onConfirm={async (reason) => { const res = await decide(r.id, true, reason); return res.ok ? null : res.error; }}
+        onConfirm={async (reason) => { const res = await decide(r.id, "Closed", reason); return res.ok ? null : res.error; }}
         onClose={() => setDialog(null)}
       />
       <ReasonDialog
-        open={dialog === "reject"}
+        open={dialog === "Returned"}
         title={`Return ${q.reference} to the auditor`}
-        description="Say what is still missing. The auditor sees this reason on the query and by email."
+        description="Say what is still missing. The auditor sees this reason on the query and gets an email to look."
         confirmLabel="Return to auditor"
         danger
-        onConfirm={async (reason) => { const res = await decide(r.id, false, reason); return res.ok ? null : res.error; }}
+        onConfirm={async (reason) => { const res = await decide(r.id, "Returned", reason); return res.ok ? null : res.error; }}
+        onClose={() => setDialog(null)}
+      />
+      <ReasonDialog
+        open={dialog === "Kept in View"}
+        title={`Keep ${q.reference} in view`}
+        description="The query is not closed. It stays under watch until the auditor resumes work. Say what you are waiting for; the auditor is emailed."
+        confirmLabel="Keep in view"
+        onConfirm={async (reason) => { const res = await decide(r.id, "Kept in View", reason); return res.ok ? null : res.error; }}
         onClose={() => setDialog(null)}
       />
     </article>
   );
 }
 
+function ReassignmentCard({ r }: { r: ReassignmentRequest }) {
+  const { state, userName, decideReassignment } = useStore();
+  const [dialog, setDialog] = useState<"approve" | "reject" | null>(null);
+  const q = state.queries.find((x) => x.id === r.queryId)!;
+  return (
+    <article className="sheet overflow-hidden rounded-xl">
+      <SheetHeader q={q} since={r.createdAt} />
+      <div className="px-5 py-5 sm:px-6">
+        <p className="text-[0.8125rem] text-muted">{userName(r.requestedBy)} asked on {fmtDateTime(r.createdAt)} to move this query</p>
+        <p className="mt-2 text-[1.0625rem]">
+          from <span className="font-medium">{userName(r.fromAssignee)}</span> to <span className="font-medium">{userName(r.toAssignee)}</span>
+        </p>
+        <blockquote className="mt-2 border-l-[3px] border-rule pl-4 leading-relaxed">{r.reason}</blockquote>
+      </div>
+      <footer className="flex flex-wrap items-center justify-end gap-2 border-t border-line bg-subtle px-5 py-3.5 sm:px-6">
+        <Button kind="danger" onClick={() => setDialog("reject")}>Reject</Button>
+        <Button kind="primary" onClick={() => setDialog("approve")}>Approve reassignment</Button>
+      </footer>
+      <ReasonDialog
+        open={dialog === "approve"}
+        title={`Move ${q.reference} to ${userName(r.toAssignee)}`}
+        description="The new auditor sees the full history and is emailed; the current auditor loses access straight away. The query becomes Assigned."
+        confirmLabel="Approve reassignment"
+        optional
+        onConfirm={async (reason) => { const res = await decideReassignment(r.id, true, reason); return res.ok ? null : res.error; }}
+        onClose={() => setDialog(null)}
+      />
+      <ReasonDialog
+        open={dialog === "reject"}
+        title="Reject the reassignment"
+        description={`The query stays with ${userName(r.fromAssignee)} and goes back to ${r.fromStatus}. The PIA sees your reason in Reviews and gets an email to look.`}
+        confirmLabel="Reject"
+        danger
+        onConfirm={async (reason) => { const res = await decideReassignment(r.id, false, reason); return res.ok ? null : res.error; }}
+        onClose={() => setDialog(null)}
+      />
+    </article>
+  );
+}
+
+function ExportCard({ x }: { x: ExportRequest }) {
+  const { state, userName, decideExport } = useStore();
+  const [dialog, setDialog] = useState<"approve" | "reject" | null>(null);
+  const rows = state.queries.filter((q) => matchesFilters(q, x.filters)).length;
+  return (
+    <article className="sheet overflow-hidden rounded-xl">
+      <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2 border-b border-line px-5 py-4 sm:px-6">
+        <div>
+          <p className="text-[1.1875rem] font-medium tracking-[-0.015em]">Export of {describeFilters(x.filters, userName)}</p>
+          <p className="mt-0.5 text-sm text-muted">About {rows} {rows === 1 ? "query" : "queries"} as they stand now, as CSV</p>
+        </div>
+        <p className="text-sm font-medium text-warn">{waitingFor(x.createdAt)}</p>
+      </header>
+      <div className="px-5 py-5 sm:px-6">
+        <p className="text-[0.8125rem] text-muted">{userName(x.requestedBy)} asked on {fmtDateTime(x.createdAt)}</p>
+        <blockquote className="mt-2 border-l-[3px] border-rule pl-4 leading-relaxed">{x.reason}</blockquote>
+      </div>
+      <footer className="flex flex-wrap items-center justify-end gap-2 border-t border-line bg-subtle px-5 py-3.5 sm:px-6">
+        <Button kind="danger" onClick={() => setDialog("reject")}>Reject</Button>
+        <Button kind="primary" onClick={() => setDialog("approve")}>Approve export</Button>
+      </footer>
+      <ReasonDialog
+        open={dialog === "approve"}
+        title="Approve the export"
+        description={`${userName(x.requestedBy)} can then download it. Every download is written to the audit log.`}
+        confirmLabel="Approve export"
+        optional
+        onConfirm={async (reason) => { const res = await decideExport(x.id, true, reason); return res.ok ? null : res.error; }}
+        onClose={() => setDialog(null)}
+      />
+      <ReasonDialog
+        open={dialog === "reject"}
+        title="Reject the export"
+        description="The PIA sees your reason in Reviews and gets an email to look."
+        confirmLabel="Reject"
+        danger
+        onConfirm={async (reason) => { const res = await decideExport(x.id, false, reason); return res.ok ? null : res.error; }}
+        onClose={() => setDialog(null)}
+      />
+    </article>
+  );
+}
+
+function DecisionMark({ decision }: { decision: Decision }) {
+  return <Check pending={decision === "Pending"} ok={decision === "Approved"} />;
+}
+
+function MyReassignments() {
+  const me = useMe();
+  const { state, userName } = useStore();
+  const mine = state.reassignments.filter((r) => r.requestedBy === me.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 10);
+  return (
+    <Panel title="Your reassignment requests" className="mb-8">
+      {mine.length ? (
+        <ul className="divide-y divide-line">
+          {mine.map((r) => {
+            const q = state.queries.find((x) => x.id === r.queryId);
+            return (
+              <li key={r.id} className="flex gap-3 py-3 text-sm first:pt-0 last:pb-0">
+                <span className="mt-0.5"><DecisionMark decision={r.decision} /></span>
+                <div className="min-w-0 flex-1">
+                  <p>{q && <Link to={`/queries/${q.id}`} className="hover:underline"><Ref>{q.reference}</Ref></Link>} {userName(r.fromAssignee)} to {userName(r.toAssignee)}</p>
+                  <p className="mt-0.5 text-muted">
+                    {r.decision === "Pending" ? "Waiting for the CIA." : `${r.decision} by ${userName(r.decidedBy)}${r.decisionReason ? `: ${r.decisionReason}` : "."}`}
+                  </p>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <Empty title="No reassignment requests">To move a query to another auditor, open it and choose Request reassignment. The CIA approves it.</Empty>
+      )}
+    </Panel>
+  );
+}
+
+function MyExports() {
+  const me = useMe();
+  const { state, userName, downloadExport } = useStore();
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const mine = state.exports.filter((x) => x.requestedBy === me.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 10);
+  return (
+    <Panel title="Your exports" aside={<Button kind="secondary" onClick={() => setOpen(true)}>Request an export</Button>} className="mb-8">
+      {error && <div className="mb-3"><Notice tone="error">{error}</Notice></div>}
+      {mine.length ? (
+        <ul className="divide-y divide-line">
+          {mine.map((x) => (
+            <li key={x.id} className="flex flex-wrap items-start gap-3 py-3 text-sm first:pt-0 last:pb-0">
+              <span className="mt-0.5"><DecisionMark decision={x.decision} /></span>
+              <div className="min-w-0 flex-1">
+                <p className="font-medium">Export of {describeFilters(x.filters, userName)}</p>
+                <p className="mt-0.5 text-muted">
+                  Asked {fmtDateTime(x.createdAt)}.{" "}
+                  {x.decision === "Pending" ? "Waiting for the CIA." : `${x.decision} by ${userName(x.decidedBy)}${x.decisionReason ? `: ${x.decisionReason}` : "."}`}
+                  {x.downloads > 0 && ` Downloaded ${x.downloads} ${x.downloads === 1 ? "time" : "times"}.`}
+                </p>
+              </div>
+              {x.decision === "Approved" && (
+                <Button kind="primary" onClick={async () => { const r = await downloadExport(x.id); setError(r.ok ? null : r.error); }}>Download CSV</Button>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <Empty title="No exports yet">Exports need the CIA's approval. Ask for one here or from the queries list, with its filters.</Empty>
+      )}
+      <ExportRequestDialog open={open} filters={{}} onClose={() => setOpen(false)} />
+    </Panel>
+  );
+}
+
+/** The PIA's "Seek approval" step before an export (owner, 2026-10-22). */
+export function ExportRequestDialog({ open, filters, onClose, onDone }: { open: boolean; filters: ExportFilters; onClose: () => void; onDone?: () => void }) {
+  const { userName, requestExport } = useStore();
+  return (
+    <ReasonDialog
+      open={open}
+      title="Seek approval to export"
+      description={`Exports need the CIA's approval. This asks for ${describeFilters(filters, userName)}, as CSV. Once approved, download it from Reviews; every download is logged.`}
+      confirmLabel="Send to the CIA"
+      onConfirm={async (reason) => {
+        const r = await requestExport(filters, reason);
+        if (r.ok) onDone?.();
+        return r.ok ? null : r.error;
+      }}
+      onClose={onClose}
+    />
+  );
+}
+
+const OUTCOME_TONE: Record<string, string> = { Closed: "", Returned: "text-danger", "Kept in View": "text-muted" };
+
 function DecidedRow({ r }: { r: StatusChangeRequest }) {
   const { state, userName } = useStore();
   const q = state.queries.find((x) => x.id === r.queryId)!;
   const approved = r.decision === "Approved";
+  const outcome = r.decidedStatus ?? (approved ? "Closed" : "Returned");
   return (
     <li className="grid gap-x-4 gap-y-1 py-3 text-sm first:pt-0 last:pb-0 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-baseline">
       <span className="flex items-center gap-2">
-        <Check ok={approved} />
+        <Check ok={approved} pending={outcome === "Kept in View"} />
         <Link to={`/queries/${q.id}`} className="hover:underline"><Ref>{q.reference}</Ref></Link>
       </span>
       <span>
-        <span className={cx("font-medium", !approved && "text-danger")}>{approved ? "Closed" : "Returned"}</span>
+        <span className={cx("font-medium", OUTCOME_TONE[outcome])}>{outcome}</span>
         {r.decisionReason && <span className="text-muted">: {r.decisionReason}</span>}
       </span>
       <span className="text-faint">{userName(r.decidedBy)}, {fmtDateTime(r.decidedAt!)}</span>
@@ -130,6 +368,11 @@ export const ACTION_LABEL: Record<string, string> = {
   "import.cancel": "Cancelled import",
   "query.assign": "Assigned",
   "query.reassign": "Reassigned",
+  "reassign.request": "Asked to reassign",
+  "reassign.approve": "Approved reassignment",
+  "reassign.reject": "Rejected reassignment",
+  "status.keep": "Kept in view",
+  "comment.add": "Commented",
   "query.edit": "Edited query",
   "status.change": "Status changed",
   "status.propose": "Proposed closure",
@@ -140,6 +383,10 @@ export const ACTION_LABEL: Record<string, string> = {
   "activity.response": "Added response",
   "evidence.upload": "Uploaded evidence",
   "export.queries": "Exported queries",
+  "export.request": "Asked to export",
+  "export.approve": "Approved export",
+  "export.reject": "Rejected export",
+  "export.download": "Downloaded export",
   "breakglass.request": "Requested access",
   "breakglass.approve": "Approved access",
   "breakglass.reject": "Refused access",
@@ -421,7 +668,7 @@ export function ReportsPage() {
         title="Reports"
         lede="Where every query stands, and which are late. Only the CIA can export, and every export is written to the audit log."
         actions={<Button kind="primary" onClick={async () => {
-          const r = await exportQueries(visibleQueries);
+          const r = await exportQueries(visibleQueries, {});
           setFlash(r.ok ? { tone: "ok", text: `Exported ${visibleQueries.length} queries as CSV. The export is recorded in the audit log.` } : { tone: "error", text: r.error });
         }}>Export all queries as CSV</Button>}
       />

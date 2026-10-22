@@ -4,11 +4,14 @@ import { sha256 } from "../lib/sha256";
 import type {
   AccessRequest,
   AuditEntry,
+  Comment,
   Evidence,
+  ExportRequest,
   FollowUpActivity,
   ImportBatch,
   Query,
   QueryRevision,
+  ReassignmentRequest,
   Risk,
   Status,
   StatusChangeRequest,
@@ -23,6 +26,9 @@ export interface State {
   activities: FollowUpActivity[];
   evidence: Evidence[];
   requests: StatusChangeRequest[];
+  reassignments: ReassignmentRequest[];
+  exports: ExportRequest[];
+  comments: Comment[];
   accessRequests: AccessRequest[];
   audit: AuditEntry[];
 }
@@ -41,6 +47,7 @@ export const users: User[] = [
   { id: "u-ia1", email: "sarah.nabirye@auditlogs.test", fullName: "Sarah Nabirye", role: "IA", isActive: true },
   { id: "u-ia2", email: "peter.mugisha@auditlogs.test", fullName: "Peter Mugisha", role: "IA", isActive: true },
   { id: "u-ia3", email: "joan.atim@auditlogs.test", fullName: "Joan Atim", role: "IA", isActive: true },
+  { id: "u-sia", email: "grace.namutebi@auditlogs.test", fullName: "Grace Namutebi", role: "SIA", isActive: true },
   { id: "u-ceo", email: "moses.kiggundu@auditlogs.test", fullName: "Moses Kiggundu", role: "CEO", isActive: true },
   { id: "u-ict", email: "brian.ssali@auditlogs.test", fullName: "Brian Ssali", role: "ICT", isActive: true },
 ];
@@ -95,12 +102,15 @@ export function seed(): State {
   const q = (ref: string): Query => queries.find((x) => x.reference === ref)!;
   const batches: ImportBatch[] = [
     { id: "b-1", importedBy: "u-pia", sourceFilename: "final-queries-q1-fy2026.xlsx", sourceSha256: sha256("batch-1"), status: "Confirmed", rowCount: 10, createdAt: at(42), confirmedAt: at(42, 10) },
-    { id: "b-2", importedBy: "u-pia", sourceFilename: "final-queries-ict-fleet.xlsx", sourceSha256: sha256("batch-2"), status: "Confirmed", rowCount: 4, createdAt: at(3), confirmedAt: at(3, 11) },
+    { id: "b-2", importedBy: "u-cia", sourceFilename: "final-queries-ict-fleet.xlsx", sourceSha256: sha256("batch-2"), status: "Confirmed", rowCount: 4, createdAt: at(3), confirmedAt: at(3, 11) },
   ];
   const revisions: QueryRevision[] = [];
   const activities: FollowUpActivity[] = [];
   const evidence: Evidence[] = [];
   const requests: StatusChangeRequest[] = [];
+  const reassignments: ReassignmentRequest[] = [];
+  const exports: ExportRequest[] = [];
+  const comments: Comment[] = [];
   let audit: AuditEntry[] = [];
   const role = (id: string) => users.find((u) => u.id === id)!.role;
 
@@ -126,13 +136,13 @@ export function seed(): State {
   const queue: { ts: string; run: () => void }[] = [];
   const later = (ts: string, run: () => void) => queue.push({ ts, run });
 
-  const assign = (ref: string, ia: string, daysAgo: number) =>
+  const assign = (ref: string, ia: string, daysAgo: number, by = "u-cia") =>
     later(at(daysAgo, 11), () => {
       const query = q(ref);
       const ts = at(daysAgo, 11);
-      log(ts, "u-cia", "query.assign", "Query", query.id, { assignee: null }, { assignee: ia });
+      log(ts, by, "query.assign", "Query", query.id, { assignee: null }, { assignee: ia });
       query.currentAssignee = ia;
-      setStatus(query, "Assigned", "u-cia", ts);
+      setStatus(query, "Assigned", by, ts);
     });
   const note = (ref: string, author: string, kind: FollowUpActivity["kind"], body: string, daysAgo: number) =>
     later(at(daysAgo, 14), () => {
@@ -161,16 +171,19 @@ export function seed(): State {
       });
       setStatus(query, "Proposed for Closure", by, ts, reason, "status.propose");
     });
-  const decide = (ref: string, approve: boolean, reason: string, daysAgo: number) =>
+  const decide = (ref: string, approve: boolean, reason: string, daysAgo: number, keep = false) =>
     later(at(daysAgo, 10), () => {
       const query = q(ref);
       const r = requests.find((x) => x.queryId === query.id && x.decision === "Pending")!;
       const ts = at(daysAgo, 10);
+      const by = keep ? "u-pia" : "u-cia";
+      const to: Status = approve ? "Closed" : keep ? "Kept in View" : "Returned";
       r.decision = approve ? "Approved" : "Rejected";
-      r.decidedBy = "u-cia";
+      r.decidedBy = by;
       r.decisionReason = reason || null;
       r.decidedAt = ts;
-      setStatus(query, approve ? "Closed" : "Returned", "u-cia", ts, reason, approve ? "status.approve" : "status.reject");
+      r.decidedStatus = to;
+      setStatus(query, to, by, ts, reason, approve ? "status.approve" : keep ? "status.keep" : "status.reject");
     });
 
   later(at(42), () => log(at(42), "u-pia", "import.upload", "ImportBatch", "b-1", null, { filename: batches[0].sourceFilename, rows: 10 }));
@@ -232,8 +245,35 @@ export function seed(): State {
   file("IA/2026/023", "u-ia2", "petty-cash-recount.pdf", 210_000, 8);
   propose("IA/2026/023", "u-ia2", "Recount matches float and excess banked with deposit slip.", 1);
 
-  later(at(3), () => log(at(3), "u-pia", "import.upload", "ImportBatch", "b-2", null, { filename: batches[1].sourceFilename, rows: 4 }));
-  later(at(3, 11), () => log(at(3, 11), "u-pia", "import.confirm", "ImportBatch", "b-2", { status: "Previewed" }, { status: "Confirmed", queries: 4 }));
+  // The SIA's work, a PIA review kept in view, a reassignment waiting for the CIA, a CIA comment
+  // and an export waiting for approval (owner's changes, 2026-10-22).
+  assign("IA/2026/032", "u-sia", 2, "u-pia");
+  note("IA/2026/032", "u-sia", "Note", "ICT has booked a restore test of the finance backup for Friday.", 1);
+  note("IA/2026/019", "u-ia2", "ManagementResponse", "A second payroll account has been requested from the vendor.", 6);
+  propose("IA/2026/019", "u-ia2", "Vendor has the request; separate accounts expected next month.", 5);
+  decide("IA/2026/019", false, "Watch until the vendor creates the second account.", 4, true);
+  later(at(2, 12), () => {
+    const query = q("IA/2026/016");
+    const ts = at(2, 12);
+    const reason = "Sarah is on leave for three weeks; Joan covers Finance.";
+    reassignments.push({ id: "ra-1", queryId: query.id, fromAssignee: "u-ia1", toAssignee: "u-ia3", fromStatus: query.status, requestedBy: "u-pia", reason, decision: "Pending", decidedBy: null, decisionReason: null, decidedAt: null, createdAt: ts });
+    log(ts, "u-pia", "reassign.request", "Query", query.id, { assignee: "u-ia1" }, { assignee: "u-ia3", request: "ra-1" }, reason);
+    setStatus(query, "Pending Approval", "u-pia", ts, reason);
+  });
+  later(at(1, 9), () => {
+    const query = q("IA/2026/020");
+    const body = "Please attach a sample of the new requisitions once the first month is done.";
+    comments.push({ id: "c-1", queryId: query.id, author: "u-cia", authorRole: "CIA", body, createdAt: at(1, 9) });
+    log(at(1, 9), "u-cia", "comment.add", "Query", query.id, null, { comment: "c-1" });
+  });
+  later(at(0, 8), () => {
+    const reason = "Overdue list for the audit committee pack.";
+    exports.push({ id: "x-1", requestedBy: "u-pia", filters: { overdue: "1" }, reason, decision: "Pending", decidedBy: null, decisionReason: null, decidedAt: null, downloads: 0, createdAt: at(0, 8) });
+    log(at(0, 8), "u-pia", "export.request", "ExportRequest", "x-1", null, { filters: { overdue: "1" } }, reason);
+  });
+
+  later(at(3), () => log(at(3), "u-cia", "import.upload", "ImportBatch", "b-2", null, { filename: batches[1].sourceFilename, rows: 4 }));
+  later(at(3, 11), () => log(at(3, 11), "u-cia", "import.confirm", "ImportBatch", "b-2", { status: "Previewed" }, { status: "Confirmed", queries: 4 }));
 
   const accessRequests: AccessRequest[] = [
     { id: "ar-1", requestedBy: "u-ict", reason: "Evidence file for IA/2026/016 reported as unreadable; need to check storage integrity.", status: "Pending", decidedBy: null, expiresAt: null, createdAt: at(0, 7) },
@@ -242,5 +282,5 @@ export function seed(): State {
 
   queue.sort((a, b) => a.ts.localeCompare(b.ts)).forEach((e) => e.run());
 
-  return { users: [...users], batches, queries, revisions, activities, evidence, requests, accessRequests, audit };
+  return { users: [...users], batches, queries, revisions, activities, evidence, requests, reassignments, exports, comments, accessRequests, audit };
 }

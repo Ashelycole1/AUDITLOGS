@@ -73,6 +73,25 @@ export const api = {
     return request<T>("POST", path, form);
   },
   url: (path: string) => `${BASE}${path}`,
+  /** Fetch a file (an export) and hand it to the browser to save. Errors arrive as ApiError. */
+  download: async (path: string, filename: string) => {
+    let res: Response;
+    try {
+      res = await fetch(`${BASE}${path}`, { credentials: "same-origin" });
+    } catch {
+      throw new ApiError("Cannot reach the server. Check the connection and try again.", 0);
+    }
+    if (!res.ok) {
+      const data = res.headers.get("content-type")?.includes("application/json") ? await res.json() : null;
+      throw new ApiError(messageFrom(data, res.status), res.status);
+    }
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  },
 };
 
 type Page<T> = { count: number; results: T[] };

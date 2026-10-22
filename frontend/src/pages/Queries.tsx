@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Button, Empty, Label, Notice, PageHeader, Panel, ReasonDialog, Ref, RiskTag, StatusBadge, Table, cx } from "../components";
-import { STATUSES, daysOverdue, fmtDate } from "../lib/rules";
+import { STATUSES, canAssign, canAssignRole, daysOverdue, fmtDate, isAuditor } from "../lib/rules";
 import { RISKS } from "../lib/risk";
 import { useMe, useStore } from "../storeTypes";
-import type { Query, Risk, Status } from "../types";
+import type { ExportFilters, Query, Risk, Status } from "../types";
+import { ExportRequestDialog } from "./Cia";
 
 export default function QueriesPage() {
   const me = useMe();
-  const { visibleQueries, state, userName, assign } = useStore();
+  const { visibleQueries, state, userName, assign, exportQueries } = useStore();
   const [status, setStatus] = useState<Status | "">("");
   const [risk, setRisk] = useState<Risk | "">("");
   const [assignee, setAssignee] = useState("");
@@ -20,10 +21,22 @@ export default function QueriesPage() {
   const [bulkTo, setBulkTo] = useState("");
   const [bulkOpen, setBulkOpen] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const isCia = me.role === "CIA";
-  const isIa = me.role === "IA";
-  const auditors = state.users.filter((u) => u.role === "IA" && u.isActive);
+  const isIa = isAuditor(me.role);
+  // PIA and CIA assign (owner, 2026-10-22). The filter lists every auditor; the picker only those they may assign.
+  const canBulk = canAssignRole(me.role);
+  const auditors = state.users.filter((u) => isAuditor(u.role) && u.isActive);
+  const assignable = auditors.filter((u) => canAssign(me, u));
+  const filters: ExportFilters = {
+    ...(status && { status }),
+    ...(risk && { risk }),
+    ...(assignee && { assignee }),
+    ...(overdueOnly && { overdue: "1" }),
+    ...(search.trim() && { q: search.trim() }),
+  };
 
   const rows = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -65,22 +78,26 @@ export default function QueriesPage() {
   const title = isIa ? "My queries" : isCia ? "Queries" : "All queries";
   const lede = isIa
     ? "The queries assigned to you. Record follow-up work and propose closure when it is resolved."
-    : isCia
-      ? `${visibleQueries.length} queries in total. ${unassigned ? `${unassigned} still need an auditor.` : "Every query has an auditor."}`
-      : "Read-only view of every confirmed query and where it stands.";
+    : `${visibleQueries.length} queries in total. ${unassigned ? `${unassigned} still need an auditor.` : "Every query has an auditor."}`;
+  const exportButton = isCia ? (
+    <Button kind="secondary" onClick={async () => { const r = await exportQueries(rows, filters); setExportError(r.ok ? null : r.error); }}>Export CSV</Button>
+  ) : me.role === "PIA" ? (
+    <Button kind="secondary" onClick={() => setExportOpen(true)}>Export</Button>
+  ) : undefined;
 
   const returned = isIa ? visibleQueries.filter((q) => q.status === "Returned").length : 0;
 
   return (
     <>
-      <PageHeader title={title} lede={lede} />
+      <PageHeader title={title} lede={lede} actions={exportButton} />
       {returned > 0 && (
         <div className="mb-4">
           <Notice tone="error">
-            {returned === 1 ? "One query was returned" : `${returned} queries were returned`} by the CIA. Read the reason on the query and continue the work.
+            {returned === 1 ? "One query was returned" : `${returned} queries were returned`} to you. Read the reason on the query and continue the work.
           </Notice>
         </div>
       )}
+      {exportError && <div className="mb-4"><Notice tone="error">{exportError}</Notice></div>}
       {flash && <div className="mb-4"><Notice tone="ok">{flash}</Notice></div>}
 
       <Panel>
@@ -119,12 +136,12 @@ export default function QueriesPage() {
           </label>
         </div>
 
-        {isCia && selected.size > 0 && (
+        {canBulk && selected.size > 0 && (
           <div className="glass-inset mb-4 flex flex-wrap items-center gap-3 rounded-md px-4 py-3">
             <span className="text-sm font-medium">{selected.size} selected</span>
             <select className="field w-auto" value={bulkTo} onChange={(e) => setBulkTo(e.target.value)} aria-label="Assign to">
-              <option value="">Choose an auditor</option>
-              {auditors.map((u) => <option key={u.id} value={u.id}>{u.fullName}</option>)}
+              <option value="">Choose an IA or SIA</option>
+              {assignable.map((u) => <option key={u.id} value={u.id}>{u.fullName} ({u.role})</option>)}
             </select>
             <Button kind="primary" disabled={!bulkTo} onClick={() => setBulkOpen(true)}>Assign selected</Button>
             <Button kind="quiet" onClick={() => setSelected(new Set())}>Clear</Button>
@@ -133,7 +150,7 @@ export default function QueriesPage() {
 
         <Table
           head={[
-            ...(isCia ? [
+            ...(canBulk ? [
               <input
                 key="all"
                 type="checkbox"
@@ -153,13 +170,13 @@ export default function QueriesPage() {
           empty={!rows.length && (
             <div className="px-5 pb-2 sm:px-6">
               <Empty title={visibleQueries.length ? "No queries match these filters" : isIa ? "Nothing assigned to you yet" : "No queries yet"}>
-                {visibleQueries.length ? "Clear a filter to see more." : isIa ? "The CIA will assign queries to you. You will get an email when they do." : "Confirmed imports appear here."}
+                {visibleQueries.length ? "Clear a filter to see more." : isIa ? "Queries assigned to you appear here. You will get an email when one is." : "Confirmed imports appear here."}
               </Empty>
             </div>
           )}
         >
           {rows.map((q) => (
-            <Row key={q.id} q={q} showAssignee={!isIa} selectable={isCia} selected={selected.has(q.id)} onToggle={() => toggle(q.id)} assigneeName={userName(q.currentAssignee)} />
+            <Row key={q.id} q={q} showAssignee={!isIa} selectable={canBulk} selected={selected.has(q.id)} onToggle={() => toggle(q.id)} assigneeName={userName(q.currentAssignee)} />
           ))}
         </Table>
       </Panel>
@@ -173,6 +190,7 @@ export default function QueriesPage() {
         onConfirm={runBulk}
         onClose={() => setBulkOpen(false)}
       />
+      <ExportRequestDialog open={exportOpen} filters={filters} onClose={() => setExportOpen(false)} onDone={() => setFlash("Export request sent to the CIA. Download it from Reviews once approved.")} />
     </>
   );
 }
@@ -180,7 +198,7 @@ export default function QueriesPage() {
 function Row({ q, showAssignee, selectable, selected, onToggle, assigneeName }: { q: Query; showAssignee: boolean; selectable: boolean; selected: boolean; onToggle: () => void; assigneeName: string }) {
   const late = daysOverdue(q);
   return (
-    <tr className={cx("align-top transition-colors hover:bg-paper/60", q.status === "Returned" && "bg-danger-wash/40")}>
+    <tr className={cx("align-top transition-colors hover:bg-paper/60", q.status === "Returned" && "bg-danger-wash/40", q.status === "Pending Approval" && "bg-warn-wash/40")}>
       {selectable && (
         <td className="w-10">
           {!q.currentAssignee && (
@@ -193,6 +211,7 @@ function Row({ q, showAssignee, selectable, selected, onToggle, assigneeName }: 
           <Ref>{q.reference}</Ref>
           <span className="mt-0.5 block font-medium leading-snug group-hover:text-lake">{q.title}</span>
           <span className="mt-0.5 block text-[0.8125rem] text-muted">{q.department}</span>
+          <span className="block text-[0.8125rem] text-faint">Owner: {q.responsibleOfficer}</span>
         </Link>
       </td>
       <td><RiskTag risk={q.riskRatingCurrent} /></td>

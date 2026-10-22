@@ -2,12 +2,29 @@
 // Every rule here is also enforced server-side; the UI checks only shape what people are shown.
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { appendAudit, type NewAuditEntry } from "./lib/auditChain";
-import { isAllowedTransition, queriesFor, reasonError } from "./lib/rules";
+import { REASSIGNABLE, canAssign, isAllowedTransition, isAuditor, matchesFilters, queriesFor, reasonError } from "./lib/rules";
 import { sha256 } from "./lib/sha256";
 import { seed, type State } from "./data/seed";
 import type { Query, Role, Status, User } from "./types";
 import { ApiStoreProvider } from "./apiStore";
 import { fail, ok, StoreCtx, type Result, type Store } from "./storeTypes";
+
+const csvCell = (v: string) => {
+  // A leading =, +, - or @ would run as a formula in a spreadsheet, as on the server.
+  const safe = /^[=+\-@]/.test(v) ? `'${v}` : v;
+  return `"${safe.replace(/"/g, '""')}"`;
+};
+
+function saveCsv(rows: Query[], userName: (id: string | null) => string) {
+  const head = ["reference", "title", "risk", "status", "department", "responsible_officer", "deadline", "assignee"];
+  const csv = [head.join(","), ...rows.map((q) => [q.reference, q.title, q.riskRatingCurrent, q.status, q.department, q.responsibleOfficer, q.deadline, q.currentAssignee ? userName(q.currentAssignee) : ""].map(csvCell).join(","))].join("\n");
+  const url = URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `queries-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 export { useMe, useStore } from "./storeTypes";
 
@@ -93,6 +110,7 @@ function DemoStoreProvider({ children }: { children: ReactNode }) {
     },
 
     async loadQuery() {},
+    async loadComments() {},
     evidenceUrl: () => null,
     async uploadImport() {
       return fail("The demo reads files in the browser.");
@@ -113,7 +131,7 @@ function DemoStoreProvider({ children }: { children: ReactNode }) {
     },
 
     async confirmImport(filename, fileHash, rows) {
-      const r = requireRole("PIA");
+      const r = requireRole("CIA");
       if (!r.ok) return r;
       if (rows.some((x) => x.errors.length)) return fail("Fix the highlighted rows before confirming.");
       const existing = new Set(state.queries.map((q) => q.reference));
@@ -145,7 +163,7 @@ function DemoStoreProvider({ children }: { children: ReactNode }) {
     },
 
     cancelImport(filename, fileHash, rowCount) {
-      if (!me || me.role !== "PIA") return;
+      if (!me || me.role !== "CIA") return;
       const batchId = crypto.randomUUID();
       const now = new Date().toISOString();
       commit((s) => ({
@@ -176,17 +194,38 @@ function DemoStoreProvider({ children }: { children: ReactNode }) {
     },
 
     async assign(queryId, assigneeId, reason) {
-      const r = requireRole("CIA");
+      const r = requireRole("PIA", "CIA");
       if (!r.ok) return r;
       const q = scopedQuery(queryId);
       if (!q) return fail("Query not found.");
-      const ia = state.users.find((u) => u.id === assigneeId && u.role === "IA" && u.isActive);
-      if (!ia) return fail("Choose an active internal auditor.");
+      const ia = state.users.find((u) => u.id === assigneeId);
+      if (!ia || !canAssign(me!, ia)) return fail("Choose an active Internal Auditor or Senior Internal Auditor.");
       if (q.currentAssignee === assigneeId) return fail(`${ia.fullName} is already assigned.`);
+      if (q.status === "Closed") return fail("This query is closed. Reopen it before changing the auditor.");
+      if (q.status === "Pending Approval") return fail("A reassignment of this query is waiting for the CIA. Decide it first.");
       const reassign = q.currentAssignee !== null;
       if (reassign) {
         const err = reasonError(reason);
         if (err) return fail(err);
+      }
+      if (reassign && me!.role === "PIA") {
+        // A PIA's reassignment waits for the CIA (owner, 2026-10-22). The current auditor keeps it meanwhile.
+        if (q.status === "Proposed for Closure") return fail("This query is proposed for closure. Review the proposal first.");
+        if (!REASSIGNABLE.includes(q.status)) return fail(`A query that is ${q.status} cannot be reassigned.`);
+        const id = crypto.randomUUID();
+        const now = new Date().toISOString();
+        commit((s) => ({
+          next: {
+            ...s,
+            reassignments: [...s.reassignments, { id, queryId, fromAssignee: q.currentAssignee!, toAssignee: assigneeId, fromStatus: q.status, requestedBy: me!.id, reason, decision: "Pending", decidedBy: null, decisionReason: null, decidedAt: null, createdAt: now }],
+            queries: s.queries.map((x) => (x.id === queryId ? { ...x, status: "Pending Approval" } : x)),
+          },
+          log: [
+            entry(me, { action: "reassign.request", objectType: "Query", objectId: queryId, oldValue: { assignee: q.currentAssignee }, newValue: { assignee: assigneeId, request: id }, reason }),
+            entry(me, { action: "status.change", objectType: "Query", objectId: queryId, oldValue: { status: q.status }, newValue: { status: "Pending Approval" }, reason }),
+          ],
+        }));
+        return ok;
       }
       const log: NewAuditEntry[] = [
         entry(me, { action: reassign ? "query.reassign" : "query.assign", objectType: "Query", objectId: queryId, oldValue: { assignee: q.currentAssignee }, newValue: { assignee: assigneeId }, reason }),
@@ -200,27 +239,115 @@ function DemoStoreProvider({ children }: { children: ReactNode }) {
       return ok;
     },
 
-    async decide(requestId, approve, reason) {
-      const r = requireRole("CIA");
+    async decide(requestId, to, reason) {
+      const r = requireRole("PIA", "CIA");
       if (!r.ok) return r;
       const req = state.requests.find((x) => x.id === requestId);
       if (!req || req.decision !== "Pending") return fail("This request has already been decided.");
       if (req.proposedBy === me!.id) return fail("You proposed this change, so someone else must decide it.");
+      const approve = to === "Closed";
       if (!approve) {
         const err = reasonError(reason);
         if (err) return fail(err);
       }
       const q = state.queries.find((x) => x.id === req.queryId)!;
-      const to: Status = approve ? "Closed" : "Returned";
-      if (!isAllowedTransition(q.status, to, "CIA")) return fail(`A query cannot move from ${q.status} to ${to}.`);
+      if (!isAllowedTransition(q.status, to, me!.role)) return fail(`Your role cannot move a query from ${q.status} to ${to}.`);
       const now = new Date().toISOString();
+      const action = approve ? "status.approve" : to === "Kept in View" ? "status.keep" : "status.reject";
       commit((s) => ({
         next: {
           ...s,
-          requests: s.requests.map((x) => (x.id === requestId ? { ...x, decision: approve ? "Approved" : "Rejected", decidedBy: me!.id, decisionReason: reason || null, decidedAt: now } : x)),
+          requests: s.requests.map((x) => (x.id === requestId ? { ...x, decision: approve ? "Approved" : "Rejected", decidedBy: me!.id, decisionReason: reason || null, decidedAt: now, decidedStatus: to } : x)),
           queries: s.queries.map((x) => (x.id === q.id ? { ...x, status: to, closedAt: approve ? now : null } : x)),
         },
-        log: [entry(me, { action: approve ? "status.approve" : "status.reject", objectType: "Query", objectId: q.id, oldValue: { status: q.status }, newValue: { status: to }, reason })],
+        log: [entry(me, { action, objectType: "Query", objectId: q.id, oldValue: { status: q.status }, newValue: { status: to }, reason })],
+      }));
+      return ok;
+    },
+
+    async decideReassignment(requestId, approve, reason) {
+      const r = requireRole("CIA");
+      if (!r.ok) return r;
+      const req = state.reassignments.find((x) => x.id === requestId);
+      if (!req || req.decision !== "Pending") return fail("This request has already been decided.");
+      if (req.requestedBy === me!.id) return fail("You asked for this, so someone else must decide it.");
+      if (!approve) {
+        const err = reasonError(reason);
+        if (err) return fail(err);
+      }
+      const q = state.queries.find((x) => x.id === req.queryId)!;
+      const to: Status = approve ? "Assigned" : req.fromStatus;
+      const now = new Date().toISOString();
+      const log: NewAuditEntry[] = [];
+      if (approve) log.push(entry(me, { action: "reassign.approve", objectType: "Query", objectId: q.id, oldValue: { assignee: q.currentAssignee }, newValue: { assignee: req.toAssignee, request: req.id }, reason }));
+      log.push(entry(me, { action: approve ? "status.change" : "reassign.reject", objectType: "Query", objectId: q.id, oldValue: { status: q.status }, newValue: { status: to }, reason }));
+      commit((s) => ({
+        next: {
+          ...s,
+          reassignments: s.reassignments.map((x) => (x.id === requestId ? { ...x, decision: approve ? "Approved" : "Rejected", decidedBy: me!.id, decisionReason: reason || null, decidedAt: now } : x)),
+          queries: s.queries.map((x) => (x.id === q.id ? { ...x, status: to, currentAssignee: approve ? req.toAssignee : x.currentAssignee } : x)),
+        },
+        log,
+      }));
+      return ok;
+    },
+
+    async requestExport(filters, reason) {
+      const r = requireRole("PIA");
+      if (!r.ok) return r;
+      const err = reasonError(reason);
+      if (err) return fail(err);
+      if (state.exports.some((x) => x.requestedBy === me!.id && x.decision === "Pending")) return fail("You already have an export waiting for the CIA.");
+      const id = crypto.randomUUID();
+      commit((s) => ({
+        next: { ...s, exports: [...s.exports, { id, requestedBy: me!.id, filters, reason, decision: "Pending", decidedBy: null, decisionReason: null, decidedAt: null, downloads: 0, createdAt: new Date().toISOString() }] },
+        log: [entry(me, { action: "export.request", objectType: "ExportRequest", objectId: id, oldValue: null, newValue: { filters }, reason })],
+      }));
+      return ok;
+    },
+
+    async decideExport(exportId, approve, reason) {
+      const r = requireRole("CIA");
+      if (!r.ok) return r;
+      const item = state.exports.find((x) => x.id === exportId);
+      if (!item || item.decision !== "Pending") return fail("This export has already been decided.");
+      if (!approve) {
+        const err = reasonError(reason);
+        if (err) return fail(err);
+      }
+      const decision = approve ? "Approved" : "Rejected";
+      commit((s) => ({
+        next: { ...s, exports: s.exports.map((x) => (x.id === exportId ? { ...x, decision, decidedBy: me!.id, decisionReason: reason || null, decidedAt: new Date().toISOString() } : x)) },
+        log: [entry(me, { action: approve ? "export.approve" : "export.reject", objectType: "ExportRequest", objectId: exportId, oldValue: { decision: "Pending" }, newValue: { decision }, reason })],
+      }));
+      return ok;
+    },
+
+    async downloadExport(exportId) {
+      const r = requireRole("PIA");
+      if (!r.ok) return r;
+      const item = state.exports.find((x) => x.id === exportId && x.requestedBy === me!.id);
+      if (!item) return fail("Export not found.");
+      if (item.decision !== "Approved") return fail("This export has not been approved by the CIA.");
+      const rows = state.queries.filter((q) => matchesFilters(q, item.filters));
+      saveCsv(rows, userName);
+      commit((s) => ({
+        next: { ...s, exports: s.exports.map((x) => (x.id === exportId ? { ...x, downloads: x.downloads + 1 } : x)) },
+        log: [entry(me, { action: "export.download", objectType: "ExportRequest", objectId: exportId, oldValue: null, newValue: { rows: rows.length, download: item.downloads + 1 }, reason: "" })],
+      }));
+      return ok;
+    },
+
+    async addComment(queryId, body) {
+      const r = requireRole("CIA", "CEO");
+      if (!r.ok) return r;
+      const q = state.queries.find((x) => x.id === queryId);
+      if (!q) return fail("Query not found.");
+      if (body.trim().length < 3) return fail("Write the comment before saving.");
+      const id = crypto.randomUUID();
+      commit((s) => ({
+        next: { ...s, comments: [...s.comments, { id, queryId, author: me!.id, authorRole: me!.role, body: body.trim(), createdAt: new Date().toISOString() }] },
+        log: [entry(me, { action: "comment.add", objectType: "Query", objectId: queryId, oldValue: null, newValue: { comment: id }, reason: "" })],
       }));
       return ok;
     },
@@ -233,7 +360,8 @@ function DemoStoreProvider({ children }: { children: ReactNode }) {
       const q = scopedQuery(queryId);
       if (!q) return fail("Query not found.");
       if (q.status === to) return fail(`The query is already ${to}.`);
-      if (to !== "Imported" && !q.currentAssignee) return fail("Assign an auditor first.");
+      if (q.status === "Pending Approval" || to === "Pending Approval") return fail("Pending Approval belongs to a reassignment request. Decide the request instead.");
+      if (to !== "Imported" && to !== "Closed" && !q.currentAssignee) return fail("Assign an auditor first.");
       const now = new Date().toISOString();
       commit((s) => ({
         next: {
@@ -249,18 +377,10 @@ function DemoStoreProvider({ children }: { children: ReactNode }) {
       return ok;
     },
 
-    async exportQueries(rows) {
-      if (!me || me.role !== "CIA") return fail("Only the CIA can export.");
-      const head = ["reference", "title", "risk", "status", "department", "responsible_officer", "deadline", "assignee"];
-      const esc = (v: string) => `"${v.replace(/"/g, '""')}"`;
-      const csv = [head.join(","), ...rows.map((q) => [q.reference, q.title, q.riskRatingCurrent, q.status, q.department, q.responsibleOfficer, q.deadline, userName(q.currentAssignee)].map(esc).join(","))].join("\n");
-      const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `queries-${new Date().toISOString().slice(0, 10)}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
-      commit((s) => ({ next: s, log: [entry(me, { action: "export.queries", objectType: "Query", objectId: "list", oldValue: null, newValue: { rows: rows.length }, reason: "" })] }));
+    async exportQueries(rows, filters) {
+      if (!me || me.role !== "CIA") return fail("Only the CIA can export without approval. Ask the CIA to approve an export.");
+      saveCsv(rows, userName);
+      commit((s) => ({ next: s, log: [entry(me, { action: "export.queries", objectType: "Query", objectId: "list", oldValue: null, newValue: { rows: rows.length, filters }, reason: "" })] }));
       return ok;
     },
 
@@ -285,7 +405,7 @@ function DemoStoreProvider({ children }: { children: ReactNode }) {
     },
 
     async addActivity(queryId, kind, body) {
-      const r = requireRole("CIA", "IA");
+      const r = requireRole("CIA", "IA", "SIA");
       if (!r.ok) return r;
       const q = scopedQuery(queryId);
       if (!q) return fail("Query not found.");
@@ -294,7 +414,7 @@ function DemoStoreProvider({ children }: { children: ReactNode }) {
       const id = crypto.randomUUID();
       const log: NewAuditEntry[] = [entry(me, { action: kind === "Note" ? "activity.note" : "activity.response", objectType: "FollowUpActivity", objectId: id, oldValue: null, newValue: { queryId }, reason: "" })];
       let status = q.status;
-      if (me!.role === "IA" && (q.status === "Assigned" || q.status === "Returned") && isAllowedTransition(q.status, "In Progress", "IA")) {
+      if (isAuditor(me!.role) && isAllowedTransition(q.status, "In Progress", me!.role)) {
         log.push(entry(me, { action: "status.change", objectType: "Query", objectId: queryId, oldValue: { status: q.status }, newValue: { status: "In Progress" }, reason: "" }));
         status = "In Progress";
       }
@@ -310,7 +430,7 @@ function DemoStoreProvider({ children }: { children: ReactNode }) {
     },
 
     async addEvidence(queryId, file) {
-      const r = requireRole("CIA", "IA");
+      const r = requireRole("CIA", "IA", "SIA");
       if (!r.ok) return r;
       const q = scopedQuery(queryId);
       if (!q) return fail("Query not found.");
@@ -325,13 +445,13 @@ function DemoStoreProvider({ children }: { children: ReactNode }) {
     },
 
     async proposeClosure(queryId, reason) {
-      const r = requireRole("IA");
+      const r = requireRole("IA", "SIA");
       if (!r.ok) return r;
       const err = reasonError(reason);
       if (err) return fail(err);
       const q = scopedQuery(queryId);
       if (!q) return fail("Query not found.");
-      if (!isAllowedTransition(q.status, "Proposed for Closure", "IA")) return fail(`A query that is ${q.status} cannot be proposed for closure.`);
+      if (!isAllowedTransition(q.status, "Proposed for Closure", me!.role)) return fail(`A query that is ${q.status} cannot be proposed for closure.`);
       const hasSupport =
         state.activities.some((a) => a.queryId === queryId && a.kind === "ManagementResponse") || state.evidence.some((e) => e.queryId === queryId);
       if (!hasSupport) return fail("Add a management response or upload evidence before proposing closure.");

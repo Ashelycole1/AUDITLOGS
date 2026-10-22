@@ -26,10 +26,11 @@ const SECURITY: { title: string; body: string }[] = [
 ];
 
 const ROLES: { role: string; body: string }[] = [
-  { role: "PIA", body: "Imports the final queries and assigns them." },
+  { role: "CIA", body: "Imports the final queries, approves closures, reassignments and exports." },
+  { role: "PIA", body: "Assigns queries to auditors and reviews their work." },
+  { role: "SIA", body: "Senior auditor. Follows up the queries assigned to them." },
   { role: "IA", body: "Follows up with management and proposes closure." },
-  { role: "CIA", body: "Approves or rejects closure and keeps the audit log." },
-  { role: "CEO", body: "Oversees the CIA's activity." },
+  { role: "CEO", body: "Oversees the work and comments on it." },
 ];
 
 const CARD = "rounded-2xl border border-land-line bg-land-card p-5";
@@ -299,7 +300,7 @@ export default function Login() {
         <p className="mt-3 max-w-[40rem] text-lg leading-relaxed text-mist">
           AuditLogs follows each query from the final report to its closure, and each role sees only the work that is theirs.
         </p>
-        <dl className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <dl className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {ROLES.map((r) => (
             <div key={r.role} className="border-t border-land-field-line pt-4">
               <dt className="font-mono text-sm font-medium text-leaf">{r.role}</dt>

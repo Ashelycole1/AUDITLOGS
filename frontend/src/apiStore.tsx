@@ -7,13 +7,17 @@ import type { State } from "./data/seed";
 import { fail, ok, StoreCtx, type Result, type ServerPreview, type Store } from "./storeTypes";
 import type {
   AuditEntry,
+  Comment,
   EditableField,
   Evidence,
+  ExportFilters,
+  ExportRequest,
   FollowUpActivity,
   ImportBatch,
   ImportRow,
   Query,
   QueryRevision,
+  ReassignmentRequest,
   Role,
   Status,
   StatusChangeRequest,
@@ -25,7 +29,7 @@ type Raw = Record<string, unknown>;
 const str = (v: unknown) => (v === null || v === undefined ? "" : String(v));
 const strOrNull = (v: unknown) => (v === null || v === undefined ? null : String(v));
 
-const EMPTY: State = { users: [], batches: [], queries: [], revisions: [], activities: [], evidence: [], requests: [], accessRequests: [], audit: [] };
+const EMPTY: State = { users: [], batches: [], queries: [], revisions: [], activities: [], evidence: [], requests: [], reassignments: [], exports: [], comments: [], accessRequests: [], audit: [] };
 
 const toQuery = (q: Raw): Query => ({
   id: str(q.id),
@@ -41,6 +45,7 @@ const toQuery = (q: Raw): Query => ({
   responsibleOfficer: str(q.responsible_officer),
   department: str(q.department),
   currentAssignee: strOrNull(q.current_assignee),
+  assigneeRole: (q.assignee_role ?? null) as Role | null,
   closedAt: strOrNull(q.closed_at),
   importedAt: strOrNull(q.imported_at),
   batchFilename: q.batch_filename ? str(q.batch_filename) : undefined,
@@ -57,10 +62,50 @@ const toRequest = (r: Raw, queryId?: string): StatusChangeRequest => ({
   decidedBy: strOrNull(r.decided_by),
   decisionReason: strOrNull(r.decision_reason),
   decidedAt: strOrNull(r.decided_at),
+  decidedStatus: (r.decided_status ?? null) as Status | null,
   createdAt: str(r.created_at),
   responses: typeof r.responses === "number" ? r.responses : undefined,
   evidenceFiles: typeof r.evidence_files === "number" ? r.evidence_files : undefined,
 });
+
+const toReassignment = (r: Raw, queryId?: string): ReassignmentRequest => ({
+  id: str(r.id),
+  queryId: queryId ?? str(r.query),
+  fromAssignee: str(r.from_assignee),
+  toAssignee: str(r.to_assignee),
+  fromStatus: r.from_status as Status,
+  requestedBy: str(r.requested_by),
+  reason: str(r.reason),
+  decision: (r.decision ?? "Pending") as ReassignmentRequest["decision"],
+  decidedBy: strOrNull(r.decided_by),
+  decisionReason: strOrNull(r.decision_reason),
+  decidedAt: strOrNull(r.decided_at),
+  createdAt: str(r.created_at),
+});
+
+const toExport = (r: Raw): ExportRequest => ({
+  id: str(r.id),
+  requestedBy: str(r.requested_by),
+  filters: (r.filters ?? {}) as ExportFilters,
+  reason: str(r.reason),
+  decision: r.decision as ExportRequest["decision"],
+  decidedBy: strOrNull(r.decided_by),
+  decisionReason: strOrNull(r.decision_reason),
+  decidedAt: strOrNull(r.decided_at),
+  downloads: Number(r.downloads ?? 0),
+  createdAt: str(r.created_at),
+});
+
+const toComment = (c: Raw, queryId: string): Comment => ({
+  id: str(c.id),
+  queryId,
+  author: str(c.author),
+  authorRole: c.author_role as Role,
+  body: str(c.body),
+  createdAt: str(c.created_at),
+});
+
+const csvName = () => `queries-${new Date().toISOString().slice(0, 10)}.csv`;
 
 const toAudit = (e: Raw, fallbackObject?: { type: string; id: string }): AuditEntry => ({
   seq: Number(e.seq),
@@ -140,7 +185,7 @@ export function ApiStoreProvider({ children }: { children: ReactNode }) {
     const next: State = { ...EMPTY, users: [who] };
     const jobs: Promise<void>[] = [];
 
-    if (role === "PIA" || role === "CIA" || role === "IA") {
+    if (role === "PIA" || role === "CIA" || role === "IA" || role === "SIA") {
       jobs.push(
         getAll<Raw>("/queries").then((rows) => {
           rows.forEach((q) => remember(q.current_assignee, q.assignee_name));
@@ -148,7 +193,39 @@ export function ApiStoreProvider({ children }: { children: ReactNode }) {
         }),
       );
     }
-    if (role === "PIA") {
+    if (role === "PIA" || role === "CIA") {
+      // Closure proposals to review, reassignment and export requests, and the auditors to assign.
+      jobs.push(
+        getAll<Raw>("/status-requests").then((rows) => {
+          rows.forEach((r) => {
+            remember(r.proposed_by, r.proposed_by_name);
+            remember(r.decided_by, r.decided_by_name);
+          });
+          next.requests = rows.map((r) => toRequest(r));
+        }),
+        getAll<Raw>("/reassignment-requests").then((rows) => {
+          rows.forEach((r) => {
+            remember(r.from_assignee, r.from_assignee_name);
+            remember(r.to_assignee, r.to_assignee_name);
+            remember(r.requested_by, r.requested_by_name);
+            remember(r.decided_by, r.decided_by_name);
+          });
+          next.reassignments = rows.map((r) => toReassignment(r));
+        }),
+        getAll<Raw>("/export-requests").then((rows) => {
+          rows.forEach((r) => {
+            remember(r.requested_by, r.requested_by_name);
+            remember(r.decided_by, r.decided_by_name);
+          });
+          next.exports = rows.map(toExport);
+        }),
+        api.get<Raw[]>("/auditors").then((rows) => {
+          rows.forEach((u) => remember(u.id, u.full_name));
+          next.users = [who, ...rows.map<User>((u) => ({ id: str(u.id), email: "", fullName: str(u.full_name), role: (u.role ?? "IA") as Role, isActive: true }))];
+        }),
+      );
+    }
+    if (role === "CIA") {
       jobs.push(
         api.get<Raw[]>("/imports").then((rows) => {
           rows.forEach((b) => remember(b.imported_by, b.imported_by_name));
@@ -167,26 +244,16 @@ export function ApiStoreProvider({ children }: { children: ReactNode }) {
     }
     if (role === "CIA") {
       jobs.push(
-        getAll<Raw>("/status-requests").then((rows) => {
-          rows.forEach((r) => {
-            remember(r.proposed_by, r.proposed_by_name);
-            remember(r.decided_by, r.decided_by_name);
-          });
-          next.requests = rows.map((r) => toRequest(r));
-        }),
         getAll<Raw>("/audit-log").then((rows) => {
           rows.forEach((e) => remember(e.actor, e.actor_name));
           next.audit = rows.map((e) => toAudit(e)).sort((a, b) => a.seq - b.seq);
-        }),
-        api.get<Raw[]>("/auditors").then((rows) => {
-          rows.forEach((u) => remember(u.id, u.full_name));
-          next.users = [who, ...rows.map<User>((u) => ({ id: str(u.id), email: "", fullName: str(u.full_name), role: "IA", isActive: true }))];
         }),
       );
     }
     if (role === "CEO") {
       jobs.push(
         api.get<Raw[]>("/dashboard/queries").then((rows) => {
+          rows.forEach((q) => remember(q.current_assignee, q.assignee_name));
           next.queries = rows.map(toQuery);
         }),
         api.get<Raw[]>("/dashboard/cia-activity").then((rows) => {
@@ -204,18 +271,35 @@ export function ApiStoreProvider({ children }: { children: ReactNode }) {
     }
     await Promise.all(jobs);
     for (const u of next.users) remember(u.id, u.fullName);
-    setState((s) => ({ ...next, revisions: s.revisions, activities: s.activities, evidence: s.evidence, audit: bySeq(role === "CIA" || role === "CEO" ? [] : s.audit, next.audit), requests: byId(role === "CIA" ? [] : s.requests, next.requests) }));
+    const listsRequests = role === "PIA" || role === "CIA";
+    setState((s) => ({
+      ...next,
+      revisions: s.revisions,
+      activities: s.activities,
+      evidence: s.evidence,
+      comments: s.comments,
+      audit: bySeq(role === "CIA" || role === "CEO" ? [] : s.audit, next.audit),
+      requests: byId(listsRequests ? [] : s.requests, next.requests),
+      reassignments: byId(listsRequests ? [] : s.reassignments, next.reassignments),
+    }));
   }, []);
 
   const loadQuery = useCallback(async (queryId: string) => {
     const base = `/queries/${queryId}`;
-    const [detail, activities, evidence, revisions, history] = await Promise.all([
+    const [detail, activities, evidence, revisions, history, comments] = await Promise.all([
       api.get<Raw>(base),
       api.get<Raw[]>(`${base}/activities`),
       api.get<Raw[]>(`${base}/evidence`),
       api.get<Raw[]>(`${base}/revisions`),
       api.get<Raw[]>(`${base}/history`),
+      api.get<Raw[]>(`${base}/comments`),
     ]);
+    comments.forEach((c) => remember(c.author, c.author_name));
+    const pendingMove = detail.pending_reassignment as Raw | null;
+    if (pendingMove) {
+      remember(pendingMove.requested_by, pendingMove.requested_by_name);
+      remember(pendingMove.to_assignee, pendingMove.to_assignee_name);
+    }
     remember(detail.current_assignee, detail.assignee_name);
     activities.forEach((a) => remember(a.author, a.author_name));
     evidence.forEach((e) => remember(e.uploaded_by, e.uploaded_by_name));
@@ -244,8 +328,18 @@ export function ApiStoreProvider({ children }: { children: ReactNode }) {
         ...revisions.map<QueryRevision>((r) => ({ id: str(r.id), queryId, field: camel(str(r.field)) as EditableField, oldValue: str(r.old_value), newValue: str(r.new_value), editedBy: str(r.edited_by), reason: str(r.reason), createdAt: str(r.created_at) })),
       ],
       requests: byId(s.requests, requests),
+      reassignments: pendingMove
+        ? byId(s.reassignments, [toReassignment({ ...pendingMove, from_assignee: detail.current_assignee, decision: "Pending" }, queryId)])
+        : s.reassignments,
+      comments: [...s.comments.filter((c) => c.queryId !== queryId), ...comments.map((c) => toComment(c, queryId))],
       audit: bySeq(s.audit, history.map((h) => toAudit(h, { type: "Query", id: queryId }))),
     }));
+  }, []);
+
+  const loadComments = useCallback(async (queryId: string) => {
+    const rows = await api.get<Raw[]>(`/queries/${queryId}/comments`);
+    rows.forEach((c) => remember(c.author, c.author_name));
+    setState((s) => ({ ...s, comments: [...s.comments.filter((c) => c.queryId !== queryId), ...rows.map((c) => toComment(c, queryId))] }));
   }, []);
 
   // Restore an existing session on page load.
@@ -324,6 +418,7 @@ export function ApiStoreProvider({ children }: { children: ReactNode }) {
     },
 
     loadQuery: (id) => loadQuery(id).catch(() => undefined),
+    loadComments: (id) => loadComments(id).catch(() => undefined),
     evidenceUrl: (id) => api.url(`/evidence/${id}/download`),
 
     confirmImport: () => notYet("Browser-side import"),
@@ -347,13 +442,29 @@ export function ApiStoreProvider({ children }: { children: ReactNode }) {
 
     editQuery: (id, field, value, reason) => change(() => api.patch(`/queries/${id}`, { [snake(field)]: value.trim(), reason }), id),
     assign: (id, assigneeId, reason) => change(() => api.post(`/queries/${id}/assign`, { assignee: assigneeId, reason }), id),
-    decide: (requestId, approve, reason) => {
+    decide: (requestId, outcome, reason) => {
       const queryId = state.requests.find((r) => r.id === requestId)?.queryId;
-      return change(() => api.post(`/status-requests/${requestId}/${approve ? "approve" : "reject"}`, { reason }), queryId);
+      const verb = outcome === "Closed" ? "approve" : outcome === "Kept in View" ? "keep-in-view" : "reject";
+      return change(() => api.post(`/status-requests/${requestId}/${verb}`, { reason }), queryId);
     },
+    decideReassignment: (requestId, approve, reason) => {
+      const queryId = state.reassignments.find((r) => r.id === requestId)?.queryId;
+      return change(() => api.post(`/reassignment-requests/${requestId}/${approve ? "approve" : "reject"}`, { reason }), queryId);
+    },
+    requestExport: (filters, reason) => change(() => api.post("/export-requests", { filters, reason })),
+    decideExport: (id, approve, reason) => change(() => api.post(`/export-requests/${id}/${approve ? "approve" : "reject"}`, { reason })),
+    downloadExport: (id) => change(() => api.download(`/export-requests/${id}/download`, csvName())),
+    addComment: (id, body) =>
+      attempt(async () => {
+        await api.post(`/queries/${id}/comments`, { body: body.trim() });
+        await loadComments(id);
+      }),
     setStatusDirect: (id, to, reason) => change(() => api.post(`/queries/${id}/status`, { to_status: to, reason }), id),
-    // Exports must be produced and logged by the server (system.md 4.9).
-    exportQueries: () => notYet("Export"),
+    // Exports are produced and logged by the server (system.md 4.9).
+    exportQueries: (_rows, filters) => {
+      const params = new URLSearchParams(Object.entries(filters).filter(([, v]) => v) as [string, string][]).toString();
+      return change(() => api.download(`/queries/export${params ? `?${params}` : ""}`, csvName()));
+    },
     decideAccess: () => notYet("ICT access approval"),
     verifyLogged: () => undefined,
     async verifyOnServer() {
