@@ -202,3 +202,12 @@ Date, decision, reason. Newest last.
     - **The CIA can also keep a closure proposal in view** (transition table, endpoint and buttons).
     - **Follow-up, evidence and comments** are added by IA, SIA, PIA and CIA on the queries they can see (an IA or SIA only on their own), and comments by the CEO too. Work by the PIA or CIA does not move the status; only the assigned auditor's first entry starts the query. The auditor is notified of comments by others.
     - **Left out for now:** "SRA" and the CEO's blank third bullet.
+
+## 2026-10-23: Exports as formatted Excel workbooks (owner request)
+
+34. **Query exports are an Excel workbook, not CSV.** CSV cannot carry column widths or styling, so dates showed as `####` and the file was hard to read or print. Both export paths (the CIA's `GET /queries/export` and the PIA's approved `GET /export-requests/{id}/download`) now return `.xlsx` from `apps/queries/workbook.py`, built with openpyxl (already a dependency).
+    - **Queries sheet.** A title block gives who exported it (name and role), when (Kampala time), the filters in words and the row count. A PIA export also gives when it was requested, the purpose, and who approved it and when. Below that is one row per query: reference, title, description, department, responsible officer, risk at import and current risk (coloured as in DECISIONS 31), status, deadline, time to deadline (overdue in red), assignee and closed date. Dates are real date cells with fixed widths. Text wraps, with row heights set to fit. The header is frozen and filterable.
+    - **Summary sheet.** Open, overdue and closed counts, plus counts by status, current risk and department.
+    - **Print-ready.** A4 fitted to page width (the register in landscape, the summary in portrait), the header row repeated on each page, and a "Confidential: internal audit" and page-number footer.
+    - **Left out on purpose:** internal ids and fingerprints, which stay in the audit log. Text is always written as text, so a value starting with `=` cannot run as a formula; the old `'` prefix is no longer needed.
+    - The in-browser demo store still downloads CSV: it has no spreadsheet library, and deployed builds use the API.
