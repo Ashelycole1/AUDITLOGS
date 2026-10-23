@@ -80,7 +80,7 @@ export default function QueriesPage() {
     ? "The queries assigned to you. Record follow-up work and propose closure when it is resolved."
     : `${visibleQueries.length} queries in total. ${unassigned ? `${unassigned} still need an auditor.` : "Every query has an auditor."}`;
   const exportButton = isCia ? (
-    <Button kind="secondary" onClick={async () => { const r = await exportQueries(rows, filters); setExportError(r.ok ? null : r.error); }}>Export CSV</Button>
+    <Button kind="secondary" onClick={async () => { const r = await exportQueries(rows, filters); setExportError(r.ok ? null : r.error); }}>Export to Excel</Button>
   ) : me.role === "PIA" ? (
     <Button kind="secondary" onClick={() => setExportOpen(true)}>Export</Button>
   ) : undefined;

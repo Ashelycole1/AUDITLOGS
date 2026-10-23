@@ -216,7 +216,7 @@ function ExportCard({ x }: { x: ExportRequest }) {
       <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2 border-b border-line px-5 py-4 sm:px-6">
         <div>
           <p className="text-[1.1875rem] font-medium tracking-[-0.015em]">Export of {describeFilters(x.filters, userName)}</p>
-          <p className="mt-0.5 text-sm text-muted">About {rows} {rows === 1 ? "query" : "queries"} as they stand now, as CSV</p>
+          <p className="mt-0.5 text-sm text-muted">About {rows} {rows === 1 ? "query" : "queries"} as they stand now, as an Excel workbook</p>
         </div>
         <p className="text-sm font-medium text-warn">{waitingFor(x.createdAt)}</p>
       </header>
@@ -307,7 +307,7 @@ function MyExports() {
                 </p>
               </div>
               {x.decision === "Approved" && (
-                <Button kind="primary" onClick={async () => { const r = await downloadExport(x.id); setError(r.ok ? null : r.error); }}>Download CSV</Button>
+                <Button kind="primary" onClick={async () => { const r = await downloadExport(x.id); setError(r.ok ? null : r.error); }}>Download Excel</Button>
               )}
             </li>
           ))}
@@ -327,7 +327,7 @@ export function ExportRequestDialog({ open, filters, onClose, onDone }: { open: 
     <ReasonDialog
       open={open}
       title="Seek approval to export"
-      description={`Exports need the CIA's approval. This asks for ${describeFilters(filters, userName)}, as CSV. Once approved, download it from Reviews; every download is logged.`}
+      description={`Exports need the CIA's approval. This asks for ${describeFilters(filters, userName)}, as an Excel workbook. Once approved, download it from Reviews; every download is logged.`}
       confirmLabel="Send to the CIA"
       onConfirm={async (reason) => {
         const r = await requestExport(filters, reason);
@@ -732,8 +732,8 @@ export function ReportsPage() {
         lede="Where every query stands, and which are late. Only the CIA can export, and every export is written to the audit log."
         actions={<Button kind="primary" onClick={async () => {
           const r = await exportQueries(visibleQueries, {});
-          setFlash(r.ok ? { tone: "ok", text: `Exported ${visibleQueries.length} queries as CSV. The export is recorded in the audit log.` } : { tone: "error", text: r.error });
-        }}>Export all queries as CSV</Button>}
+          setFlash(r.ok ? { tone: "ok", text: `Exported ${visibleQueries.length} queries to Excel. The export is recorded in the audit log.` } : { tone: "error", text: r.error });
+        }}>Export all queries to Excel</Button>}
       />
       {flash && <div className="mb-4"><Notice tone={flash.tone}>{flash.text}</Notice></div>}
       <div className="grid gap-5 lg:grid-cols-[22rem_minmax(0,1fr)]">

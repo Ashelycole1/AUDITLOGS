@@ -1,5 +1,4 @@
 from django.http import HttpResponse
-from django.utils import timezone
 from rest_framework import generics, mixins, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
@@ -16,14 +15,16 @@ from apps.followup.models import Comment, Evidence, FollowUpActivity
 from apps.workflow import exports
 from apps.workflow import services as workflow
 
-from . import services
+from . import services, workbook
 from .filters import apply_filters
 from .models import Query, QueryRevision, Risk, Status
 
+XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
-def csv_response(content: bytes) -> HttpResponse:
-    response = HttpResponse(content, content_type="text/csv; charset=utf-8")
-    response["Content-Disposition"] = f'attachment; filename="queries-{timezone.localdate().isoformat()}.csv"'
+
+def export_response(content: bytes) -> HttpResponse:
+    response = HttpResponse(content, content_type=XLSX)
+    response["Content-Disposition"] = f'attachment; filename="{workbook.filename()}"'
     response["X-Content-Type-Options"] = "nosniff"
     response["Cache-Control"] = "no-store"
     return response
@@ -408,10 +409,10 @@ class QueryViewSet(
 
     @action(detail=False, methods=["get"])
     def export(self, request):
-        """CIA export as CSV, with the list's filters. Logged (system.md 4.9). A PIA asks through
+        """CIA export as a formatted Excel workbook, with the list's filters. Logged (system.md 4.9). A PIA asks through
         /export-requests instead."""
         content, _ = exports.export_now(actor=request.user, filters=request.query_params, ip=self._ip())
-        return csv_response(content)
+        return export_response(content)
 
     @action(detail=True, methods=["post"], url_path="propose-status")
     def propose_status(self, request, pk=None):

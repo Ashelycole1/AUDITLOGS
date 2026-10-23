@@ -1,15 +1,19 @@
 """The owner's changes of 2026-10-22: the SIA role and rank, PIA assignment and review, reassignment
 and export approval by the CIA, CIA and CEO comments, and email notifications."""
 
+import io
+
 import pytest
 from django.core import mail
 from django.urls import reverse
+from openpyxl import load_workbook
 
 from apps.accounts.models import can_assign
 from apps.auditlog.models import AuditLog
 from apps.auditlog.services import verify_chain
 from apps.notifications.models import Notification
 from apps.queries.models import Query, Status
+from apps.queries.views import XLSX
 from apps.workflow.models import ExportRequest, ReassignmentRequest
 
 pytestmark = pytest.mark.django_db
@@ -316,9 +320,13 @@ def test_pia_export_needs_cia_approval(client_for, make_user, make_query, django
 
     response = pia.get(download)
     assert response.status_code == 200
-    text = response.content.decode("utf-8-sig")
-    assert "IA/2026/301" in text and "IA/2026/302" not in text  # the request's filters apply
-    assert "'=HYPERLINK(1)" in text  # no spreadsheet formulas
+    sheet = load_workbook(io.BytesIO(response.content))["Queries"]
+    values = [c.value for row in sheet.iter_rows() for c in row]
+    assert "IA/2026/301" in values and "IA/2026/302" not in values  # the request's filters apply
+    assert "=HYPERLINK(1)" in values  # kept as text
+    assert all(c.data_type != "f" for row in sheet.iter_rows() for c in row)  # no spreadsheet formulas
+    assert "Board pack for the audit committee" in values  # the purpose and approval are on the page
+    assert any(isinstance(v, str) and v.startswith(cia.user.full_name) for v in values)
     actions_logged = set(
         AuditLog.objects.filter(object_type="ExportRequest").values_list("action", flat=True)
     )
@@ -357,8 +365,13 @@ def test_cia_exports_directly_and_it_is_logged(client_for, make_query):
     make_query(reference="IA/2026/310")
     response = client_for("CIA").get(reverse("queries-export"))
     assert response.status_code == 200
-    assert response["Content-Type"].startswith("text/csv")
-    assert "IA/2026/310" in response.content.decode("utf-8-sig")
+    assert response["Content-Type"] == XLSX
+    assert response["Content-Disposition"].endswith('.xlsx"')
+    book = load_workbook(io.BytesIO(response.content))
+    assert book.sheetnames == ["Queries", "Summary"]
+    values = [c.value for row in book["Queries"].iter_rows() for c in row]
+    assert "IA/2026/310" in values
+    assert not any(isinstance(v, str) and v.startswith("#") for v in values)
     assert AuditLog.objects.filter(action="export.queries").exists()
 
 

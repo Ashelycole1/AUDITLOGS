@@ -8,8 +8,9 @@ from apps.accounts.models import Role, User
 from apps.auditlog.services import record
 from apps.core.validators import MIN_REASON
 from apps.notifications import services as notify
-from apps.queries.filters import FILTER_KEYS, apply_filters, export_csv
+from apps.queries.filters import FILTER_KEYS, apply_filters
 from apps.queries.models import Query
+from apps.queries.workbook import export_workbook
 
 from .models import Decision, ExportRequest
 from .services import WorkflowError
@@ -36,7 +37,7 @@ def export_now(*, actor: User, filters: dict, ip=None) -> tuple[bytes, int]:
         new={"rows": len(queries), "filters": filters},
         ip=ip,
     )
-    return export_csv(queries), len(queries)
+    return export_workbook(queries, actor=actor, filters=filters), len(queries)
 
 
 @transaction.atomic
@@ -103,7 +104,7 @@ def decide_export(*, request_id, actor: User, approve: bool, reason: str = "", i
 
 @transaction.atomic
 def download_export(*, request_id, actor: User, ip=None) -> tuple[bytes, int]:
-    item = ExportRequest.objects.select_for_update().get(pk=request_id)
+    item = ExportRequest.objects.select_for_update().select_related("decided_by").get(pk=request_id)
     if item.requested_by_id != actor.pk:
         raise WorkflowError("Only the person who asked for this export can download it.")
     if item.decision != Decision.APPROVED:
@@ -119,4 +120,4 @@ def download_export(*, request_id, actor: User, ip=None) -> tuple[bytes, int]:
         new={"rows": len(queries), "download": item.downloads},
         ip=ip,
     )
-    return export_csv(queries), len(queries)
+    return export_workbook(queries, actor=actor, filters=item.filters, request=item), len(queries)

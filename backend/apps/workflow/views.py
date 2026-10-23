@@ -6,7 +6,7 @@ from apps.core.requests import client_ip
 from apps.core.scoping import ScopedQuerysetMixin
 from apps.queries import services as query_services
 from apps.queries.filters import FILTER_KEYS
-from apps.queries.views import csv_response
+from apps.queries.views import export_response
 
 from . import exports, services
 from .models import ExportRequest, ReassignmentRequest, StatusChangeRequest
@@ -264,4 +264,4 @@ class ExportRequestViewSet(DecideMixin, mixins.ListModelMixin, viewsets.GenericV
     def download(self, request, pk=None):
         item = self.get_object()
         content, _ = exports.download_export(request_id=item.pk, actor=request.user, ip=self._ip())
-        return csv_response(content)
+        return export_response(content)

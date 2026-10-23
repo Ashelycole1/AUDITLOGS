@@ -117,7 +117,8 @@ const toNotification = (n: Raw, recipient: string): Notification => ({
   createdAt: str(n.created_at),
 });
 
-const csvName = () => `queries-${new Date().toISOString().slice(0, 10)}.csv`;
+// The server names the file too; this is the name the browser saves it under.
+const exportName = () => `audit-queries-${new Date().toLocaleDateString("en-CA", { timeZone: "Africa/Kampala" })}.xlsx`;
 
 const toAudit = (e: Raw, fallbackObject?: { type: string; id: string }): AuditEntry => ({
   seq: Number(e.seq),
@@ -478,7 +479,7 @@ export function ApiStoreProvider({ children }: { children: ReactNode }) {
     },
     requestExport: (filters, reason) => change(() => api.post("/export-requests", { filters, reason })),
     decideExport: (id, approve, reason) => change(() => api.post(`/export-requests/${id}/${approve ? "approve" : "reject"}`, { reason })),
-    downloadExport: (id) => change(() => api.download(`/export-requests/${id}/download`, csvName())),
+    downloadExport: (id) => change(() => api.download(`/export-requests/${id}/download`, exportName())),
     addComment: (id, body) =>
       attempt(async () => {
         await api.post(`/queries/${id}/comments`, { body: body.trim() });
@@ -488,7 +489,7 @@ export function ApiStoreProvider({ children }: { children: ReactNode }) {
     // Exports are produced and logged by the server (system.md 4.9).
     exportQueries: (_rows, filters) => {
       const params = new URLSearchParams(Object.entries(filters).filter(([, v]) => v) as [string, string][]).toString();
-      return change(() => api.download(`/queries/export${params ? `?${params}` : ""}`, csvName()));
+      return change(() => api.download(`/queries/export${params ? `?${params}` : ""}`, exportName()));
     },
     decideAccess: () => notYet("ICT access approval"),
     verifyLogged: () => undefined,
