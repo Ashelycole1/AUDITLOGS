@@ -15,6 +15,9 @@ import { CiaActivityPage, PersonnelPage } from "./pages/Oversight";
 import { UsersPage, SystemPage } from "./pages/Ict";
 import NotificationsPage from "./pages/Notifications";
 import ProfilePage from "./pages/Profile";
+import { AuditReportPage, AuditReportsPage } from "./pages/Reports";
+import { OrganizationPage, PlatformHome, PlatformLogPage } from "./pages/Platform";
+import { SetPasswordPage, SignupPage, VerifyEmailPage } from "./pages/Public";
 
 type NavItem = { to: string; label: string; icon: IconName };
 
@@ -29,6 +32,7 @@ const NAV: Record<Role, NavItem[]> = {
     { to: "/dashboard", label: "Dashboard", icon: "dashboard" },
     { to: "/queries", label: "All queries", icon: "queries" },
     { to: "/approvals", label: "Reviews", icon: "approvals" },
+    { to: "/reports", label: "Reports", icon: "reports" },
   ],
   CIA: [
     { to: "/dashboard", label: "Dashboard", icon: "dashboard" },
@@ -42,14 +46,22 @@ const NAV: Record<Role, NavItem[]> = {
   ],
   IA: AUDITOR_NAV,
   SIA: AUDITOR_NAV,
+  // The CEO reads every query, read-only (auditlogs-additions_final.md 9).
   CEO: [
     { to: "/dashboard", label: "Dashboard", icon: "dashboard" },
+    { to: "/queries", label: "Queries", icon: "queries" },
+    { to: "/reports", label: "Reports", icon: "reports" },
     { to: "/personnel", label: "Personnel", icon: "users" },
     { to: "/cia-activity", label: "CIA activity", icon: "activity" },
   ],
   ICT: [
     { to: "/users", label: "Users", icon: "users" },
     { to: "/system", label: "System", icon: "server" },
+  ],
+  // The platform's System Administrator: institutions, never audit content (section 4).
+  SYS: [
+    { to: "/platform", label: "Organizations", icon: "layers" },
+    { to: "/platform/log", label: "Platform log", icon: "ledger" },
   ],
 };
 
@@ -90,7 +102,8 @@ function Shell() {
         ? state.requests.filter((r) => r.decision === "Pending").length
         : 0;
   const unread = state.notifications.filter((n) => n.recipient === me.id && !n.readAt).length;
-  const canSearch = me.role === "PIA" || me.role === "CIA" || me.role === "IA" || me.role === "SIA";
+  const canSearch = me.role === "PIA" || me.role === "CIA" || me.role === "IA" || me.role === "SIA" || me.role === "CEO";
+  const hasNotifications = me.role !== "SYS";
 
   const search = (e: React.FormEvent) => {
     e.preventDefault();
@@ -140,7 +153,7 @@ function Shell() {
               </form>
             )}
             <ThemeToggle />
-            <NavLink
+            {hasNotifications && <NavLink
               to="/notifications"
               className="relative grid size-9 place-items-center rounded-md text-faint hover:bg-hover hover:text-ink"
               aria-label={unread ? `Notifications, ${unread} unread` : "Notifications"}
@@ -148,7 +161,7 @@ function Shell() {
             >
               <Icon name="bell" className="size-[18px]" />
               {unread > 0 && <span className="absolute -right-0.5 -top-0.5 min-w-4 rounded-full bg-lake px-1 text-center font-mono text-[0.625rem] leading-4 text-on-accent">{unread > 9 ? "9+" : unread}</span>}
-            </NavLink>
+            </NavLink>}
             <UserMenu me={me} onSignOut={() => logout()} />
             <button type="button" onClick={() => setMenu((m) => !m)} className="grid size-10 place-items-center rounded-md text-muted hover:bg-hover lg:hidden" aria-label={menu ? "Close menu" : "Open menu"} aria-expanded={menu}>
               <Icon name={menu ? "close" : "menu"} className="size-5" />
@@ -263,6 +276,11 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/platform/login" element={<Login portal="platform" />} />
+        <Route path="/signup" element={<SignupPage />} />
+        <Route path="/verify-email" element={<VerifyEmailPage />} />
+        <Route path="/set-password" element={<SetPasswordPage />} />
+        <Route path="/platform/set-password" element={<SetPasswordPage platform />} />
         <Route element={<Shell />}>
           <Route index element={<Home />} />
           <Route path="/notifications" element={<NotificationsPage />} />
@@ -271,9 +289,18 @@ export default function App() {
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/overview" element={<Navigate to="/dashboard" replace />} />
           </Route>
-          <Route element={<RoleRoute roles={["PIA", "CIA", "IA", "SIA"]} />}>
+          <Route element={<RoleRoute roles={["PIA", "CIA", "IA", "SIA", "CEO"]} />}>
             <Route path="/queries" element={<QueriesPage />} />
             <Route path="/queries/:id" element={<QueryDetail />} />
+          </Route>
+          <Route element={<RoleRoute roles={["PIA", "CIA", "CEO"]} />}>
+            <Route path="/reports" element={<AuditReportsPage />} />
+            <Route path="/reports/:id" element={<AuditReportPage />} />
+          </Route>
+          <Route element={<RoleRoute roles={["SYS"]} />}>
+            <Route path="/platform" element={<PlatformHome />} />
+            <Route path="/platform/organizations/:id" element={<OrganizationPage />} />
+            <Route path="/platform/log" element={<PlatformLogPage />} />
           </Route>
           <Route element={<RoleRoute roles={["PIA", "CIA"]} />}>
             <Route path="/approvals" element={<ApprovalsPage />} />
@@ -282,7 +309,7 @@ export default function App() {
             <Route path="/import" element={<ImportPage />} />
             <Route path="/batches" element={<BatchesPage />} />
             <Route path="/audit-log" element={<AuditLogPage />} />
-            <Route path="/reports" element={<ReportsPage />} />
+            <Route path="/status-report" element={<ReportsPage />} />
             <Route path="/compliance" element={<CompliancePage />} />
           </Route>
           <Route element={<RoleRoute roles={["CEO"]} />}>

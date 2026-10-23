@@ -8,6 +8,7 @@ import { STATUSES, daysOverdue, dueWithin, fmtDate, fmtDateTime, isAuditor } fro
 import { useMe, useStore } from "../storeTypes";
 import type { Query, Risk, Status } from "../types";
 import { ACTION_LABEL } from "./Cia";
+import { RegisteredNumbersCard, StatusPieCard, SystemStatsCard } from "../widgets";
 
 const DAY = 86_400_000;
 const OPEN_STATUSES: Status[] = ["Imported", "Assigned", "In Progress", "Proposed for Closure", "Pending Approval", "Kept in View", "Returned"];
@@ -163,6 +164,14 @@ export default function DashboardPage() {
           spark={<div className="pt-4"><Meter value={qs.length ? closed / qs.length : 0} color={GOOD} track="var(--color-meter-good-track)" label="Share of queries closed" /></div>}
         />
         <KpiTile {...fourth} />
+      </div>
+
+      {/* Widgets switched per organization by the platform administrator. Their counts cover the whole
+          organization and ignore the filters above (auditlogs-additions_final.md 10). */}
+      <div className="mt-4 grid gap-4 lg:grid-cols-2 xl:grid-cols-3 empty:hidden">
+        <StatusPieCard className="lg:col-span-2 xl:col-span-1" />
+        <RegisteredNumbersCard />
+        <SystemStatsCard />
       </div>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-3">

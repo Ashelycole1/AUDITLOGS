@@ -5,14 +5,28 @@ import { RISKS } from "../lib/risk";
 import { EVIDENCE_MAX_BYTES, EVIDENCE_TYPES, ROLE_NAME, STATUSES, canAssign, canWorkRole, daysOverdue, fmtBytes, fmtDate, fmtDateTime, isAllowedTransition, isAuditor } from "../lib/rules";
 import { useMe, useStore, type Outcome } from "../storeTypes";
 import { CommentThread } from "./Comments";
+import { useCriterionOptions } from "./Reports";
 import type { EditableField, FollowUpActivity, Query, Risk, Status } from "../types";
 
+// In the order of the query record (auditlogs-additions_final.md 8.2).
 const FIELD_LABEL: Record<EditableField, string> = {
   title: "Title",
-  descriptionCurrent: "Finding wording",
+  descriptionCurrent: "Query (finding wording)",
+  managementResponse: "Management response",
   riskRatingCurrent: "Risk rating",
-  deadline: "Deadline",
+  recommendation: "Recommendation",
+  auditObservation: "Audit observation",
+  policyTitle: "Policy title",
+  policyReference: "Policy reference",
+  responsibleOfficer: "Action party",
+  deadline: "Action time (deadline)",
+  department: "Department",
+  notableNumbers: "Notable numbers",
+  criterion: "Criterion",
 };
+const LONG_FIELDS: EditableField[] = ["descriptionCurrent", "managementResponse", "recommendation", "auditObservation", "policyReference", "notableNumbers"];
+
+const fieldValue = (q: Query, f: EditableField): string => (f === "criterion" ? q.criterionId ?? "" : String(q[f] ?? ""));
 
 export default function QueryDetail() {
   const { id } = useParams();
@@ -43,6 +57,8 @@ function Workspace({ q }: { q: Query }) {
   const isCia = me.role === "CIA";
   const isPia = me.role === "PIA";
   const isIa = isAuditor(me.role);
+  // The CEO reads every query and changes nothing (auditlogs-additions_final.md 9).
+  const isCeo = me.role === "CEO";
   const batch = state.batches.find((b) => b.id === q.batchId);
   const pending = state.requests.find((r) => r.queryId === q.id && r.decision === "Pending");
   const pendingMove = state.reassignments.find((r) => r.queryId === q.id && r.decision === "Pending");
@@ -77,9 +93,9 @@ function Workspace({ q }: { q: Query }) {
 
       <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="space-y-5">
-          <Finding q={q} />
-          <FollowUp q={q} />
-          <EvidencePanel q={q} />
+          <QueryRecord q={q} />
+          {!isCeo && <FollowUp q={q} />}
+          {!isCeo && <EvidencePanel q={q} />}
           <Panel title="Comments" subtitle="From anyone working on or overseeing this query">
             <CommentThread q={q} />
           </Panel>
@@ -108,8 +124,20 @@ function Workspace({ q }: { q: Query }) {
                 <RiskTag risk={q.riskRatingCurrent} />
                 {q.riskRatingCurrent !== q.riskRatingOriginal && <span className="block text-muted">Imported as {q.riskRatingOriginal}</span>}
               </dd>
+              {q.criterionTitle && (
+                <>
+                  <dt className="text-muted">Criterion</dt>
+                  <dd>
+                    {q.criterionTitle}
+                    {q.reportId && <Link to={`/reports/${q.reportId}`} className="block text-lake hover:underline">{q.reportTitle}</Link>}
+                  </dd>
+                </>
+              )}
               <dt className="text-muted">Source</dt>
-              <dd className="break-all">{batch?.sourceFilename ?? q.batchFilename}</dd>
+              <dd className="break-all">
+                {batch?.sourceFilename ?? q.batchFilename}
+                {(isCia || isPia || isCeo) && <DownloadOriginal batchId={q.batchId} filename={batch?.sourceFilename ?? q.batchFilename ?? "original"} />}
+              </dd>
             </dl>
             <RiskGuide risk={q.riskRatingCurrent} className="mt-4" />
           </Panel>
@@ -119,26 +147,80 @@ function Workspace({ q }: { q: Query }) {
           {isCia && <CiaActions q={q} />}
           {isPia && <PiaActions q={q} />}
           {isIa && <Propose q={q} hasPending={!!pending} />}
-          <Revisions q={q} />
+          {!isCeo && <Revisions q={q} />}
         </div>
       </div>
     </>
   );
 }
 
-function Finding({ q }: { q: Query }) {
-  const changed = q.descriptionCurrent !== q.descriptionOriginal;
+export function DownloadOriginal({ batchId, filename }: { batchId: string; filename: string }) {
+  const { downloadOriginal } = useStore();
+  const [error, setError] = useState<string | null>(null);
   return (
-    <Panel title="Finding">
-      <p className="max-w-[70ch] leading-relaxed">{q.descriptionCurrent}</p>
-      {changed ? (
-        <div className="glass-inset mt-4 rounded-md p-4">
-          <p className="text-sm font-medium text-muted">Original wording, as imported</p>
-          <p className="mt-1 max-w-[70ch] text-[0.9375rem] leading-relaxed text-muted">{q.descriptionOriginal}</p>
-        </div>
-      ) : (
-        <p className="mt-3 text-sm text-faint">Unchanged since import.</p>
-      )}
+    <>
+      <button
+        type="button"
+        className="mt-1 inline-flex min-h-9 items-center gap-1.5 text-sm font-medium text-lake hover:underline"
+        onClick={async () => { const r = await downloadOriginal(batchId, filename); setError(r.ok ? null : r.error); }}
+      >
+        Download original
+      </button>
+      {error && <span className="block text-[0.8125rem] text-danger">{error}</span>}
+    </>
+  );
+}
+
+/** The query record of section 8.2, numbered in its order. Empty fields say so rather than hiding. */
+function QueryRecord({ q }: { q: Query }) {
+  const changed = q.descriptionCurrent !== q.descriptionOriginal;
+  const none = <span className="text-faint">None recorded</span>;
+  const text = (v?: string) => (v && v.trim() ? <p className="max-w-[70ch] whitespace-pre-line leading-relaxed">{v}</p> : none);
+  const rows: { n: number; label: string; body: React.ReactNode }[] = [
+    {
+      n: 1,
+      label: "Query",
+      body: (
+        <>
+          <p className="max-w-[70ch] leading-relaxed">{q.descriptionCurrent}</p>
+          {changed ? (
+            <div className="glass-inset mt-3 rounded-md p-3">
+              <p className="text-sm font-medium text-muted">Original wording, as imported</p>
+              <p className="mt-1 max-w-[70ch] text-[0.9375rem] leading-relaxed text-muted">{q.descriptionOriginal}</p>
+            </div>
+          ) : (
+            <p className="mt-1 text-sm text-faint">Unchanged since import.</p>
+          )}
+        </>
+      ),
+    },
+    { n: 2, label: "Management response", body: text(q.managementResponse) },
+    { n: 3, label: "Risk rating", body: <RiskTag risk={q.riskRatingCurrent} /> },
+    { n: 4, label: "Recommendation", body: text(q.recommendation) },
+    { n: 5, label: "Audit observation", body: text(q.auditObservation) },
+    {
+      n: 6,
+      label: "Policy reference",
+      body: q.policyTitle || q.policyReference ? (
+        <>
+          {q.policyTitle && <p className="font-medium">{q.policyTitle}</p>}
+          {q.policyReference && <p className="max-w-[70ch] whitespace-pre-line leading-relaxed text-muted">{q.policyReference}</p>}
+        </>
+      ) : none,
+    },
+    { n: 7, label: "Action party & time", body: <p>{q.responsibleOfficer}, by {fmtDate(q.deadline)}</p> },
+    { n: 8, label: "Notable numbers", body: text(q.notableNumbers) },
+  ];
+  return (
+    <Panel title="Query record">
+      <dl className="divide-y divide-line">
+        {rows.map((row) => (
+          <div key={row.n} className="grid gap-1 py-3 first:pt-0 last:pb-0 sm:grid-cols-[12rem_minmax(0,1fr)] sm:gap-4">
+            <dt className="text-sm text-muted"><span className="mr-2 font-mono text-xs text-faint">{row.n}</span>{row.label}</dt>
+            <dd className="text-[0.9375rem]">{row.body}</dd>
+          </div>
+        ))}
+      </dl>
     </Panel>
   );
 }
@@ -471,9 +553,10 @@ function CiaActions({ q }: { q: Query }) {
   const reassign = !!q.currentAssignee;
   const waiting = q.status === "Pending Approval";
 
+  const criteria = useCriterionOptions(dialog === "edit" && field === "criterion");
   const openEdit = (f: EditableField) => {
     setField(f);
-    setValue(String(q[f]));
+    setValue(fieldValue(q, f));
     setDialog("edit");
   };
 
@@ -512,7 +595,7 @@ function CiaActions({ q }: { q: Query }) {
       >
         <div>
           <Label htmlFor="edit-field">Field</Label>
-          <select id="edit-field" className="field" value={field} onChange={(e) => { const f = e.target.value as EditableField; setField(f); setValue(String(q[f])); }}>
+          <select id="edit-field" className="field" value={field} onChange={(e) => { const f = e.target.value as EditableField; setField(f); setValue(fieldValue(q, f)); }}>
             {(Object.keys(FIELD_LABEL) as EditableField[]).map((f) => <option key={f} value={f}>{FIELD_LABEL[f]}</option>)}
           </select>
         </div>
@@ -527,7 +610,12 @@ function CiaActions({ q }: { q: Query }) {
             </>
           ) : field === "deadline" ? (
             <input id="edit-value" type="date" className="field" value={value} onChange={(e) => setValue(e.target.value)} />
-          ) : field === "descriptionCurrent" ? (
+          ) : field === "criterion" ? (
+            <select id="edit-value" className="field" value={value} onChange={(e) => setValue(e.target.value)}>
+              <option value="">No criterion</option>
+              {criteria.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+            </select>
+          ) : LONG_FIELDS.includes(field) ? (
             <textarea id="edit-value" className="field min-h-28" value={value} onChange={(e) => setValue(e.target.value)} />
           ) : (
             <input id="edit-value" className="field" value={value} onChange={(e) => setValue(e.target.value)} />

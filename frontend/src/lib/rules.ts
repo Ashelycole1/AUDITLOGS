@@ -1,4 +1,4 @@
-import type { ExportFilters, Query, Role, Status, User } from "../types";
+import type { ExportFilters, Query, ReassignmentRequest, Role, Status, StatusSummary, User } from "../types";
 
 export const ROLE_NAME: Record<Role, string> = {
   PIA: "Principal Internal Auditor",
@@ -7,6 +7,7 @@ export const ROLE_NAME: Record<Role, string> = {
   SIA: "Senior Internal Auditor",
   CEO: "Chief Executive",
   ICT: "ICT administrator",
+  SYS: "System Administrator",
 };
 
 // The audit chain, lowest first (owner, 2026-10-22). CEO and ICT sit outside it.
@@ -77,8 +78,42 @@ export function queriesFor(user: User, all: Query[]): Query[] {
     case "SIA":
       return all.filter((q) => q.currentAssignee === user.id);
     case "ICT":
+    case "SYS":
       return [];
   }
+}
+
+/** "Worked on": the auditor has started, past Assigned (auditlogs-additions_final.md 10). A query waiting
+ * for a reassignment counts by the status it had before. Mirrors apps/queries/stats.py. */
+export const WORKED_STATUSES: Status[] = ["In Progress", "Proposed for Closure", "Returned", "Kept in View", "Closed"];
+
+export function isWorkedOn(q: Query, reassignments: ReassignmentRequest[] = []): boolean {
+  if (WORKED_STATUSES.includes(q.status)) return true;
+  if (q.status !== "Pending Approval") return false;
+  const waiting = reassignments.find((r) => r.queryId === q.id && r.decision === "Pending");
+  return !!waiting && WORKED_STATUSES.includes(waiting.fromStatus);
+}
+
+/** The pie chart's counts worked out in the browser (demo mode). The API sends the same shape. */
+export function statusSummary(qs: Query[], reassignments: ReassignmentRequest[] = []): StatusSummary {
+  const total = qs.length;
+  const worked = qs.filter((q) => isWorkedOn(q, reassignments));
+  const allocated = qs.filter((q) => q.currentAssignee).length;
+  const allocatedIdle = qs.filter((q) => q.currentAssignee && !isWorkedOn(q, reassignments)).length;
+  const unallocated = qs.filter((q) => !q.currentAssignee && !isWorkedOn(q, reassignments)).length;
+  const pct = (n: number) => (total ? Math.round((1000 * n) / total) / 10 : 0);
+  return {
+    total,
+    workedOn: worked.length,
+    notWorkedOn: total - worked.length,
+    allocated,
+    unallocated: total - allocated,
+    slices: [
+      { key: "worked_on", label: "Worked on", count: worked.length, percent: pct(worked.length), meaning: "The auditor has started: past Assigned." },
+      { key: "allocated_not_worked", label: "Allocated, not yet worked on", count: allocatedIdle, percent: pct(allocatedIdle), meaning: "Has an auditor who has not started yet." },
+      { key: "unallocated", label: "Not allocated", count: unallocated, percent: pct(unallocated), meaning: "Imported but not yet given to an auditor." },
+    ],
+  };
 }
 
 /** The query-list filters, as the server applies them to the list and to exports. */
@@ -88,7 +123,10 @@ export function matchesFilters(q: Query, f: ExportFilters): boolean {
     (!f.status || q.status === f.status) &&
     (!f.risk || q.riskRatingCurrent === f.risk) &&
     (!f.department || q.department === f.department) &&
-    (!f.assignee || (f.assignee === "none" ? !q.currentAssignee : q.currentAssignee === f.assignee)) &&
+    (!f.assignee || (f.assignee === "none" ? !q.currentAssignee : f.assignee === "any" ? !!q.currentAssignee : q.currentAssignee === f.assignee)) &&
+    (!f.worked || (f.worked === "yes") === isWorkedOn(q)) &&
+    (!f.report || q.reportId === f.report) &&
+    (!f.criterion || q.criterionId === f.criterion) &&
     (!(f.overdue === "1" || f.overdue === "true") || daysOverdue(q) > 0) &&
     (!term || q.reference.toLowerCase().includes(term) || q.title.toLowerCase().includes(term) || q.descriptionCurrent.toLowerCase().includes(term))
   );
@@ -99,7 +137,9 @@ export function describeFilters(f: ExportFilters, name: (id: string) => string):
     f.status && `status ${f.status}`,
     f.risk && `${f.risk} risk`,
     f.department && f.department,
-    f.assignee && (f.assignee === "none" ? "not assigned" : `auditor ${name(f.assignee)}`),
+    f.assignee && (f.assignee === "none" ? "not assigned" : f.assignee === "any" ? "allocated" : `auditor ${name(f.assignee)}`),
+    f.worked && (f.worked === "yes" ? "worked on" : "not worked on"),
+    f.report && "one audit report",
     (f.overdue === "1" || f.overdue === "true") && "overdue only",
     f.q && `matching "${f.q}"`,
   ].filter(Boolean);

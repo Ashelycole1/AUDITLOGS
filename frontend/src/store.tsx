@@ -79,6 +79,9 @@ function DemoStoreProvider({ children }: { children: ReactNode }) {
     me,
     userName,
     visibleQueries: me ? queriesFor(me, state.queries) : [],
+    // The demo organization has every dashboard and widget switched on.
+    has: () => true,
+    orgRoles: ["IA", "SIA", "PIA", "CIA", "CEO", "ICT"],
 
     async checkPassword(email, password) {
       const user = state.users.find((u) => u.email.toLowerCase() === email.trim().toLowerCase());
@@ -128,6 +131,9 @@ function DemoStoreProvider({ children }: { children: ReactNode }) {
     evidenceUrl: () => null,
     async uploadImport() {
       return fail("The demo reads files in the browser.");
+    },
+    async downloadOriginal() {
+      return fail("The demo keeps no uploaded files. Connect to the server to download originals.");
     },
     async confirmBatch() {
       return fail("The demo confirms in the browser.");
@@ -189,11 +195,12 @@ function DemoStoreProvider({ children }: { children: ReactNode }) {
     async editQuery(queryId, field, value, reason) {
       const r = requireRole("CIA");
       if (!r.ok) return r;
+      if (field === "criterion") return fail("Audit reports and criteria need the server.");
       const err = reasonError(reason);
       if (err) return fail(err);
       const q = scopedQuery(queryId);
       if (!q) return fail("Query not found.");
-      const old = String(q[field]);
+      const old = String(q[field] ?? "");
       if (old === value.trim()) return fail("The new value is the same as the current one.");
       const now = new Date().toISOString();
       commit((s) => ({
@@ -412,8 +419,9 @@ function DemoStoreProvider({ children }: { children: ReactNode }) {
       return ok;
     },
 
-    async exportQueries(rows, filters) {
+    async exportQueries(rows, filters, format = "xlsx") {
       if (!me || me.role !== "CIA") return fail("Only the CIA can export without approval. Ask the CIA to approve an export.");
+      if (format === "pdf") return fail("PDF reports are made by the server. Connect to it to export PDF.");
       saveCsv(rows, userName);
       commit((s) => ({ next: s, log: [entry(me, { action: "export.queries", objectType: "Query", objectId: "list", oldValue: null, newValue: { rows: rows.length, filters }, reason: "" })] }));
       return ok;

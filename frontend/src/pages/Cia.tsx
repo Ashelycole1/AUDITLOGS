@@ -5,7 +5,7 @@ import { Icon } from "../icons";
 import { verifyChain } from "../lib/auditChain";
 import { ROLE_NAME, STATUSES, daysOverdue, describeFilters, fmtDate, fmtDateTime, matchesFilters } from "../lib/rules";
 import { useMe, useStore, type Outcome } from "../storeTypes";
-import type { AuditEntry, Decision, ExportFilters, ExportRequest, Query, ReassignmentRequest, StatusChangeRequest } from "../types";
+import type { AuditEntry, Decision, ExportFilters, ExportFormat, ExportRequest, Query, ReassignmentRequest, StatusChangeRequest } from "../types";
 
 // CIA: the approvals inbox for closure proposals, reassignments and exports.
 // PIA: reviews of closure proposals (return or keep in view), and their own requests (owner, 2026-10-22).
@@ -307,7 +307,7 @@ function MyExports() {
                 </p>
               </div>
               {x.decision === "Approved" && (
-                <Button kind="primary" onClick={async () => { const r = await downloadExport(x.id); setError(r.ok ? null : r.error); }}>Download Excel</Button>
+                <Button kind="primary" onClick={async () => { const r = await downloadExport(x.id); setError(r.ok ? null : r.error); }}>Download {x.format === "pdf" ? "PDF" : "Excel"}</Button>
               )}
             </li>
           ))}
@@ -321,21 +321,25 @@ function MyExports() {
 }
 
 /** The PIA's "Seek approval" step before an export (owner, 2026-10-22). */
-export function ExportRequestDialog({ open, filters, onClose, onDone }: { open: boolean; filters: ExportFilters; onClose: () => void; onDone?: () => void }) {
+export function ExportRequestDialog({ open, filters, format: fixed, onClose, onDone }: { open: boolean; filters: ExportFilters; format?: ExportFormat; onClose: () => void; onDone?: () => void }) {
   const { userName, requestExport } = useStore();
+  const [chosen, setChosen] = useState<ExportFormat>("xlsx");
+  const format = fixed ?? chosen;
   return (
     <ReasonDialog
       open={open}
       title="Seek approval to export"
-      description={`Exports need the CIA's approval. This asks for ${describeFilters(filters, userName)}, as an Excel workbook. Once approved, download it from Reviews; every download is logged.`}
+      description={`Exports need the CIA's approval. This asks for ${describeFilters(filters, userName)}, as ${format === "pdf" ? "a PDF report" : "an Excel workbook"}. Once approved, download it from Reviews; every download is logged.`}
       confirmLabel="Send to the CIA"
       onConfirm={async (reason) => {
-        const r = await requestExport(filters, reason);
+        const r = await requestExport(filters, reason, format);
         if (r.ok) onDone?.();
         return r.ok ? null : r.error;
       }}
       onClose={onClose}
-    />
+    >
+      {!fixed && <FormatChoice value={chosen} onChange={setChosen} />}
+    </ReasonDialog>
   );
 }
 
@@ -397,6 +401,26 @@ export const ACTION_LABEL: Record<string, string> = {
   "user.enable": "Enabled account",
   "user.disable": "Disabled account",
   "user.reset_mfa": "Reset MFA",
+  "query.create": "Created query",
+  "import.download_original": "Downloaded original file",
+  "export.report": "Exported report as PDF",
+  "report.create": "Created audit report",
+  "report.edit": "Edited audit report",
+  "criterion.create": "Added criterion",
+  "criterion.edit": "Edited criterion",
+  "evidence.download": "Downloaded evidence",
+  "auth.login_refused": "Sign-in refused",
+  "auth.password_set": "Set password",
+  "organization.features": "Changed features",
+  "organization.approve": "Approved organization",
+  "organization.suspend": "Suspended organization",
+  "organization.reactivate": "Reactivated organization",
+  "organization.update": "Updated organization",
+  "organization.admin_create": "Set up administrator",
+  "organization.admin_reset": "Reset administrator",
+  "user.role_change": "Changed role",
+  "user.email_change": "Changed email",
+  "user.update": "Updated account",
 };
 
 // Field names as a reader would say them; people and queries by name and reference, not by ID.
@@ -727,13 +751,16 @@ export function ReportsPage() {
 
   return (
     <>
+      <Link to="/reports" className="inline-flex min-h-10 items-center text-sm font-medium text-lake hover:underline">Audit reports</Link>
       <PageHeader
-        title="Reports"
+        title="Status report"
         lede="Where every query stands, and which are late. Only the CIA can export, and every export is written to the audit log."
-        actions={<Button kind="primary" onClick={async () => {
-          const r = await exportQueries(visibleQueries, {});
-          setFlash(r.ok ? { tone: "ok", text: `Exported ${visibleQueries.length} queries to Excel. The export is recorded in the audit log.` } : { tone: "error", text: r.error });
-        }}>Export all queries to Excel</Button>}
+        actions={(["xlsx", "pdf"] as const).map((f) => (
+          <Button key={f} kind={f === "xlsx" ? "primary" : "secondary"} onClick={async () => {
+            const r = await exportQueries(visibleQueries, {}, f);
+            setFlash(r.ok ? { tone: "ok", text: `Exported ${visibleQueries.length} queries as ${f === "pdf" ? "a PDF report" : "an Excel workbook"}. The export is recorded in the audit log.` } : { tone: "error", text: r.error });
+          }}>Export all as {f === "pdf" ? "PDF" : "Excel"}</Button>
+        ))}
       />
       {flash && <div className="mb-4"><Notice tone={flash.tone}>{flash.text}</Notice></div>}
       <div className="grid gap-5 lg:grid-cols-[22rem_minmax(0,1fr)]">
@@ -912,5 +939,21 @@ export function CompliancePage() {
         onClose={() => setDialog(null)}
       />
     </>
+  );
+}
+
+/** Excel register or PDF report (auditlogs-additions_final.md 13). */
+export function FormatChoice({ value, onChange }: { value: ExportFormat; onChange: (f: ExportFormat) => void }) {
+  return (
+    <fieldset>
+      <legend className="mb-1.5 text-sm font-medium">Format</legend>
+      <div className="inline-flex rounded-md border border-rule bg-sheet p-0.5 text-sm" role="radiogroup">
+        {(["xlsx", "pdf"] as const).map((f) => (
+          <button key={f} type="button" role="radio" aria-checked={value === f} onClick={() => onChange(f)} className={cx("min-h-9 rounded px-3", value === f ? "bg-lake font-medium text-on-accent" : "text-muted hover:text-ink")}>
+            {f === "pdf" ? "PDF report" : "Excel workbook"}
+          </button>
+        ))}
+      </div>
+    </fieldset>
   );
 }

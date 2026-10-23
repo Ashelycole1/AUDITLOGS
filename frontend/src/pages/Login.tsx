@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { Button, IS_STAGING, Label, Notice, ThemeToggle } from "../components";
 import { useStore } from "../storeTypes";
 import { Icon, type IconName } from "../icons";
@@ -38,7 +38,9 @@ const EYEBROW = "font-mono text-xs uppercase tracking-[0.32em] text-leaf";
 const FIELD = "field !min-h-14 !rounded-xl !border-land-field-line";
 const SUBMIT = "!min-h-14 w-full !rounded-xl !border-forest !bg-forest !text-lg !text-white hover:!bg-forest-2";
 
-export default function Login() {
+// portal="platform" is the System Administrator's own sign-in (auditlogs-additions_final.md 4). The server
+// refuses each kind of account on the other page.
+export default function Login({ portal = "organization" }: { portal?: "organization" | "platform" }) {
   const { me, ready, mode, state, checkPassword, completeMfa, resendPin } = useStore();
   const nav = useNavigate();
   const [email, setEmail] = useState("");
@@ -69,7 +71,7 @@ export default function Login() {
   const submitPassword = (e: React.FormEvent) => {
     e.preventDefault();
     run(async () => {
-      const r = await checkPassword(email, password);
+      const r = await checkPassword(email, password, portal);
       if (!r.ok) return setError(r.error);
       if (r.signedIn) return nav("/", { replace: true });
       setError(null);
@@ -180,8 +182,10 @@ export default function Login() {
           {!pendingUser ? (
             <form onSubmit={submitPassword} className="space-y-5" noValidate>
               <div>
-                <h2 className="text-[2.5rem] font-semibold leading-tight tracking-[-0.04em]">Sign in</h2>
-                <p className="mt-2 text-[1.0625rem] leading-relaxed text-mist">Use your work email. We will then email you a one-time code.</p>
+                <h2 className="text-[2.5rem] font-semibold leading-tight tracking-[-0.04em]">{portal === "platform" ? "Platform sign-in" : "Sign in"}</h2>
+                <p className="mt-2 text-[1.0625rem] leading-relaxed text-mist">
+                  {portal === "platform" ? "For platform administrators, who manage the organizations on AuditLogs." : "Use your work email. We will then email you a one-time code."}
+                </p>
               </div>
               <div>
                 <label htmlFor="email" className="mb-2 block font-medium">Email</label>
@@ -219,6 +223,14 @@ export default function Login() {
               <Button kind="primary" type="submit" disabled={busy} className={SUBMIT}>
                 {busy ? "Checking" : <>Continue <Icon name="arrowRight" className="size-5" /></>}
               </Button>
+              {portal === "platform" ? (
+                <p className="text-center text-sm text-mist"><Link to="/login" className="font-medium text-leaf hover:underline">Organization staff sign in here</Link></p>
+              ) : (
+                <div className="flex flex-wrap justify-between gap-2 text-sm">
+                  <Link to="/signup" className="font-medium text-leaf hover:underline">Sign up your organization</Link>
+                  <Link to="/platform/login" className="text-mist hover:text-forest-ink hover:underline">Platform administrators</Link>
+                </div>
+              )}
             </form>
           ) : (
             <form onSubmit={submitCode} className="space-y-5" noValidate>

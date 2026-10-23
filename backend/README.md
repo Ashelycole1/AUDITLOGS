@@ -47,4 +47,6 @@ Until step 3 succeeds, every other endpoint answers 403.
 | `apps/core` | Default-deny role permission, reason validation, health |
 | `apps/accounts` | User and roles, sign-in with emailed one-time PIN, lockout, ICT account management |
 | `apps/auditlog` | Hash-chained append-only log, verifier, `verify_audit_chain` command |
+| `apps/organizations` | Organizations, feature switches, System Administrator platform API, sign-up, `create_sysadmin` |
+| `apps/reports` | Audit reports and criteria |
 | `tests/` | One file per area. `test_permission_matrix.py` covers every route × role |

@@ -3,12 +3,15 @@ import { Button, Check, Empty, Label, Notice, PageHeader, Panel, ReasonDialog, T
 import { ROLE_NAME, fmtDateTime } from "../lib/rules";
 import { useMe, useStore } from "../storeTypes";
 import type { Role } from "../types";
+import { RegisteredNumbersCard, SystemStatsCard } from "../widgets";
 
 const ROLES: Role[] = ["CIA", "PIA", "SIA", "IA", "CEO", "ICT"];
 
 export function UsersPage() {
   const me = useMe();
-  const { state, createUser, setUserActive } = useStore();
+  const { state, createUser, setUserActive, orgRoles } = useStore();
+  // Only the roles whose dashboards the platform administrator switched on (auditlogs-additions_final.md 5).
+  const roles = ROLES.filter((r) => orgRoles.includes(r as (typeof orgRoles)[number]));
   const [form, setForm] = useState({ fullName: "", email: "", role: "IA" as Role });
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
@@ -66,7 +69,7 @@ export function UsersPage() {
             <div>
               <Label htmlFor="nu-role">Role</Label>
               <select id="nu-role" className="field" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Role })}>
-                {ROLES.map((r) => <option key={r} value={r}>{ROLE_NAME[r]}</option>)}
+                {roles.map((r) => <option key={r} value={r}>{ROLE_NAME[r]}</option>)}
               </select>
             </div>
             {error && <Notice tone="error">{error}</Notice>}
@@ -111,6 +114,10 @@ export function SystemPage() {
   return (
     <>
       <PageHeader title="System" lede="Backups, health and access requests. ICT has no access to audit content unless the CIA approves a time-limited request." />
+      <div className="mb-5 grid gap-5 xl:grid-cols-2 empty:hidden">
+        <RegisteredNumbersCard />
+        <SystemStatsCard />
+      </div>
       <div className="grid gap-5 xl:grid-cols-2">
         <Panel title="Health and backups" aside={<span className={cx("text-sm font-medium", failing ? "text-danger" : "text-good")}>{checks.length - failing} of {checks.length} passing</span>}>
           <ul className="divide-y divide-line">

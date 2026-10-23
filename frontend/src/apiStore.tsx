@@ -11,11 +11,15 @@ import type {
   EditableField,
   Evidence,
   ExportFilters,
+  ExportFormat,
   ExportRequest,
+  FeatureKey,
   Notification,
   FollowUpActivity,
   ImportBatch,
   ImportRow,
+  OrgInfo,
+  OrgRole,
   Query,
   QueryRevision,
   ReassignmentRequest,
@@ -50,6 +54,16 @@ const toQuery = (q: Raw): Query => ({
   closedAt: strOrNull(q.closed_at),
   importedAt: strOrNull(q.imported_at),
   batchFilename: q.batch_filename ? str(q.batch_filename) : undefined,
+  managementResponse: str(q.management_response),
+  recommendation: str(q.recommendation),
+  auditObservation: str(q.audit_observation),
+  policyTitle: str(q.policy_title),
+  policyReference: str(q.policy_reference),
+  notableNumbers: str(q.notable_numbers),
+  criterionId: strOrNull(q.criterion),
+  criterionTitle: strOrNull(q.criterion_title),
+  reportId: strOrNull(q.report),
+  reportTitle: strOrNull(q.report_title),
 });
 
 const toRequest = (r: Raw, queryId?: string): StatusChangeRequest => ({
@@ -88,6 +102,7 @@ const toExport = (r: Raw): ExportRequest => ({
   id: str(r.id),
   requestedBy: str(r.requested_by),
   filters: (r.filters ?? {}) as ExportFilters,
+  format: (r.format ?? "xlsx") as ExportFormat,
   reason: str(r.reason),
   decision: r.decision as ExportRequest["decision"],
   decidedBy: strOrNull(r.decided_by),
@@ -118,7 +133,7 @@ const toNotification = (n: Raw, recipient: string): Notification => ({
 });
 
 // The server names the file too; this is the name the browser saves it under.
-const exportName = () => `audit-queries-${new Date().toLocaleDateString("en-CA", { timeZone: "Africa/Kampala" })}.xlsx`;
+const exportName = (format: ExportFormat = "xlsx") => `audit-queries-${new Date().toLocaleDateString("en-CA", { timeZone: "Africa/Kampala" })}.${format}`;
 
 const toAudit = (e: Raw, fallbackObject?: { type: string; id: string }): AuditEntry => ({
   seq: Number(e.seq),
@@ -149,8 +164,22 @@ const toImportRow = (r: Raw): ImportRow => {
     deadline: str(d.deadline),
     responsibleOfficer: str(d.responsible_officer),
     department: str(d.department),
+    criterion: str(d.criterion),
     errors: (r.errors as string[]) ?? [],
     warnings: (r.warnings as string[]) ?? [],
+  };
+};
+
+const toOrg = (o: unknown): OrgInfo | null => {
+  if (!o || typeof o !== "object") return null;
+  const r = o as Raw;
+  return {
+    id: str(r.id),
+    name: str(r.name),
+    country: str(r.country),
+    status: r.status as OrgInfo["status"],
+    features: (r.features as FeatureKey[]) ?? [],
+    roles: (r.roles as OrgRole[]) ?? [],
   };
 };
 
@@ -160,6 +189,7 @@ const toUser = (u: Raw): User => ({
   fullName: str(u.full_name),
   role: (u.effective_role ?? u.role) as Role,
   isActive: u.is_active !== false,
+  ...("organization" in u ? { organization: toOrg(u.organization) } : {}),
 });
 
 function bySeq(a: AuditEntry[], b: AuditEntry[]): AuditEntry[] {
@@ -196,13 +226,19 @@ export function ApiStoreProvider({ children }: { children: ReactNode }) {
   const load = useCallback(async (who: User) => {
     const role = who.role;
     const next: State = { ...EMPTY, users: [who] };
-    const jobs: Promise<void>[] = [
-      api.get<{ results: Raw[] }>("/notifications").then((r) => {
-        next.notifications = r.results.map((n) => toNotification(n, who.id));
-      }),
-    ];
+    // The System Administrator has no organization, so no notifications or audit content; the platform
+    // pages load their own data.
+    const jobs: Promise<void>[] =
+      role === "SYS"
+        ? []
+        : [
+            api.get<{ results: Raw[] }>("/notifications").then((r) => {
+              next.notifications = r.results.map((n) => toNotification(n, who.id));
+            }),
+          ];
 
-    if (role === "PIA" || role === "CIA" || role === "IA" || role === "SIA") {
+    // The CEO reads every query in full, read-only (auditlogs-additions_final.md 9).
+    if (role === "PIA" || role === "CIA" || role === "IA" || role === "SIA" || role === "CEO") {
       jobs.push(
         getAll<Raw>("/queries").then((rows) => {
           rows.forEach((q) => remember(q.current_assignee, q.assignee_name));
@@ -269,10 +305,6 @@ export function ApiStoreProvider({ children }: { children: ReactNode }) {
     }
     if (role === "CEO") {
       jobs.push(
-        api.get<Raw[]>("/dashboard/queries").then((rows) => {
-          rows.forEach((q) => remember(q.current_assignee, q.assignee_name));
-          next.queries = rows.map(toQuery);
-        }),
         api.get<Raw[]>("/dashboard/cia-activity").then((rows) => {
           rows.forEach((e) => remember(e.actor, e.actor_name));
           next.audit = rows.map((e) => toAudit({ ...e, actor_role: "CIA" }, { type: "Query", id: str(e.object_id) })).sort((a, b) => a.seq - b.seq);
@@ -303,13 +335,20 @@ export function ApiStoreProvider({ children }: { children: ReactNode }) {
 
   const loadQuery = useCallback(async (queryId: string) => {
     const base = `/queries/${queryId}`;
+    // The CEO reads the query and its comments but not follow-up, evidence or history: those answer 403
+    // and are shown as empty.
+    const part = (name: string) =>
+      api.get<Raw[]>(`${base}/${name}`).catch((e) => {
+        if (e instanceof ApiError && e.status === 403) return [] as Raw[];
+        throw e;
+      });
     const [detail, activities, evidence, revisions, history, comments] = await Promise.all([
       api.get<Raw>(base),
-      api.get<Raw[]>(`${base}/activities`),
-      api.get<Raw[]>(`${base}/evidence`),
-      api.get<Raw[]>(`${base}/revisions`),
-      api.get<Raw[]>(`${base}/history`),
-      api.get<Raw[]>(`${base}/comments`),
+      part("activities"),
+      part("evidence"),
+      part("revisions"),
+      part("history"),
+      part("comments"),
     ]);
     comments.forEach((c) => remember(c.author, c.author_name));
     const pendingMove = detail.pending_reassignment as Raw | null;
@@ -393,10 +432,12 @@ export function ApiStoreProvider({ children }: { children: ReactNode }) {
     userName: (id) => (id ? names.current.get(id) ?? state.users.find((u) => u.id === id)?.fullName ?? "Unknown user" : "System"),
     // The server has already scoped these to the person signed in.
     visibleQueries: state.queries,
+    has: (feature) => !!me?.organization?.features.includes(feature),
+    orgRoles: me?.organization?.roles ?? [],
 
-    async checkPassword(email, password) {
+    async checkPassword(email, password, portal = "organization") {
       try {
-        const r = await api.post<{ mfa?: string; sent_to?: string } & Raw>("/auth/login", { email, password });
+        const r = await api.post<{ mfa?: string; sent_to?: string } & Raw>("/auth/login", { email, password, portal });
         if (!r.mfa) {
           // MFA paused on the server (staging only): the password step has already signed in.
           const who = toUser(r);
@@ -449,24 +490,29 @@ export function ApiStoreProvider({ children }: { children: ReactNode }) {
 
     confirmImport: () => notYet("Browser-side import"),
     cancelImport: () => undefined,
-    async uploadImport(file) {
+    async uploadImport(file, reportId) {
       try {
-        const r = await api.upload<Raw>("/imports", file);
+        const r = await api.upload<Raw>("/imports", file, reportId ? { report: reportId } : {});
+        const meta = (r.report_meta ?? {}) as Raw;
         const preview: ServerPreview = {
           batchId: str(r.id),
           filename: str(r.source_filename),
           hash: str(r.source_sha256),
           rows: ((r.rows as Raw[]) ?? []).map(toImportRow),
+          reportTitle: r.report_title ? str(r.report_title) : meta.title ? str(meta.title) : undefined,
+          criteria: ((meta.criteria as Raw[]) ?? []).map((c) => str(c.title)),
         };
         return { ok: true, preview };
       } catch (e) {
         return fail(e instanceof ApiError ? e.message : "The file could not be uploaded.");
       }
     },
+    downloadOriginal: (id, filename) => attempt(() => api.download(`/imports/${id}/original`, filename)),
     confirmBatch: (id) => change(() => api.post(`/imports/${id}/confirm`)),
     cancelBatch: (id) => change(() => api.post(`/imports/${id}/cancel`)),
 
-    editQuery: (id, field, value, reason) => change(() => api.patch(`/queries/${id}`, { [snake(field)]: value.trim(), reason }), id),
+    editQuery: (id, field, value, reason) =>
+      change(() => api.patch(`/queries/${id}`, { [snake(field)]: field === "criterion" ? value || null : value.trim(), reason }), id),
     assign: (id, assigneeId, reason) => change(() => api.post(`/queries/${id}/assign`, { assignee: assigneeId, reason }), id),
     decide: (requestId, outcome, reason) => {
       const queryId = state.requests.find((r) => r.id === requestId)?.queryId;
@@ -477,9 +523,9 @@ export function ApiStoreProvider({ children }: { children: ReactNode }) {
       const queryId = state.reassignments.find((r) => r.id === requestId)?.queryId;
       return change(() => api.post(`/reassignment-requests/${requestId}/${approve ? "approve" : "reject"}`, { reason }), queryId);
     },
-    requestExport: (filters, reason) => change(() => api.post("/export-requests", { filters, reason })),
+    requestExport: (filters, reason, format = "xlsx") => change(() => api.post("/export-requests", { filters, reason, format })),
     decideExport: (id, approve, reason) => change(() => api.post(`/export-requests/${id}/${approve ? "approve" : "reject"}`, { reason })),
-    downloadExport: (id) => change(() => api.download(`/export-requests/${id}/download`, exportName())),
+    downloadExport: (id) => change(() => api.download(`/export-requests/${id}/download`, exportName(state.exports.find((x) => x.id === id)?.format))),
     addComment: (id, body) =>
       attempt(async () => {
         await api.post(`/queries/${id}/comments`, { body: body.trim() });
@@ -487,9 +533,10 @@ export function ApiStoreProvider({ children }: { children: ReactNode }) {
       }),
     setStatusDirect: (id, to, reason) => change(() => api.post(`/queries/${id}/status`, { to_status: to, reason }), id),
     // Exports are produced and logged by the server (system.md 4.9).
-    exportQueries: (_rows, filters) => {
-      const params = new URLSearchParams(Object.entries(filters).filter(([, v]) => v) as [string, string][]).toString();
-      return change(() => api.download(`/queries/export${params ? `?${params}` : ""}`, exportName()));
+    exportQueries: (_rows, filters, format = "xlsx") => {
+      const entries = Object.entries(filters).filter(([, v]) => v) as [string, string][];
+      const params = new URLSearchParams([...entries, ["export_format", format]]).toString();
+      return change(() => api.download(`/queries/export?${params}`, exportName(format)));
     },
     decideAccess: () => notYet("ICT access approval"),
     verifyLogged: () => undefined,
