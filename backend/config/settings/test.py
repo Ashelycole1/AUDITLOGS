@@ -7,4 +7,7 @@ DATABASES = {"default": database_from_url(env("DATABASE_URL"))}
 if DATABASES["default"]["ENGINE"].endswith("sqlite3"):
     DATABASES["default"]["NAME"] = ":memory:"
 
-REST_FRAMEWORK = {**REST_FRAMEWORK, "DEFAULT_THROTTLE_RATES": {"login": "1000/min", "export": "1000/min"}}
+REST_FRAMEWORK = {
+    **REST_FRAMEWORK,
+    "DEFAULT_THROTTLE_RATES": {"login": "1000/min", "export": "1000/min", "signup": "1000/min"},
+}

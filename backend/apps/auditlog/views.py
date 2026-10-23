@@ -28,7 +28,12 @@ class AuditLogListView(ListAPIView):
     serializer_class = AuditLogSerializer
 
     def get_queryset(self):
-        qs = AuditLog.objects.select_related("actor").order_by("-seq")
+        # Only this organization's entries (auditlogs-additions_final.md 7).
+        qs = (
+            AuditLog.objects.filter(organization_id=self.request.user.organization_id)
+            .select_related("actor")
+            .order_by("-seq")
+        )
         p = self.request.query_params
         if p.get("actor"):
             qs = qs.filter(actor_id=p["actor"])
@@ -44,12 +49,13 @@ class AuditLogListView(ListAPIView):
 
 
 class VerifyChainView(APIView):
-    """Recompute the chain on demand. Returns counts only, so ICT can run it without seeing audit content."""
+    """Recompute the chain on demand. Returns counts only, so ICT can run it without seeing audit content.
+    The whole chain is walked; the counts speak only of this organization's entries."""
 
     allowed_roles = ("CIA", "ICT")
 
     def post(self, request):
-        result = verify_chain()
+        result = verify_chain(request.user.organization_id)
         outcome = f"intact ({result.checked})" if result.ok else f"broken at {result.broken_at}"
         record(
             actor=request.user,

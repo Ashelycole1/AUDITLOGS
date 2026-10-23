@@ -16,18 +16,23 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from apps.auditlog.services import record
+from apps.core.permissions import SESSION_ORG_KEY, session_org_value
 from apps.core.requests import client_ip
 from apps.core.validators import ReasonSerializer
+from apps.organizations.features import role_enabled
+from apps.organizations.models import OrgStatus
 
-from . import services
+from . import passwords, services
 from .models import AUDITORS, Role, User, can_assign
 from .serializers import (
     LoginSerializer,
     MeSerializer,
     MfaSerializer,
+    SetPasswordSerializer,
     UserCreateSerializer,
     UserSerializer,
     UserUpdateSerializer,
+    check_role_enabled,
 )
 
 ALL_ROLES = tuple(Role.values)
@@ -74,6 +79,36 @@ def expired() -> Response:
     return Response({"detail": EXPIRED, "code": "expired"}, status=status.HTTP_400_BAD_REQUEST)
 
 
+ORGANIZATION_CLOSED = {
+    OrgStatus.PENDING: "Your organization is waiting for approval by the platform administrator.",
+    OrgStatus.SUSPENDED: "Your organization's access is suspended. Contact the platform administrator.",
+    OrgStatus.DEACTIVATED: "Your organization's access has ended. Contact the platform administrator.",
+    OrgStatus.REJECTED: "Your organization's sign-up was not approved. Contact the platform administrator.",
+}
+
+
+def sign_in_problem(user: User, portal: str) -> tuple[str, str] | None:
+    """Why a correct password still does not let this person in, as (code, message). Checked only after
+    the password is right, so it reveals nothing to someone guessing."""
+    if user.organization_id is None:
+        if portal != "platform":
+            return "portal", "Platform administrators sign in on the platform sign-in page."
+        return None
+    if portal == "platform":
+        return "portal", "This page is for platform administrators. Use your organization's sign-in page."
+    org = user.organization
+    if org.status != OrgStatus.ACTIVE:
+        return "organization", ORGANIZATION_CLOSED.get(org.status, ORGANIZATION_CLOSED[OrgStatus.DEACTIVATED])
+    if not role_enabled(org, user.effective_role()):
+        return "role", "Your role is not enabled for your organization. Ask your ICT administrator."
+    return None
+
+
+def mark_session(request, user: User) -> None:
+    # The session carries the organization it was signed in to; RoleRequired checks it on every request.
+    request.session[SESSION_ORG_KEY] = session_org_value(user)
+
+
 @method_decorator(ensure_csrf_cookie, name="dispatch")
 class CsrfView(APIView):
     """Sets the CSRF cookie the single-page app sends back on every write."""
@@ -111,6 +146,7 @@ class LoginView(APIView):
                 object_id=target.pk if target else "unknown",
                 new={"locked": locked},
                 ip=ip,
+                organization=target.organization_id if target else None,
             )
             if locked:
                 return Response(
@@ -118,10 +154,25 @@ class LoginView(APIView):
                 )
             return Response({"detail": WRONG_CREDENTIALS}, status=status.HTTP_400_BAD_REQUEST)
 
+        problem = sign_in_problem(user, data.validated_data["portal"])
+        if problem:
+            code, message = problem
+            record(
+                actor=None,
+                action="auth.login_refused",
+                object_type="User",
+                object_id=user.pk,
+                new={"why": code},
+                ip=ip,
+                organization=user.organization_id,
+            )
+            return Response({"detail": message, "code": code}, status=status.HTTP_403_FORBIDDEN)
+
         if not settings.MFA_REQUIRED:
             # MFA paused (staging only): the password alone signs in, and the log says so.
             with transaction.atomic():
                 login(raw, user, backend="django.contrib.auth.backends.ModelBackend")
+                mark_session(request, user)
                 record(
                     actor=user,
                     action="auth.login",
@@ -133,7 +184,13 @@ class LoginView(APIView):
             return Response(MeSerializer(user).data)
 
         request.session.cycle_key()
-        request.session[PENDING_KEY] = {"user": str(user.pk), "at": time.time(), "fails": 0, "resends": 0}
+        request.session[PENDING_KEY] = {
+            "user": str(user.pk),
+            "at": time.time(),
+            "fails": 0,
+            "resends": 0,
+            "portal": data.validated_data["portal"],
+        }
         # Within the cooldown a repeated sign-in reuses the PIN already sent, rather than sending another.
         email_device(user).generate_challenge()
         return Response({"mfa": "email", "sent_to": masked(user.email)})
@@ -174,6 +231,7 @@ class MfaResendView(APIView):
             object_id=user.pk,
             new={"resend": pending["resends"]},
             ip=client_ip(request._request),
+            organization=user.organization_id,
         )
         return Response({"mfa": "email", "sent_to": masked(user.email)})
 
@@ -204,6 +262,7 @@ class MfaView(APIView):
                 object_id=user.pk,
                 new={"attempt": pending["fails"]},
                 ip=ip,
+                organization=user.organization_id,
             )
             if pending["fails"] >= settings.MFA_MAX_FAILURES:
                 request.session.pop(PENDING_KEY, None)
@@ -217,10 +276,17 @@ class MfaView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # The organization may have been suspended, or the role switched off, since the password step.
+        problem = sign_in_problem(user, pending.get("portal", "organization"))
+        if problem:
+            request.session.pop(PENDING_KEY, None)
+            return Response({"detail": problem[1], "code": problem[0]}, status=status.HTTP_403_FORBIDDEN)
+
         with transaction.atomic():
             request.session.pop(PENDING_KEY, None)
             login(request._request, user, backend="django.contrib.auth.backends.ModelBackend")
             otp_login(request._request, device)
+            mark_session(request, user)
             record(
                 actor=user,
                 action="auth.login",
@@ -254,13 +320,58 @@ class MeView(APIView):
         return Response(MeSerializer(request.user).data)
 
 
+@method_decorator(csrf_protect, name="dispatch")
+class SetPasswordView(APIView):
+    """Choose a password from the one-time emailed link. The link stops working once it is used."""
+
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "login"
+
+    def post(self, request):
+        from django.contrib.auth.password_validation import validate_password
+        from django.core.exceptions import ValidationError as DjangoValidationError
+
+        data = SetPasswordSerializer(data=request.data)
+        data.is_valid(raise_exception=True)
+        user = passwords.user_for_token(data.validated_data["uid"], data.validated_data["token"])
+        if user is None:
+            return Response(
+                {
+                    "detail": "This link has expired or was already used. Ask for a new one.",
+                    "code": "expired",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            validate_password(data.validated_data["password"], user)
+        except DjangoValidationError as exc:
+            raise ValidationError({"password": list(exc.messages)}) from exc
+        with transaction.atomic():
+            user.set_password(data.validated_data["password"])
+            user.save(update_fields=["password", "updated_at"])
+            record(
+                actor=None,
+                action="auth.password_set",
+                object_type="User",
+                object_id=user.pk,
+                ip=client_ip(request._request),
+                organization=user.organization_id,
+            )
+        return Response({"detail": "Your password is set. You can sign in now."})
+
+
 class UserViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
-    """Account management. ICT only (design.md 2): ICT manages accounts but has no rights over findings."""
+    """Account management. ICT only (design.md 2): ICT manages accounts but has no rights over findings.
+    ICT is the organization's administrator and sees and manages only its own organization's people,
+    in the roles enabled for it (auditlogs-additions_final.md 5 and 6)."""
 
     allowed_roles = ("ICT",)
-    queryset = User.objects.all()
     serializer_class = UserSerializer
     pagination_class = None
+
+    def get_queryset(self):
+        return User.objects.filter(organization_id=self.request.user.organization_id)
 
     def _ip(self):
         return client_ip(self.request._request)
@@ -272,9 +383,11 @@ class UserViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.Gen
             )
 
     def create(self, request):
-        data = UserCreateSerializer(data=request.data)
+        data = UserCreateSerializer(data=request.data, context={"organization": request.user.organization})
         data.is_valid(raise_exception=True)
-        user = services.create_user(actor=request.user, ip=self._ip(), **data.validated_data)
+        user = services.create_user(
+            actor=request.user, organization=request.user.organization, ip=self._ip(), **data.validated_data
+        )
         return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
 
     def partial_update(self, request, pk=None):
@@ -307,6 +420,10 @@ class UserViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.Gen
     def enable(self, request, pk=None):
         user = self.get_object()
         reason = self._reasoned(request, user, "enable")
+        try:
+            check_role_enabled(user.organization, user.role)
+        except ValidationError as exc:
+            raise ValidationError({"detail": exc.detail[0] + " Change the role first."}) from exc
         user = services.set_active(actor=request.user, user=user, active=True, reason=reason, ip=self._ip())
         return Response(UserSerializer(user).data)
 
@@ -317,7 +434,9 @@ class AuditorListView(APIView):
     allowed_roles = ("PIA", "CIA")
 
     def get(self, request):
-        auditors = User.objects.filter(role__in=AUDITORS, is_active=True).order_by("full_name")
+        auditors = User.objects.filter(
+            organization_id=request.user.organization_id, role__in=AUDITORS, is_active=True
+        ).order_by("full_name")
         return Response(
             [
                 {"id": str(u.pk), "full_name": u.full_name, "role": u.role}

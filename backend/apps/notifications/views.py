@@ -3,11 +3,10 @@ from rest_framework import mixins, serializers, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from apps.accounts.models import Role
+from apps.accounts.models import ORG_ROLES
 
 from .models import Notification
 
-ALL_ROLES = tuple(Role.values)
 LATEST = 100
 
 
@@ -23,7 +22,7 @@ class NotificationSerializer(serializers.ModelSerializer):
 class NotificationViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
     """Each person's own notifications, newest first. Nobody can read anyone else's."""
 
-    allowed_roles = ALL_ROLES
+    allowed_roles = ORG_ROLES
     serializer_class = NotificationSerializer
     pagination_class = None
 

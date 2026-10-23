@@ -31,4 +31,7 @@ def test_if_enabled_does_nothing_unless_switched_on(monkeypatch):
     with override_settings(ENVIRONMENT="staging"):
         call_command("seed_dev_users", "--if-enabled")
         call_command("seed_dev_users", "--if-enabled")  # runs on every start: must not duplicate
-    assert User.objects.count() == 8
+    # Eight people of the demo organization, and the platform's System Administrator.
+    assert User.objects.count() == 9
+    assert User.objects.filter(organization__isnull=True).get().role == "SYS"
+    assert User.objects.exclude(role="SYS").values("organization").distinct().count() == 1

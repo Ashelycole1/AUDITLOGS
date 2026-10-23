@@ -12,8 +12,10 @@ def _snapshot(user: User) -> dict:
 
 
 @transaction.atomic
-def create_user(*, actor: User, email: str, full_name: str, role: str, reason: str = "", ip=None) -> User:
-    user = User.objects.create_user(email=email, full_name=full_name, role=role)
+def create_user(
+    *, actor: User, email: str, full_name: str, role: str, organization, reason: str = "", ip=None
+) -> User:
+    user = User.objects.create_user(email=email, full_name=full_name, role=role, organization=organization)
     record(
         actor=actor,
         action="user.create",

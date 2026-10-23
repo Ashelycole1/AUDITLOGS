@@ -12,9 +12,10 @@ from rest_framework.test import APIClient
 
 from config.urls import api
 
-from .conftest import ROLES
+from .conftest import ALL_ROLES
 
-ALL = set(ROLES)
+ALL = set(ALL_ROLES)
+ORG = ALL - {"SYS"}
 
 # (url name, method, target object or None, roles allowed)
 READERS = {"PIA", "CIA", "IA", "SIA"}
@@ -35,9 +36,10 @@ MATRIX = [
     ("imports-preview", "get", "batch", {"CIA"}),
     ("imports-confirm", "post", "batch", {"CIA"}),
     ("imports-cancel", "post", "batch", {"CIA"}),
-    ("queries-list", "get", None, READERS),
+    # The CEO reads every query and changes nothing (auditlogs-additions_final.md 9).
+    ("queries-list", "get", None, READERS | {"CEO"}),
     # An IA or SIA who is not the assignee gets 404 here, which the scoping tests check.
-    ("queries-detail", "get", "query", READERS),
+    ("queries-detail", "get", "query", READERS | {"CEO"}),
     ("queries-detail", "patch", "query", {"CIA"}),
     ("queries-assign", "post", "query", {"PIA", "CIA"}),
     ("queries-bulk-assign", "post", None, {"PIA", "CIA"}),
@@ -66,124 +68,64 @@ MATRIX = [
     ("export-requests-reject", "post", "export", {"CIA"}),
     ("export-requests-download", "get", "export", {"PIA"}),
     ("auditors", "get", None, {"PIA", "CIA"}),
-    ("notifications-list", "get", None, ALL),
-    ("notifications-read-all", "post", None, ALL),
-    ("notifications-read", "post", "notification", ALL),
+    ("notifications-list", "get", None, ORG),
+    ("notifications-read-all", "post", None, ORG),
+    ("notifications-read", "post", "notification", ORG),
     ("dashboard-queries", "get", None, {"CEO"}),
     ("dashboard-cia-activity", "get", None, {"CEO"}),
+    # Widgets switched per organization; every role of the organization sees its own counts.
+    ("dashboard-status-summary", "get", None, ORG),
+    ("dashboard-registered-numbers", "get", None, ORG),
+    ("dashboard-system-stats", "get", None, ORG),
+    # The original uploaded file (section 12).
+    ("imports-original", "get", "batch", {"CIA", "PIA", "CEO"}),
+    # Audit reports and criteria (section 8.1).
+    ("reports-list", "get", None, READERS | {"CEO"}),
+    ("reports-list", "post", None, {"CIA"}),
+    ("reports-detail", "get", "report", READERS | {"CEO"}),
+    ("reports-detail", "patch", "report", {"CIA"}),
+    ("reports-criteria", "get", "report", READERS | {"CEO"}),
+    ("reports-criteria", "post", "report", {"CIA"}),
+    ("reports-update-criterion", "patch", "criterion", {"CIA"}),
+    ("reports-pdf", "get", "report", {"CIA"}),
+    # Platform administration: the System Administrator only (section 4).
+    ("platform-organizations-list", "get", None, {"SYS"}),
+    ("platform-organizations-list", "post", None, {"SYS"}),
+    ("platform-organizations-detail", "get", "organization", {"SYS"}),
+    ("platform-organizations-detail", "patch", "organization", {"SYS"}),
+    ("platform-organizations-approve", "post", "organization", {"SYS"}),
+    ("platform-organizations-reject", "post", "organization", {"SYS"}),
+    ("platform-organizations-suspend", "post", "organization", {"SYS"}),
+    ("platform-organizations-reactivate", "post", "organization", {"SYS"}),
+    ("platform-organizations-deactivate", "post", "organization", {"SYS"}),
+    ("platform-organizations-features", "get", "organization", {"SYS"}),
+    ("platform-organizations-features", "put", "organization", {"SYS"}),
+    ("platform-organizations-admin", "post", "organization", {"SYS"}),
+    ("platform-stats", "get", None, {"SYS"}),
+    ("platform-audit-log", "get", None, {"SYS"}),
+    ("platform-audit-log-verify", "post", None, {"SYS"}),
 ]
 
 # Reachable without signing in. Each says nothing about data.
-PUBLIC = {"health", "auth-csrf", "auth-login", "auth-mfa", "auth-mfa-resend"}
+PUBLIC = {
+    "health",
+    "auth-csrf",
+    "auth-login",
+    "auth-mfa",
+    "auth-mfa-resend",
+    "auth-set-password",
+    "signup",
+    "signup-verify",
+}
 
 IDS = [f"{m[1]} {m[0]}" for m in MATRIX]
-
-
-@pytest.fixture
-def make_evidence(make_user):
-    from apps.followup.models import Evidence
-
-    def _make(query):
-        return Evidence.objects.create(
-            query=query,
-            uploaded_by=make_user("IA"),
-            original_filename="a.txt",
-            stored_path="missing",
-            sha256="0" * 64,
-            size_bytes=1,
-            content_type="text/plain",
-        )
-
-    return _make
-
-
-@pytest.fixture
-def make_request(make_user):
-    from apps.workflow.models import StatusChangeRequest
-
-    def _make(query):
-        return StatusChangeRequest.objects.create(
-            query=query,
-            from_status="In Progress",
-            to_status="Proposed for Closure",
-            proposed_by=make_user("IA"),
-            proposed_reason="Matrix test proposal",
-        )
-
-    return _make
-
-
-@pytest.fixture
-def make_reassignment(make_user):
-    from apps.workflow.models import ReassignmentRequest
-
-    def _make(query):
-        return ReassignmentRequest.objects.create(
-            query=query,
-            from_assignee=make_user("IA"),
-            to_assignee=make_user("SIA"),
-            from_status="Assigned",
-            requested_by=make_user("PIA"),
-            reason="Matrix test reassignment",
-        )
-
-    return _make
-
-
-@pytest.fixture
-def make_export(make_user):
-    from apps.workflow.models import ExportRequest
-
-    def _make():
-        return ExportRequest.objects.create(requested_by=make_user("PIA"), reason="Matrix test export")
-
-    return _make
-
-
-@pytest.fixture
-def make_notification(make_user):
-    from apps.notifications.models import Notification
-
-    def _make():
-        return Notification.objects.create(recipient=make_user("IA"), headline="Matrix test")
-
-    return _make
-
-
-@pytest.fixture
-def url_for(
-    make_user,
-    make_batch,
-    make_query,
-    make_evidence,
-    make_request,
-    make_reassignment,
-    make_export,
-    make_notification,
-):
-    def _url(name: str, target: str | None) -> str:
-        if target is None:
-            return reverse(name)
-        obj = {
-            "user": lambda: make_user("IA"),
-            "batch": lambda: make_batch("Previewed"),
-            "query": make_query,
-            "evidence": lambda: make_evidence(make_query()),
-            "request": lambda: make_request(make_query()),
-            "reassignment": lambda: make_reassignment(make_query()),
-            "export": make_export,
-            "notification": make_notification,
-        }[target]()
-        return reverse(name, kwargs={"pk": obj.pk})
-
-    return _url
 
 
 def call(client: APIClient, method: str, url: str):
     return getattr(client, method)(url, {}, format="json")
 
 
-@pytest.mark.parametrize("role", ROLES)
+@pytest.mark.parametrize("role", ALL_ROLES)
 @pytest.mark.parametrize(("name", "method", "target", "allowed"), MATRIX, ids=IDS)
 def test_role_access(role, name, method, target, allowed, client_for, url_for):
     response = call(client_for(role), method, url_for(name, target))

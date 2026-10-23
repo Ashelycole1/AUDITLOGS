@@ -7,6 +7,8 @@ from django.db import transaction
 
 from apps.accounts.models import User
 from apps.auditlog.services import record
+from apps.organizations import features
+from apps.organizations.models import Organization, OrganizationFeature, OrgStatus
 
 # Dummy people only (system.md 4.10). Names match the frontend prototype's demo accounts.
 DEMO_USERS = [
@@ -19,6 +21,34 @@ DEMO_USERS = [
     ("moses.kiggundu@auditlogs.test", "Moses Kiggundu", "CEO"),
     ("brian.ssali@auditlogs.test", "Brian Ssali", "ICT"),
 ]
+# The platform's System Administrator, who belongs to no organization.
+DEMO_SYSADMIN = ("esther.nakato@auditlogs.test", "Esther Nakato", "SYS")
+DEMO_ORGANIZATION = "Demo organisation"
+
+
+def demo_organization() -> Organization:
+    """The organization the demo people belong to: theirs if they already exist, else a new one with
+    every feature on."""
+    existing = User.objects.filter(
+        email__in=[e for e, _, _ in DEMO_USERS], organization__isnull=False
+    ).first()
+    if existing:
+        return existing.organization
+    org, created = Organization.objects.get_or_create(
+        name=DEMO_ORGANIZATION,
+        defaults={
+            "country": "Uganda",
+            "contact_person": "Brian Ssali",
+            "email": "brian.ssali@auditlogs.test",
+            "status": OrgStatus.ACTIVE,
+        },
+    )
+    if created:
+        OrganizationFeature.objects.bulk_create(
+            OrganizationFeature(organization=org, feature_key=key, enabled=True)
+            for key in features.FEATURE_KEYS
+        )
+    return org
 
 
 class Command(BaseCommand):
@@ -43,10 +73,14 @@ class Command(BaseCommand):
         password = os.environ.get("DEV_SEED_PASSWORD") or secrets.token_urlsafe(12)
         created = 0
         with transaction.atomic():
-            for email, name, role in DEMO_USERS:
+            org = demo_organization()
+            for email, name, role in [*DEMO_USERS, DEMO_SYSADMIN]:
                 if User.objects.filter(email=email).exists():
                     continue
-                user = User.objects.create_user(email=email, full_name=name, role=role, password=password)
+                home = None if role == "SYS" else org
+                user = User.objects.create_user(
+                    email=email, full_name=name, role=role, password=password, organization=home
+                )
                 record(
                     actor=None,
                     action="user.create",
@@ -54,6 +88,7 @@ class Command(BaseCommand):
                     object_id=user.pk,
                     new={"email": email, "full_name": name, "role": role, "is_active": True},
                     reason="Development seed data",
+                    organization=home,
                 )
                 created += 1
         self.stdout.write(self.style.SUCCESS(f"Created {created} demo accounts."))

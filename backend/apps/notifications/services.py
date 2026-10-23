@@ -21,8 +21,10 @@ from .models import Notification
 log = logging.getLogger(__name__)
 
 
-def chief_auditors() -> list[User]:
-    return list(User.objects.filter(role=Role.CIA, is_active=True))
+def chief_auditors(organization) -> list[User]:
+    """The CIAs of this one organization: a request never reaches another organization's people."""
+    org_id = getattr(organization, "pk", organization)
+    return list(User.objects.filter(organization_id=org_id, role=Role.CIA, is_active=True))
 
 
 def send(
@@ -37,14 +39,25 @@ def send(
     people = {
         u.pk: u
         for u in recipients
-        if u is not None and u.is_active and (exclude is None or u.pk != exclude.pk)
+        if u is not None
+        and u.is_active
+        and u.organization_id is not None
+        and (exclude is None or u.pk != exclude.pk)
+        and (query is None or u.organization_id == query.organization_id)
     }
     if not people:
         return
     link = link or (f"/queries/{query.pk}" if query is not None else "")
     Notification.objects.bulk_create(
         [
-            Notification(recipient=u, headline=headline, body=body, query=query, link=link)
+            Notification(
+                organization_id=u.organization_id,
+                recipient=u,
+                headline=headline,
+                body=body,
+                query=query,
+                link=link,
+            )
             for u in people.values()
         ]
     )

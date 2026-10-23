@@ -3,13 +3,17 @@ import uuid
 from django.conf import settings
 from django.db import models
 
+from apps.organizations.models import OrgOwned
 
-class Notification(models.Model):
+
+class Notification(OrgOwned):
     """An in-app message to one person: something they need to know or act on (owner, 2026-10-22).
 
     It names the query by reference and links to it; the details stay on the query, behind its
     own access checks. The recipient can only mark it read.
     """
+
+    ORG_PARENT = "recipient"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     recipient = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="+")

@@ -6,5 +6,7 @@ django-axes~=8.0
 argon2-cffi~=25.1
 psycopg[binary]~=3.2
 openpyxl~=3.1
+python-docx~=1.2
+reportlab~=4.4
 cryptography~=46.0
 gunicorn~=23.0

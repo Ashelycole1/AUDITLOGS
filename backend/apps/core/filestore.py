@@ -33,6 +33,11 @@ def sha256(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
 
 
+def org_folder(root: str, organization_id) -> str:
+    """Each organization's files live under a folder of its own (auditlogs-additions_final.md 3.4)."""
+    return str(Path(root) / str(organization_id))
+
+
 def save_encrypted(content: bytes, folder: str) -> str:
     target = Path(folder)
     target.mkdir(parents=True, exist_ok=True)

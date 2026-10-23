@@ -189,6 +189,7 @@ class ExportRequestSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "filters",
+            "format",
             "reason",
             "requested_by",
             "requested_by_name",
@@ -200,7 +201,7 @@ class ExportRequestSerializer(serializers.ModelSerializer):
             "downloads",
             "created_at",
         ]
-        read_only_fields = [f for f in fields if f not in ("filters", "reason")]
+        read_only_fields = [f for f in fields if f not in ("filters", "format", "reason")]
 
     def validate_filters(self, value):
         if not isinstance(value, dict) or set(value) - set(FILTER_KEYS):
@@ -222,7 +223,11 @@ class ExportRequestViewSet(DecideMixin, mixins.ListModelMixin, viewsets.GenericV
     serializer_class = ExportRequestSerializer
 
     def get_queryset(self):
-        qs = ExportRequest.objects.select_related("requested_by", "decided_by").order_by("created_at")
+        qs = (
+            ExportRequest.objects.in_org(self.request.user.organization_id)
+            .select_related("requested_by", "decided_by")
+            .order_by("created_at")
+        )
         if self.request.user.effective_role() != "CIA":
             qs = qs.filter(requested_by=self.request.user)
         decision = self.request.query_params.get("decision")
@@ -237,6 +242,7 @@ class ExportRequestViewSet(DecideMixin, mixins.ListModelMixin, viewsets.GenericV
             actor=request.user,
             filters=data.validated_data.get("filters", {}),
             reason=data.validated_data["reason"],
+            fmt=data.validated_data.get("format", "xlsx"),
             ip=self._ip(),
         )
         return Response(ExportRequestSerializer(item).data, status=status.HTTP_201_CREATED)
@@ -264,4 +270,4 @@ class ExportRequestViewSet(DecideMixin, mixins.ListModelMixin, viewsets.GenericV
     def download(self, request, pk=None):
         item = self.get_object()
         content, _ = exports.download_export(request_id=item.pk, actor=request.user, ip=self._ip())
-        return export_response(content)
+        return export_response(content, item.format, exports._report(request.user, item.filters))

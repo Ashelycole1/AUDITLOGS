@@ -9,24 +9,47 @@ from apps.accounts.models import Role, User, can_assign
 from apps.auditlog.services import record
 from apps.core.validators import MIN_REASON
 from apps.notifications import services as notify
+from apps.organizations.models import CrossOrganizationError
+from apps.reports.models import Criterion
 from apps.workflow.models import Decision, ReassignmentRequest
 from apps.workflow.services import REASSIGNABLE, WorkflowError, transition
 
 from .models import Assignment, Query, QueryRevision, Status
 
-# Fields the CIA may correct after import. The originals are kept (system.md 4.2).
+# Fields the CIA may correct after import. The originals are kept (system.md 4.2). The rest of the query
+# record (auditlogs-additions_final.md 8.2) and the criterion it sits under are editable the same way.
 EDITABLE_FIELDS = (
     "title",
     "description_current",
+    "management_response",
     "risk_rating_current",
+    "recommendation",
+    "audit_observation",
+    "policy_title",
+    "policy_reference",
     "deadline",
     "responsible_officer",
     "department",
+    "notable_numbers",
+    "criterion",
 )
 
 
 def _text(value) -> str:
-    return value.isoformat() if isinstance(value, date) else str(value)
+    if value is None:
+        return ""
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, Criterion):
+        # Revisions and the log name the criterion, so the history reads without looking it up.
+        return value.title
+    return str(value)
+
+
+def _same(a, b) -> bool:
+    if isinstance(a, Criterion) or isinstance(b, Criterion):
+        return getattr(a, "pk", None) == getattr(b, "pk", None)
+    return _text(a) == _text(b)
 
 
 def _has_reason(reason: str) -> bool:
@@ -36,11 +59,12 @@ def _has_reason(reason: str) -> bool:
 @transaction.atomic
 def edit_query(*, query: Query, actor: User, changes: dict, reason: str, ip=None) -> Query:
     query = Query.objects.select_for_update().get(pk=query.pk)
-    changed = {
-        f: v for f, v in changes.items() if f in EDITABLE_FIELDS and _text(getattr(query, f)) != _text(v)
-    }
+    changed = {f: v for f, v in changes.items() if f in EDITABLE_FIELDS and not _same(getattr(query, f), v)}
     if not changed:
         return query
+    criterion = changed.get("criterion")
+    if criterion is not None and criterion.organization_id != query.organization_id:
+        raise CrossOrganizationError("A query's criterion must belong to the same organization.")
     old = {f: _text(getattr(query, f)) for f in changed}
     for field, value in changed.items():
         QueryRevision.objects.create(
@@ -168,7 +192,7 @@ def request_reassignment(
     )
     query = transition(query, Status.PENDING_APPROVAL, actor, reason, ip=ip)
     notify.about_query(
-        notify.chief_auditors(),
+        notify.chief_auditors(query.organization_id),
         query,
         "Reassignment waiting for your approval",
         f"{actor.full_name} asks to move it from {request.from_assignee.full_name} to {assignee.full_name}.",

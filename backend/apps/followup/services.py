@@ -7,7 +7,7 @@ from django.db import transaction
 
 from apps.auditlog.services import record
 from apps.core.exceptions import RuleError
-from apps.core.filestore import read_encrypted, save_encrypted, sha256
+from apps.core.filestore import org_folder, read_encrypted, save_encrypted, sha256
 from apps.notifications import services as notify
 from apps.queries.models import Query, Status
 from apps.workflow.services import AUDITORS, WorkflowError, transition
@@ -83,7 +83,7 @@ def add_evidence(*, query: Query, actor, filename: str, content: bytes, ip=None)
         query=query,
         uploaded_by=actor,
         original_filename=Path(filename).name[:255],
-        stored_path=save_encrypted(content, settings.EVIDENCE_DIR),
+        stored_path=save_encrypted(content, org_folder(settings.EVIDENCE_DIR, query.organization_id)),
         sha256=sha256(content),
         size_bytes=len(content),
         content_type=CONTENT_TYPES[ext],
