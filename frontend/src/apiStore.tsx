@@ -4,8 +4,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, ApiError, getAll } from "./api";
 import type { State } from "./data/seed";
-import { fail, ok, StoreCtx, type Result, type ServerPreview, type Store } from "./storeTypes";
+import { fail, ok, StoreCtx, type Enrolment, type Result, type ServerPreview, type Store } from "./storeTypes";
 import type {
+  AccessRequest,
   AuditEntry,
   Comment,
   EditableField,
@@ -52,6 +53,7 @@ const toQuery = (q: Raw): Query => ({
   currentAssignee: strOrNull(q.current_assignee),
   assigneeRole: (q.assignee_role ?? null) as Role | null,
   closedAt: strOrNull(q.closed_at),
+  disposedAt: strOrNull(q.disposed_at),
   importedAt: strOrNull(q.imported_at),
   batchFilename: q.batch_filename ? str(q.batch_filename) : undefined,
   managementResponse: str(q.management_response),
@@ -188,8 +190,30 @@ const toUser = (u: Raw): User => ({
   email: str(u.email),
   fullName: str(u.full_name),
   role: (u.effective_role ?? u.role) as Role,
+  baseRole: u.role as Role,
   isActive: u.is_active !== false,
+  actingCiaUntil: strOrNull(u.acting_cia_until),
+  ...("has_password" in u ? { hasPassword: u.has_password === true } : {}),
   ...("organization" in u ? { organization: toOrg(u.organization) } : {}),
+});
+
+const toAccess = (a: Raw): AccessRequest => ({
+  id: str(a.id),
+  requestedBy: str(a.requested_by),
+  reason: str(a.reason),
+  status: a.status as AccessRequest["status"],
+  decidedBy: strOrNull(a.decided_by),
+  expiresAt: strOrNull(a.expires_at),
+  createdAt: str(a.created_at),
+  hours: Number(a.hours ?? 2),
+  decisionReason: str(a.decision_reason),
+  endedAt: strOrNull(a.ended_at),
+  reads: Number(a.reads ?? 0),
+});
+
+const enrolment = (r: Raw): Enrolment => ({
+  sentTo: r.sent_to ? str(r.sent_to) : undefined,
+  link: r.set_password_link ? str(r.set_password_link) : undefined,
 });
 
 function bySeq(a: AuditEntry[], b: AuditEntry[]): AuditEntry[] {
@@ -315,6 +339,27 @@ export function ApiStoreProvider({ children }: { children: ReactNode }) {
       jobs.push(
         api.get<Raw[]>("/users").then((rows) => {
           next.users = rows.map(toUser);
+        }),
+        // Readable only under an approved break-glass grant (design.md 12); refused, and so empty, otherwise.
+        getAll<Raw>("/queries")
+          .then((rows) => {
+            rows.forEach((q) => remember(q.current_assignee, q.assignee_name));
+            next.queries = rows.map(toQuery);
+          })
+          // Once a grant ends nothing read under it stays in the browser.
+          .catch(() => {
+            next.queries = [];
+          }),
+      );
+    }
+    if (role === "ICT" || role === "CIA") {
+      jobs.push(
+        api.get<Raw[]>("/access-requests").then((rows) => {
+          rows.forEach((a) => {
+            remember(a.requested_by, a.requested_by_name);
+            remember(a.decided_by, a.decided_by_name);
+          });
+          next.accessRequests = rows.map(toAccess);
         }),
       );
     }
@@ -538,7 +583,8 @@ export function ApiStoreProvider({ children }: { children: ReactNode }) {
       const params = new URLSearchParams([...entries, ["export_format", format]]).toString();
       return change(() => api.download(`/queries/export?${params}`, exportName(format)));
     },
-    decideAccess: () => notYet("ICT access approval"),
+    decideAccess: (id, approve, reason) =>
+      change(() => api.post(`/access-requests/${id}/${approve ? "approve" : "reject"}`, { reason })),
     verifyLogged: () => undefined,
     async verifyOnServer() {
       try {
@@ -554,9 +600,30 @@ export function ApiStoreProvider({ children }: { children: ReactNode }) {
     addEvidence: (id, f) => (f.file ? change(() => api.upload(`/queries/${id}/evidence`, f.file!), id) : Promise.resolve(fail("Choose a file."))),
     proposeClosure: (id, reason) => change(() => api.post(`/queries/${id}/propose-status`, { reason }), id),
 
-    createUser: (u) => change(() => api.post("/users", { email: u.email.trim(), full_name: u.fullName.trim(), role: u.role })),
+    async createUser(u) {
+      let out: Enrolment = {};
+      const r = await change(async () => {
+        out = enrolment(await api.post<Raw>("/users", { email: u.email.trim(), full_name: u.fullName.trim(), role: u.role }));
+      });
+      return { ...r, ...out };
+    },
     setUserActive: (userId, active, reason) => change(() => api.post(`/users/${userId}/${active ? "enable" : "disable"}`, { reason })),
-    requestAccess: () => notYet("ICT access requests"),
+    async sendEnrolment(userId, reason) {
+      let out: Enrolment = {};
+      const r = await change(async () => {
+        out = enrolment(await api.post<Raw>(`/users/${userId}/send-enrolment`, { reason }));
+      });
+      return { ...r, ...out };
+    },
+    setActingCia: (userId, until, reason) =>
+      change(() =>
+        until
+          ? api.post(`/users/${userId}/acting-cia`, { until, reason })
+          : api.post(`/users/${userId}/end-acting-cia`, { reason }),
+      ),
+    requestAccess: (reason, hours = 2) => change(() => api.post("/access-requests", { reason, hours })),
+    endAccess: (id) => change(() => api.post(`/access-requests/${id}/end`, {})),
+    refresh: () => refresh(),
   };
 
   const value = useMemo(() => store, [state, me, ready]); // eslint-disable-line react-hooks/exhaustive-deps

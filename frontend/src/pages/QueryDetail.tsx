@@ -43,7 +43,38 @@ export default function QueryDetail() {
       </div>
     );
   }
-  return <Workspace q={q} />;
+  return q.disposedAt ? <DisposedStub q={q} /> : <Workspace q={q} />;
+}
+
+/** What is left after an approved disposal (retention rules): no text, names, follow-up or files. */
+function DisposedStub({ q }: { q: Query }) {
+  return (
+    <>
+      <Link to="/queries" className="inline-flex min-h-10 items-center gap-1.5 text-sm font-medium text-lake hover:underline">Queries</Link>
+      <header className="mb-6 mt-2">
+        <p className="font-mono text-sm text-lake-deep">{q.reference}</p>
+        <h1 className="mt-1 text-2xl font-medium leading-tight tracking-[-0.02em] text-muted sm:text-[1.75rem]">Disposed of</h1>
+        <div className="mt-4"><StatusBadge status={q.status} /></div>
+      </header>
+      <Panel className="max-w-2xl">
+        <p className="leading-relaxed">
+          This query's content was erased on {fmtDate(q.disposedAt!)}, after its retention period, with the CIA's approval. Its reference, department, dates and status are kept, and so is its trail in the audit log.
+        </p>
+        <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2.5 text-sm">
+          <dt className="text-muted">Department</dt>
+          <dd>{q.department}</dd>
+          <dt className="text-muted">Deadline</dt>
+          <dd>{fmtDate(q.deadline)}</dd>
+          {q.closedAt && (
+            <>
+              <dt className="text-muted">Closed</dt>
+              <dd>{fmtDate(q.closedAt)}</dd>
+            </>
+          )}
+        </dl>
+      </Panel>
+    </>
+  );
 }
 
 function Workspace({ q }: { q: Query }) {
@@ -80,6 +111,12 @@ function Workspace({ q }: { q: Query }) {
           {late > 0 && <span className="text-[0.8125rem] font-medium text-danger">{late} {late === 1 ? "day" : "days"} overdue</span>}
         </div>
       </header>
+
+      {me.role === "ICT" && (
+        <div className="mb-4">
+          <Notice tone="warn">Break-glass access: read only. Opening this page and each file is recorded in the audit log.</Notice>
+        </div>
+      )}
 
       <StatusRail status={q.status} />
 

@@ -1,4 +1,4 @@
-import type { ExportFilters, Query, ReassignmentRequest, Role, Status, StatusSummary, User } from "../types";
+import type { AccessRequest, ExportFilters, Query, ReassignmentRequest, Role, Status, StatusSummary, User } from "../types";
 
 export const ROLE_NAME: Record<Role, string> = {
   PIA: "Principal Internal Auditor",
@@ -191,3 +191,6 @@ export function fmtBytes(n: number): string {
 
 export const EVIDENCE_TYPES = ["pdf", "docx", "xlsx", "png", "jpg", "csv", "txt"];
 export const EVIDENCE_MAX_BYTES = 20 * 1024 * 1024;
+
+/** A break-glass grant that is approved and has not run out. The server ends grants every 15 minutes; this does not wait. */
+export const isOpen = (a: AccessRequest) => a.status === "Approved" && !!a.expiresAt && Date.parse(a.expiresAt) > Date.now();

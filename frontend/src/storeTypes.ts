@@ -82,9 +82,24 @@ export interface Store {
   // IA + SIA
   proposeClosure: (queryId: string, reason: string) => Promise<Result>;
   // ICT
-  createUser: (u: Pick<User, "email" | "fullName" | "role">) => Promise<Result>;
+  /** The new person gets a one-time link to choose a password. Outside production the API also returns it. */
+  createUser: (u: Pick<User, "email" | "fullName" | "role">) => Promise<Result & Enrolment>;
   setUserActive: (userId: string, active: boolean, reason: string) => Promise<Result>;
-  requestAccess: (reason: string) => Promise<Result>;
+  /** A fresh one-time link: a first sign-in, or a forgotten password. */
+  sendEnrolment: (userId: string, reason: string) => Promise<Result & Enrolment>;
+  /** Time-limited CIA rights for a PIA (design.md 8). `until` null ends them now. */
+  setActingCia: (userId: string, until: string | null, reason: string) => Promise<Result>;
+  /** Break-glass (design.md 12): ICT asks, the CIA decides, either may end it early. */
+  requestAccess: (reason: string, hours?: number) => Promise<Result>;
+  endAccess: (requestId: string) => Promise<Result>;
+  /** Reload everything this person may see from the server (API); nothing in the demo. */
+  refresh: () => Promise<void>;
+}
+
+export interface Enrolment {
+  sentTo?: string;
+  /** Shown only outside production, where there is no mail server. */
+  link?: string;
 }
 
 export const StoreCtx = createContext<Store | null>(null);

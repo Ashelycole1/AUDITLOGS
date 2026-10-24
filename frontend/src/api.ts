@@ -75,11 +75,19 @@ export const api = {
     return request<T>("POST", path, form);
   },
   url: (path: string) => `${BASE}${path}`,
-  /** Fetch a file (an export) and hand it to the browser to save. Errors arrive as ApiError. */
-  download: async (path: string, filename: string) => {
+  /** Fetch a file (an export) and hand it to the browser to save. Errors arrive as ApiError.
+   * With a body it is a POST, for exports that need a reason. */
+  download: async (path: string, filename: string, body?: unknown) => {
     let res: Response;
+    const init: RequestInit = { credentials: "same-origin" };
+    if (body !== undefined) {
+      await ensureCsrf();
+      init.method = "POST";
+      init.headers = { "Content-Type": "application/json", "X-CSRFToken": cookie("csrftoken") ?? "" };
+      init.body = JSON.stringify(body);
+    }
     try {
-      res = await fetch(`${BASE}${path}`, { credentials: "same-origin" });
+      res = await fetch(`${BASE}${path}`, init);
     } catch {
       throw new ApiError("Cannot reach the server. Check the connection and try again.", 0);
     }

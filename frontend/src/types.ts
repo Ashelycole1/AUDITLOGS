@@ -44,6 +44,12 @@ export interface User {
   isActive: boolean;
   /** The signed-in person's organization and its switches (API). Null for the System Administrator. */
   organization?: OrgInfo | null;
+  /** The role held, when `role` shows CIA rights granted for cover (design.md 8). */
+  baseRole?: Role;
+  /** End of time-limited CIA rights granted by ICT, if any. */
+  actingCiaUntil?: string | null;
+  /** False until the person has chosen a password from their one-time link (ICT's view). */
+  hasPassword?: boolean;
 }
 
 export interface ImportBatch {
@@ -74,6 +80,8 @@ export interface Query {
   /** IA or SIA (API). The demo looks it up from its users. */
   assigneeRole?: Role | null;
   closedAt: string | null;
+  /** Set when an approved disposal erased the content; the stub stays Closed (retention rules). */
+  disposedAt?: string | null;
   /** When the batch was confirmed (API). The demo works it out from its batches. */
   importedAt?: string | null;
   /** Name of the imported file (API). */
@@ -235,10 +243,16 @@ export interface AccessRequest {
   id: string;
   requestedBy: string;
   reason: string;
-  status: "Pending" | "Approved" | "Rejected";
+  /** Ended: it ran out or was ended early. */
+  status: "Pending" | "Approved" | "Rejected" | "Ended";
   decidedBy: string | null;
   expiresAt: string | null;
   createdAt: string;
+  hours?: number;
+  decisionReason?: string;
+  endedAt?: string | null;
+  /** Pages and files opened under it, from the audit log (API). */
+  reads?: number;
 }
 
 export interface ImportRow {

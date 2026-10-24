@@ -2,7 +2,7 @@
 // Every rule here is also enforced server-side; the UI checks only shape what people are shown.
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { appendAudit, type NewAuditEntry } from "./lib/auditChain";
-import { REASSIGNABLE, canAssign, isAllowedTransition, isAuditor, matchesFilters, queriesFor, reasonError } from "./lib/rules";
+import { REASSIGNABLE, canAssign, isAllowedTransition, isAuditor, isOpen, matchesFilters, queriesFor, reasonError } from "./lib/rules";
 import { sha256 } from "./lib/sha256";
 import { seed, type State } from "./data/seed";
 import type { Query, Role, Status, User } from "./types";
@@ -78,7 +78,8 @@ function DemoStoreProvider({ children }: { children: ReactNode }) {
     state,
     me,
     userName,
-    visibleQueries: me ? queriesFor(me, state.queries) : [],
+    // ICT reads every query while a break-glass grant is open, and none otherwise.
+    visibleQueries: !me ? [] : me.role === "ICT" ? (state.accessRequests.some((a) => a.requestedBy === me.id && isOpen(a)) ? state.queries : []) : queriesFor(me, state.queries),
     // The demo organization has every dashboard and widget switched on.
     has: () => true,
     orgRoles: ["IA", "SIA", "PIA", "CIA", "CEO", "ICT"],
@@ -434,9 +435,11 @@ function DemoStoreProvider({ children }: { children: ReactNode }) {
         const err = reasonError(reason);
         if (err) return fail(err);
       }
-      const expiresAt = approve ? new Date(Date.now() + 2 * 3_600_000).toISOString() : null;
+      const req = state.accessRequests.find((x) => x.id === requestId);
+      if (!req || req.status !== "Pending") return fail("This request has already been decided.");
+      const expiresAt = approve ? new Date(Date.now() + (req.hours ?? 2) * 3_600_000).toISOString() : null;
       commit((s) => ({
-        next: { ...s, accessRequests: s.accessRequests.map((x) => (x.id === requestId ? { ...x, status: approve ? "Approved" : "Rejected", decidedBy: me!.id, expiresAt } : x)) },
+        next: { ...s, accessRequests: s.accessRequests.map((x) => (x.id === requestId ? { ...x, status: approve ? "Approved" : "Rejected", decidedBy: me!.id, expiresAt, decisionReason: reason } : x)) },
         log: [entry(me, { action: approve ? "breakglass.approve" : "breakglass.reject", objectType: "AccessRequest", objectId: requestId, oldValue: { status: "Pending" }, newValue: { status: approve ? "Approved" : "Rejected", expiresAt }, reason })],
       }));
       return ok;
@@ -521,6 +524,39 @@ function DemoStoreProvider({ children }: { children: ReactNode }) {
         next: { ...s, users: [...s.users, { id, email: u.email.trim(), fullName: u.fullName.trim(), role: u.role, isActive: true }] },
         log: [entry(me, { action: "user.create", objectType: "User", objectId: id, oldValue: null, newValue: { email: u.email, role: u.role }, reason: "" })],
       }));
+      // The demo sends no email; the server mails a one-time link.
+      return { ok: true, sentTo: u.email.trim() };
+    },
+
+    async sendEnrolment(userId, reason) {
+      const r = requireRole("ICT");
+      if (!r.ok) return r;
+      const err = reasonError(reason);
+      if (err) return fail(err);
+      const user = state.users.find((x) => x.id === userId);
+      if (!user) return fail("User not found.");
+      if (userId === me!.id) return fail("You cannot send a link for your own account.");
+      commit((s) => ({ next: s, log: [entry(me, { action: "user.enrolment_sent", objectType: "User", objectId: userId, oldValue: null, newValue: null, reason })] }));
+      return { ok: true, sentTo: user.email };
+    },
+
+    async setActingCia(userId, until, reason) {
+      const r = requireRole("ICT");
+      if (!r.ok) return r;
+      const err = reasonError(reason);
+      if (err) return fail(err);
+      const user = state.users.find((x) => x.id === userId);
+      if (!user || (user.baseRole ?? user.role) !== "PIA") return fail("Only a Principal Internal Auditor can act as CIA.");
+      if (until) {
+        const end = new Date(until).getTime();
+        if (!(end > Date.now())) return fail("Choose an end date in the future.");
+        if (end > Date.now() + 90 * 86_400_000) return fail("Acting CIA rights can last up to 90 days.");
+      }
+      const actingCiaUntil = until ? new Date(until).toISOString() : null;
+      commit((s) => ({
+        next: { ...s, users: s.users.map((x) => (x.id === userId ? { ...x, baseRole: "PIA", role: until ? "CIA" : "PIA", actingCiaUntil } : x)) },
+        log: [entry(me, { action: until ? "user.acting_cia_grant" : "user.acting_cia_end", objectType: "User", objectId: userId, oldValue: { actingCiaUntil: user.actingCiaUntil ?? null }, newValue: { actingCiaUntil }, reason })],
+      }));
       return ok;
     },
 
@@ -538,18 +574,39 @@ function DemoStoreProvider({ children }: { children: ReactNode }) {
     },
 
 
-    async requestAccess(reason) {
+    async requestAccess(reason, hours = 2) {
       const r = requireRole("ICT");
       if (!r.ok) return r;
       const err = reasonError(reason);
       if (err) return fail(err);
+      if (state.accessRequests.some((x) => x.requestedBy === me!.id && (x.status === "Pending" || (x.status === "Approved" && x.expiresAt && Date.parse(x.expiresAt) > Date.now()))))
+        return fail("You already have a request waiting or access in use.");
       const id = crypto.randomUUID();
       commit((s) => ({
-        next: { ...s, accessRequests: [{ id, requestedBy: me!.id, reason, status: "Pending", decidedBy: null, expiresAt: null, createdAt: new Date().toISOString() }, ...s.accessRequests] },
-        log: [entry(me, { action: "breakglass.request", objectType: "AccessRequest", objectId: id, oldValue: null, newValue: { status: "Pending" }, reason })],
+        next: {
+          ...s,
+          accessRequests: [{ id, requestedBy: me!.id, reason, status: "Pending", decidedBy: null, expiresAt: null, createdAt: new Date().toISOString(), hours, reads: 0 }, ...s.accessRequests],
+          notifications: [...notes(ciaIds(), "Break-glass access waiting for your decision", null, "/approvals"), ...s.notifications],
+        },
+        log: [entry(me, { action: "breakglass.request", objectType: "AccessRequest", objectId: id, oldValue: null, newValue: { status: "Pending", hours }, reason })],
       }));
       return ok;
     },
+
+    async endAccess(requestId) {
+      const r = requireRole("ICT", "CIA");
+      if (!r.ok) return r;
+      const req = state.accessRequests.find((x) => x.id === requestId);
+      if (!req || req.status !== "Approved") return fail("This access is not in use.");
+      const now = new Date().toISOString();
+      commit((s) => ({
+        next: { ...s, accessRequests: s.accessRequests.map((x) => (x.id === requestId ? { ...x, status: "Ended", endedAt: now, expiresAt: now } : x)) },
+        log: [entry(me, { action: "breakglass.end", objectType: "AccessRequest", objectId: requestId, oldValue: { status: "Approved" }, newValue: { status: "Ended" }, reason: "" })],
+      }));
+      return ok;
+    },
+
+    async refresh() {},
   };
 
   const value = useMemo(() => store, [state, meId, failures]); // eslint-disable-line react-hooks/exhaustive-deps

@@ -164,7 +164,24 @@ Updated at the end of every session and whenever work is paused (see `agent_work
   - Sample Word template: `samples/imports/sample-audit-report.docx`.
   - **Staging needs:** deploy, the migrations (they move existing data into "Default organisation"), `create_sysadmin`, and an SMTP server for sign-up and set-password emails.
 
+- 2026-10-24, **Phase 4 compliance, acting CIA and enrolment links: backend done** (branch `feature/compliance-and-cover`, off `feature/multi-organization`; DECISIONS 36). Owner chose all four recommendations: disposal erases content and keeps a stub; break-glass gives ICT read-only queries; acting CIA is PIA only; the CIA and ICT keep the breach register.
+  - New app `apps/compliance` (migration `compliance 0001`, plus `queries 0006` for `disposed_at`): retention rules (CIA, no defaults), weekly `check_retention` producing Pending disposals the CIA approves or rejects, the breach register with automatic drafts (chain failure, lockout, download volume over `DOWNLOAD_ALERT_PER_HOUR`), data subject search and export (CIA), break-glass requests (ICT asks, CIA decides, reads logged), and `expire_grants` every 15 minutes. The scheduler now runs weekly and interval jobs.
+  - Accounts: ICT-created users get a one-time emailed link (also returned outside production); `POST users/{id}/send-enrolment`; `POST users/{id}/acting-cia` and `/end-acting-cia` (PIA only, up to 90 days). CIA Activity marks acting CIAs.
+  - **1158 backend tests pass** (was 931), ruff and black clean.
+
+- 2026-10-25, **`frontend/src/store.tsx` was found blank** (32,860 NUL bytes, last written 2026-10-24 20:39; an interrupted save). It was restored from HEAD and the demo store's new methods were written again (`createUser` with link, `sendEnrolment`, `setActingCia`, `requestAccess` with hours, `endAccess`, `refresh`). The damaged copy is kept in the session scratchpad. No other changed file had NUL bytes.
+- 2026-10-25, **Phase 4 frontend built:**
+  - New `pages/Compliance.tsx` (CIA): break-glass requests (approve for the hours asked, refuse, end), disposals (check now, dispose or keep), breach register (record, complete drafts, update with a reason, close), data subject search and Excel export (POST download with a reason), retention rules (set or change, with a reason). Demo mode keeps break-glass only.
+  - Approvals inbox: a break-glass section, counted in the nav badge.
+  - ICT: Users page shows "Not signed in yet", sends one-time links (shown on screen outside production), and grants or ends acting CIA for a PIA (end of the chosen day, up to 90 days). System page has the breach register. New Break-glass page (`/break-glass`, where the server's notification points): request with hours, open-access notice, link to read-only queries. ICT may open `/queries` routes; the server refuses them without a grant, and the list is cleared once a grant ends.
+  - Query page: stub for disposed queries; read-only notice for ICT.
+  - Readable labels for the new audit actions (break-glass reads, breaches, retention, disposals, subject requests, links, acting CIA).
+  - Frontend builds; 1158 backend tests pass, ruff and black clean.
+  - **Checked end to end** in headless Chrome against a throwaway database at 1366px and 360px: ICT sends a sign-in link (shown on screen), makes the PIA acting CIA, asks for 3 hours of access; the CIA approves it from Approvals; ICT then reads queries with the read-only notice and no change controls; the CIA records, updates and closes a breach, searches for a person, sets a 12-month rule, and the check flags and disposes an aged closed query, leaving the stub; the acting PIA gets the CIA's pages. No page errors and no sideways overflow.
+  - Note: every API read ICT makes under a grant is logged, so one page view counts several reads.
+
 ### In flight
+- Nothing. Phase 4 is ready for the owner to push.
 - Owner to sign in on staging with a demo account (password only).
 
 ### Next (proposed)

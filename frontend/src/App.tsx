@@ -10,9 +10,10 @@ import DashboardPage from "./pages/Dashboard";
 import QueriesPage from "./pages/Queries";
 import QueryDetail from "./pages/QueryDetail";
 import { ImportPage, BatchesPage } from "./pages/Imports";
-import { ApprovalsPage, AuditLogPage, ReportsPage, CompliancePage } from "./pages/Cia";
+import { ApprovalsPage, AuditLogPage, ReportsPage } from "./pages/Cia";
+import { CompliancePage } from "./pages/Compliance";
 import { CiaActivityPage, PersonnelPage } from "./pages/Oversight";
-import { UsersPage, SystemPage } from "./pages/Ict";
+import { BreakGlassPage, SystemPage, UsersPage } from "./pages/Ict";
 import NotificationsPage from "./pages/Notifications";
 import ProfilePage from "./pages/Profile";
 import { AuditReportPage, AuditReportsPage } from "./pages/Reports";
@@ -57,6 +58,7 @@ const NAV: Record<Role, NavItem[]> = {
   ICT: [
     { to: "/users", label: "Users", icon: "users" },
     { to: "/system", label: "System", icon: "server" },
+    { to: "/break-glass", label: "Break-glass", icon: "compliance" },
   ],
   // The platform's System Administrator: institutions, never audit content (section 4).
   SYS: [
@@ -97,7 +99,8 @@ function Shell() {
   // What waits on this person: the CIA decides proposals, reassignments and exports; the PIA reviews proposals.
   const pending =
     me.role === "CIA"
-      ? [...state.requests, ...state.reassignments, ...state.exports].filter((r) => r.decision === "Pending").length
+      ? [...state.requests, ...state.reassignments, ...state.exports].filter((r) => r.decision === "Pending").length +
+        state.accessRequests.filter((a) => a.status === "Pending").length
       : me.role === "PIA"
         ? state.requests.filter((r) => r.decision === "Pending").length
         : 0;
@@ -289,7 +292,8 @@ export default function App() {
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/overview" element={<Navigate to="/dashboard" replace />} />
           </Route>
-          <Route element={<RoleRoute roles={["PIA", "CIA", "IA", "SIA", "CEO"]} />}>
+          {/* ICT reads queries only under an approved break-glass grant; the server refuses it otherwise. */}
+          <Route element={<RoleRoute roles={["PIA", "CIA", "IA", "SIA", "CEO", "ICT"]} />}>
             <Route path="/queries" element={<QueriesPage />} />
             <Route path="/queries/:id" element={<QueryDetail />} />
           </Route>
@@ -319,6 +323,7 @@ export default function App() {
           <Route element={<RoleRoute roles={["ICT"]} />}>
             <Route path="/users" element={<UsersPage />} />
             <Route path="/system" element={<SystemPage />} />
+            <Route path="/break-glass" element={<BreakGlassPage />} />
           </Route>
           <Route path="*" element={<Home />} />
         </Route>
