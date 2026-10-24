@@ -10,6 +10,7 @@ uv venv --python 3.12 .venv
 uv pip install --python .venv -r requirements.txt -r requirements-dev.txt
 .venv/Scripts/python manage.py migrate          # .venv/bin/python on Linux/macOS
 .venv/Scripts/python manage.py seed_dev_users   # 8 dummy accounts; prints a random password unless DEV_SEED_PASSWORD is set
+.venv/Scripts/python manage.py seed_dev_queries # 16 dummy queries taken through the workflow (optional)
 .venv/Scripts/python manage.py runserver
 ```
 
@@ -20,9 +21,13 @@ The development stack (Postgres, this API with live reload, and the frontend) an
 ```sh
 docker compose -f docker-compose.dev.yml up --build
 docker compose -f docker-compose.dev.yml exec api python manage.py seed_dev_users
+docker compose -f docker-compose.dev.yml exec api python manage.py seed_dev_queries
 ```
 
 ## Checks
+
+The same checks run before each commit once the hooks are set up (`../.pre-commit-config.yaml`):
+`uv tool install pre-commit` and then `pre-commit install` at the repository root.
 
 ```sh
 .venv/Scripts/python -m pytest          # unit, permission matrix, tamper tests
