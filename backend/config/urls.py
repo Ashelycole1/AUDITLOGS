@@ -26,6 +26,7 @@ from apps.followup.views import EvidenceDownloadView
 from apps.imports.views import ImportBatchViewSet
 from apps.notifications.views import NotificationViewSet
 from apps.organizations.views import (
+    OrganizationLogoView,
     OrganizationViewSet,
     PlatformLogView,
     PlatformStatsView,
@@ -70,6 +71,7 @@ api = [
     path("audit-log", AuditLogListView.as_view(), name="audit-log"),
     path("audit-log/verify", VerifyChainView.as_view(), name="audit-log-verify"),
     path("auditors", AuditorListView.as_view(), name="auditors"),
+    path("organization/logo", OrganizationLogoView.as_view(), name="organization-logo"),
     path("dashboard/queries", CeoDashboardQueriesView.as_view(), name="dashboard-queries"),
     path("dashboard/cia-activity", CiaActivityView.as_view(), name="dashboard-cia-activity"),
     path("dashboard/status-summary", StatusSummaryView.as_view(), name="dashboard-status-summary"),

@@ -6,6 +6,7 @@ import re
 import pytest
 from django.core import mail
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.accounts.models import User
@@ -65,6 +66,9 @@ def secret_data(make_user, make_query, make_report):
     record(
         actor=make_user("CIA"), action="test.secret", object_type="Query", object_id=query.pk, reason=SECRET
     )
+    Organization.objects.filter(pk=query.organization_id).update(
+        logo=SECRET.encode(), logo_updated_at=timezone.now()
+    )
     return query
 
 
@@ -81,6 +85,10 @@ def test_lists_and_counts_hold_only_the_own_organization(
     target = reverse(name) + (f"?q={SECRET}" if name == "subject-search" else "")
     for role in sorted(allowed - {"SYS"}):
         response = call(client_for(make_user(role, organization=other)), method, target)
+        if name == "organization-logo":
+            # The secret organization has a logo; this one has none, so it gets nothing at all.
+            assert response.status_code == 404, role
+            continue
         assert response.status_code == 200, (role, response.content[:200])
         body = response.content.decode("utf-8", errors="replace")
         # The search echoes the term it was given; nothing else may carry it.
@@ -512,3 +520,115 @@ def test_admin_email_of_another_account_is_refused(sysadmin, make_user, make_org
     assert response.status_code == 409
     taken.refresh_from_db()
     assert taken.organization_id != org.pk
+
+
+# Organization profile: name, details and logo (owner, 2026-10-25) --------------------------------------
+
+
+def picture(fmt: str = "JPEG", size=(1200, 400)) -> bytes:
+    import io
+
+    from PIL import Image
+
+    out = io.BytesIO()
+    Image.new("RGB", size, (20, 90, 160)).save(out, format=fmt)
+    return out.getvalue()
+
+
+def upload_logo(
+    client, org, content: bytes, name: str = "logo.jpg", reason: str = "New brand from the client"
+):
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    return client.post(
+        reverse("platform-organizations-logo", kwargs={"pk": org.pk}),
+        {"file": SimpleUploadedFile(name, content), "reason": reason},
+        format="multipart",
+    )
+
+
+def test_sysadmin_changes_the_details_the_organization_sees(sysadmin, org, client_for):
+    response = sysadmin.patch(
+        reverse("platform-organizations-detail", kwargs={"pk": org.pk}),
+        {
+            "name": "Mbale Water Board",
+            "address": "Plot 4, Republic Street, Mbale",
+            "website": "https://mbalewater.test",
+            "reason": "Name and address changed by the client",
+        },
+        format="json",
+    )
+    assert response.status_code == 200, response.content
+    mine = client_for("PIA").get(reverse("auth-me")).json()["organization"]
+    assert (mine["name"], mine["address"], mine["website"]) == (
+        "Mbale Water Board",
+        "Plot 4, Republic Street, Mbale",
+        "https://mbalewater.test",
+    )
+    entry = AuditLog.objects.filter(action="organization.update").latest("seq")
+    assert entry.new_value["address"] == "Plot 4, Republic Street, Mbale" and entry.organization_id == org.pk
+
+
+def test_logo_is_redrawn_as_a_small_png_and_shown_to_the_organization(sysadmin, org, client_for, make_org):
+    import io
+
+    from PIL import Image
+
+    response = upload_logo(sysadmin, org, picture())
+    assert response.status_code == 200, response.content
+    assert response.json()["logo_url"].startswith(
+        reverse("platform-organizations-logo", kwargs={"pk": org.pk}) + "?v="
+    )
+
+    ia = client_for("IA")
+    url = ia.get(reverse("auth-me")).json()["organization"]["logo_url"]
+    assert url.startswith(reverse("organization-logo") + "?v=")
+    served = ia.get(reverse("organization-logo"))
+    assert served.status_code == 200 and served["Content-Type"] == "image/png"
+    assert served["X-Content-Type-Options"] == "nosniff"
+    with Image.open(io.BytesIO(served.content)) as img:
+        assert img.format == "PNG" and max(img.size) == 512
+
+    entry = AuditLog.objects.filter(action="organization.logo").latest("seq")
+    assert entry.organization_id == org.pk and len(entry.new_value["logo_sha256"]) == 64
+    assert entry.reason == "New brand from the client"
+
+    # Another organization has its own (no) logo, never this one.
+    other = client_for(make_user_in(make_org("Other organisation")))
+    assert other.get(reverse("organization-logo")).status_code == 404
+    assert other.get(reverse("auth-me")).json()["organization"]["logo_url"] is None
+
+
+def make_user_in(org):
+    return User.objects.create_user(
+        email=f"ia.{org.pk.hex[:8]}@org.test",
+        full_name="Other IA",
+        role="IA",
+        password=PASSWORD,
+        organization=org,
+    )
+
+
+@pytest.mark.parametrize(
+    ("name", "content"),
+    [
+        ("logo.svg", b'<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'),
+        ("logo.png", b"not a picture"),
+        ("logo.bmp", picture("BMP", (10, 10))),
+    ],
+)
+def test_logo_must_be_a_plain_picture(sysadmin, org, name, content):
+    assert upload_logo(sysadmin, org, content, name).status_code == 400
+    assert Organization.objects.get(pk=org.pk).logo is None
+
+
+def test_logo_change_needs_a_reason_and_can_be_taken_down(sysadmin, org, client_for):
+    assert upload_logo(sysadmin, org, picture(), reason="").status_code == 400
+    assert upload_logo(sysadmin, org, picture("PNG", (64, 64))).status_code == 200
+    url = reverse("platform-organizations-logo", kwargs={"pk": org.pk})
+    assert sysadmin.delete(url, {}, format="json").status_code == 409
+    response = sysadmin.delete(url, {"reason": "Old logo withdrawn"}, format="json")
+    assert response.status_code == 200 and response.json()["logo_url"] is None
+    assert client_for("CEO").get(reverse("organization-logo")).status_code == 404
+    assert AuditLog.objects.filter(action="organization.logo_remove").exists()
+    assert verify_chain().ok

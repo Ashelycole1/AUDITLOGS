@@ -8,18 +8,20 @@ from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Count, Q
+from django.http import HttpResponse
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_protect
 from rest_framework import mixins, serializers, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.generics import ListAPIView
+from rest_framework.parsers import JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
-from apps.accounts.models import Role, User
+from apps.accounts.models import ORG_ROLES, Role, User
 from apps.accounts.views import masked
 from apps.auditlog.models import AuditLog
 from apps.auditlog.services import verify_chain
@@ -29,6 +31,7 @@ from apps.queries.models import Query, Status
 
 from . import features as catalogue
 from . import services
+from .logos import logo_url
 from .models import Organization, OrgStatus
 
 PLATFORM = ("SYS",)
@@ -45,6 +48,8 @@ class OrganizationDetailsSerializer(serializers.Serializer):
     contact_person = serializers.CharField(max_length=150)
     email = serializers.EmailField()
     phone = serializers.CharField(max_length=40, required=False, allow_blank=True, default="")
+    address = serializers.CharField(max_length=500, required=False, allow_blank=True, default="")
+    website = serializers.URLField(max_length=200, required=False, allow_blank=True, default="")
 
     def validate_name(self, value: str) -> str:
         return value.strip()
@@ -53,8 +58,19 @@ class OrganizationDetailsSerializer(serializers.Serializer):
         return value.strip().lower()
 
 
+def logo_response(org) -> HttpResponse:
+    if org.logo is None:
+        raise NotFound("This organization has no logo.")
+    response = HttpResponse(bytes(org.logo), content_type="image/png")
+    response["Cache-Control"] = "private, max-age=86400"
+    response["X-Content-Type-Options"] = "nosniff"
+    response["Content-Disposition"] = 'inline; filename="logo.png"'
+    return response
+
+
 class OrganizationSerializer(serializers.ModelSerializer):
     features = serializers.SerializerMethodField()
+    logo_url = serializers.SerializerMethodField()
     users = serializers.IntegerField(source="user_count", read_only=True, default=0)
     active_users = serializers.IntegerField(source="active_user_count", read_only=True, default=0)
     queries = serializers.IntegerField(source="query_count", read_only=True, default=0)
@@ -69,6 +85,9 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "contact_person",
             "email",
             "phone",
+            "address",
+            "website",
+            "logo_url",
             "status",
             "email_verified_at",
             "approved_at",
@@ -84,6 +103,9 @@ class OrganizationSerializer(serializers.ModelSerializer):
 
     def get_features(self, org) -> dict:
         return services.feature_map(org)
+
+    def get_logo_url(self, org) -> str | None:
+        return logo_url(org, platform=True)
 
     def get_administrators(self, org) -> list[dict]:
         admins = User.objects.filter(organization=org, role=Role.ICT).order_by("full_name")
@@ -110,6 +132,13 @@ class UpdateOrganizationSerializer(serializers.Serializer):
     contact_person = serializers.CharField(max_length=150, required=False)
     email = serializers.EmailField(required=False)
     phone = serializers.CharField(max_length=40, required=False, allow_blank=True)
+    address = serializers.CharField(max_length=500, required=False, allow_blank=True)
+    website = serializers.URLField(max_length=200, required=False, allow_blank=True)
+    reason = serializers.CharField(validators=[validate_reason])
+
+
+class LogoSerializer(serializers.Serializer):
+    file = serializers.FileField()
     reason = serializers.CharField(validators=[validate_reason])
 
 
@@ -147,7 +176,8 @@ class OrganizationViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, view
     pagination_class = None
 
     def get_queryset(self):
-        qs = with_counts(Organization.objects.all()).order_by("name")
+        # The logo itself is read only by the logo route.
+        qs = with_counts(Organization.objects.defer("logo")).order_by("name")
         wanted = self.request.query_params.get("status")
         return qs.filter(status=wanted) if wanted else qs
 
@@ -155,7 +185,7 @@ class OrganizationViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, view
         return client_ip(self.request._request)
 
     def _out(self, org, **extra):
-        org = with_counts(Organization.objects.filter(pk=org.pk)).get()
+        org = with_counts(Organization.objects.defer("logo").filter(pk=org.pk)).get()
         org.query_count = query_counts([org.pk]).get(org.pk, 0)
         return {**OrganizationSerializer(org).data, **extra}
 
@@ -174,7 +204,9 @@ class OrganizationViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, view
         data.is_valid(raise_exception=True)
         v = data.validated_data
         wanted = services.resolve_features(preset=v.get("preset"), values=v["features"])
-        details = {k: v[k] for k in ("name", "country", "contact_person", "email", "phone")}
+        details = {
+            k: v[k] for k in ("name", "country", "contact_person", "email", "phone", "address", "website")
+        }
         org = services.create_organization(actor=request.user, details=details, wanted=wanted, ip=self._ip())
         extra = {}
         if v["admin_email"]:
@@ -257,6 +289,34 @@ class OrganizationViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, view
         )
         return Response(self._out(org))
 
+    @action(detail=True, methods=["get", "post", "delete"], parser_classes=[MultiPartParser, JSONParser])
+    def logo(self, request, pk=None):
+        """Read, put up or take down the organization's logo. Changing it needs a reason."""
+        org = self.get_object()
+        if request.method == "GET":
+            return logo_response(Organization.objects.get(pk=org.pk))
+        if request.method == "DELETE":
+            reason = StatusChangeSerializer(data=request.data)
+            reason.is_valid(raise_exception=True)
+            services.set_logo(
+                org=org,
+                actor=request.user,
+                content=None,
+                reason=reason.validated_data["reason"],
+                ip=self._ip(),
+            )
+            return Response(self._out(org))
+        data = LogoSerializer(data=request.data)
+        data.is_valid(raise_exception=True)
+        services.set_logo(
+            org=org,
+            actor=request.user,
+            content=data.validated_data["file"].read(),
+            reason=data.validated_data["reason"],
+            ip=self._ip(),
+        )
+        return Response(self._out(org))
+
     def _admin_out(self, user: User, link: str) -> dict:
         out = {"admin": {"id": str(user.pk), "full_name": user.full_name, "sent_to": masked(user.email)}}
         if show_links():
@@ -275,6 +335,15 @@ class OrganizationViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, view
             self._out(org, **self._admin_out(user, link)),
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
+
+
+class OrganizationLogoView(APIView):
+    """The signed-in person's own organization's logo, for the top bar."""
+
+    allowed_roles = ORG_ROLES
+
+    def get(self, request):
+        return logo_response(Organization.objects.get(pk=request.user.organization_id))
 
 
 class PlatformStatsView(APIView):
@@ -393,7 +462,9 @@ class SignupView(APIView):
         data = SignupSerializer(data=request.data)
         data.is_valid(raise_exception=True)
         v = data.validated_data
-        details = {k: v[k] for k in ("name", "country", "contact_person", "email", "phone")}
+        details = {
+            k: v[k] for k in ("name", "country", "contact_person", "email", "phone", "address", "website")
+        }
         org, _, link = services.sign_up(
             details=details, password=v["password"], ip=client_ip(request._request)
         )

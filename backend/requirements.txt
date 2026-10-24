@@ -39,7 +39,9 @@ openpyxl==3.1.5
 packaging==26.3
     # via gunicorn
 pillow==13.0.0
-    # via reportlab
+    # via
+    #   -r requirements.in
+    #   reportlab
 psycopg==3.3.6
     # via -r requirements.in
 psycopg-binary==3.3.6

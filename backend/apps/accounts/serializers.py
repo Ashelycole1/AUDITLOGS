@@ -2,6 +2,7 @@ from rest_framework import serializers
 
 from apps.core.validators import validate_reason
 from apps.organizations.features import enabled_features, enabled_roles, role_enabled
+from apps.organizations.logos import logo_url
 
 from .models import ORG_ROLES, Role, User
 
@@ -75,6 +76,9 @@ class MeSerializer(UserSerializer):
             "id": str(org.pk),
             "name": org.name,
             "country": org.country,
+            "address": org.address,
+            "website": org.website,
+            "logo_url": logo_url(org),
             "status": org.status,
             "features": sorted(enabled_features(org)),
             "roles": enabled_roles(org),

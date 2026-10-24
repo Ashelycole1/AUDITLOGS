@@ -30,6 +30,13 @@ class Organization(models.Model):
     contact_person = models.CharField(max_length=150)
     email = models.EmailField()
     phone = models.CharField(max_length=40, blank=True)
+    # Shown to the organization's own people with its name (owner, 2026-10-25). Set by the System
+    # Administrator. The logo is kept in the database as a re-encoded PNG, never as the uploaded file.
+    address = models.TextField(blank=True, default="")
+    website = models.URLField(max_length=200, blank=True, default="")
+    logo = models.BinaryField(null=True, blank=True, editable=False)
+    logo_sha256 = models.CharField(max_length=64, blank=True, default="")
+    logo_updated_at = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=12, choices=OrgStatus.choices, default=OrgStatus.PENDING)
     email_verified_at = models.DateTimeField(null=True, blank=True)
     approved_at = models.DateTimeField(null=True, blank=True)
