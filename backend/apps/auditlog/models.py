@@ -26,6 +26,11 @@ class AuditLog(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     seq = models.BigIntegerField(unique=True)
     timestamp = models.DateTimeField()
+    # Whose record this is (auditlogs-additions_final.md 7). Blank for platform entries, and for entries
+    # written before organizations existed; it is sealed into the fingerprint whenever it is set.
+    organization = models.ForeignKey(
+        "organizations.Organization", null=True, blank=True, on_delete=models.PROTECT, related_name="+"
+    )
     actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.PROTECT, related_name="+")
     actor_role = models.CharField(max_length=8, blank=True)
     action = models.CharField(max_length=64, db_index=True)
@@ -42,7 +47,11 @@ class AuditLog(models.Model):
 
     class Meta:
         ordering = ["seq"]
-        indexes = [models.Index(fields=["object_type", "object_id"]), models.Index(fields=["timestamp"])]
+        indexes = [
+            models.Index(fields=["object_type", "object_id"]),
+            models.Index(fields=["timestamp"]),
+            models.Index(fields=["organization", "seq"]),
+        ]
 
     def __str__(self) -> str:
         return f"#{self.seq} {self.action}"

@@ -157,7 +157,31 @@ Updated at the end of every session and whenever work is paused (see `agent_work
   - New **Profile** page for every role (`/profile`): name, role, email, place in the audit chain, what the role can do, current work counts, and account security notes.
   - **Audit log redesigned** without chain graphics: a single seal ring that fills as verification runs (green intact, red at the altered entry), then a ledger grouped by day with time, person, action (colour dot per kind), readable change (names and references, not IDs), reason, and a short fingerprint with a tick once verified. Chain CSS removed; the menu icon is a ledger. Checked in light and dark at 1366px and 360px; no page errors. Not committed yet.
 
+- 2026-10-24, **auditlogs-additions_final.md built** (DECISIONS 35), on branch `feature/multi-organization`:
+  - **Backend:** organizations and isolation, System Administrator, feature switches, sign-up, query record fields, audit reports and criteria, Word import, PDF export, original download, and the pie, registered numbers and system stats endpoints. New apps `organizations` and `reports`, and migrations in every app. **931 backend tests pass** (was 541), including a 404 check for every route from another organization, lists and exports that never include another organization, and the feature switches. Ruff and black are clean.
+  - **Frontend:** platform pages (organizations, organization detail with features and administrators, platform log, platform sign-in), sign-up, email confirmation and set-password pages, Audit reports pages, the query record on the query page with the CIA edit of every field and the criterion, CEO read-only queries, the pie chart, registered numbers and system stats widgets, Word upload with report choice, PDF export and requests, and original-file downloads. Builds.
+  - **Checked end to end** in headless Chrome against a throwaway database at 1366px and 360px: CIA Word import, dashboard, reports, query; CEO read-only query; ICT system; public sign-up; SYS approval with the Core package; the new organization's ICT sees no SIA. No page errors and no sideways overflow.
+  - Sample Word template: `samples/imports/sample-audit-report.docx`.
+  - **Staging needs:** deploy, the migrations (they move existing data into "Default organisation"), `create_sysadmin`, and an SMTP server for sign-up and set-password emails.
+
+- 2026-10-24, **Phase 4 compliance, acting CIA and enrolment links: backend done** (branch `feature/compliance-and-cover`, off `feature/multi-organization`; DECISIONS 36). Owner chose all four recommendations: disposal erases content and keeps a stub; break-glass gives ICT read-only queries; acting CIA is PIA only; the CIA and ICT keep the breach register.
+  - New app `apps/compliance` (migration `compliance 0001`, plus `queries 0006` for `disposed_at`): retention rules (CIA, no defaults), weekly `check_retention` producing Pending disposals the CIA approves or rejects, the breach register with automatic drafts (chain failure, lockout, download volume over `DOWNLOAD_ALERT_PER_HOUR`), data subject search and export (CIA), break-glass requests (ICT asks, CIA decides, reads logged), and `expire_grants` every 15 minutes. The scheduler now runs weekly and interval jobs.
+  - Accounts: ICT-created users get a one-time emailed link (also returned outside production); `POST users/{id}/send-enrolment`; `POST users/{id}/acting-cia` and `/end-acting-cia` (PIA only, up to 90 days). CIA Activity marks acting CIAs.
+  - **1158 backend tests pass** (was 931), ruff and black clean.
+
+- 2026-10-25, **`frontend/src/store.tsx` was found blank** (32,860 NUL bytes, last written 2026-10-24 20:39; an interrupted save). It was restored from HEAD and the demo store's new methods were written again (`createUser` with link, `sendEnrolment`, `setActingCia`, `requestAccess` with hours, `endAccess`, `refresh`). The damaged copy is kept in the session scratchpad. No other changed file had NUL bytes.
+- 2026-10-25, **Phase 4 frontend built:**
+  - New `pages/Compliance.tsx` (CIA): break-glass requests (approve for the hours asked, refuse, end), disposals (check now, dispose or keep), breach register (record, complete drafts, update with a reason, close), data subject search and Excel export (POST download with a reason), retention rules (set or change, with a reason). Demo mode keeps break-glass only.
+  - Approvals inbox: a break-glass section, counted in the nav badge.
+  - ICT: Users page shows "Not signed in yet", sends one-time links (shown on screen outside production), and grants or ends acting CIA for a PIA (end of the chosen day, up to 90 days). System page has the breach register. New Break-glass page (`/break-glass`, where the server's notification points): request with hours, open-access notice, link to read-only queries. ICT may open `/queries` routes; the server refuses them without a grant, and the list is cleared once a grant ends.
+  - Query page: stub for disposed queries; read-only notice for ICT.
+  - Readable labels for the new audit actions (break-glass reads, breaches, retention, disposals, subject requests, links, acting CIA).
+  - Frontend builds; 1158 backend tests pass, ruff and black clean.
+  - **Checked end to end** in headless Chrome against a throwaway database at 1366px and 360px: ICT sends a sign-in link (shown on screen), makes the PIA acting CIA, asks for 3 hours of access; the CIA approves it from Approvals; ICT then reads queries with the read-only notice and no change controls; the CIA records, updates and closes a breach, searches for a person, sets a 12-month rule, and the check flags and disposes an aged closed query, leaving the stub; the acting PIA gets the CIA's pages. No page errors and no sideways overflow.
+  - Note: every API read ICT makes under a grant is logged, so one page view counts several reads.
+
 ### In flight
+- Nothing. Phase 4 is ready for the owner to push.
 - Owner to sign in on staging with a demo account (password only).
 
 ### Next (proposed)

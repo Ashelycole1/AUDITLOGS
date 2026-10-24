@@ -3,6 +3,7 @@ import uuid
 from django.conf import settings
 from django.db import models
 
+from apps.organizations.models import OrgOwned
 from apps.queries.models import QueryChildQuerySet
 
 
@@ -14,8 +15,10 @@ class AppendOnlyQuerySet(QueryChildQuerySet):
         raise PermissionError("Saved follow-up cannot be deleted.")
 
 
-class FollowUpActivity(models.Model):
+class FollowUpActivity(OrgOwned):
     """A note or management response on a query. Saved entries are never edited (design.md 6)."""
+
+    ORG_PARENT = "query"
 
     class Kind(models.TextChoices):
         NOTE = "Note"
@@ -46,8 +49,10 @@ class FollowUpActivity(models.Model):
         raise PermissionError("Saved follow-up cannot be deleted.")
 
 
-class Evidence(models.Model):
+class Evidence(OrgOwned):
     """A file supporting the follow-up, stored encrypted under a random name (architecture.md 5.5)."""
+
+    ORG_PARENT = "query"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     query = models.ForeignKey("queries.Query", on_delete=models.PROTECT, related_name="evidence")
@@ -72,8 +77,10 @@ class Evidence(models.Model):
         raise PermissionError("Evidence is never deleted. Disposal follows the retention rules.")
 
 
-class Comment(models.Model):
+class Comment(OrgOwned):
     """An oversight comment on a query by the CIA or the CEO (owner, 2026-10-22). Never edited."""
+
+    ORG_PARENT = "query"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     query = models.ForeignKey("queries.Query", on_delete=models.PROTECT, related_name="comments")

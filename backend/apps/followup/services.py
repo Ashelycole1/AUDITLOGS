@@ -6,11 +6,12 @@ from django.conf import settings
 from django.db import transaction
 
 from apps.auditlog.services import record
+from apps.compliance import breaches
 from apps.core.exceptions import RuleError
-from apps.core.filestore import read_encrypted, save_encrypted, sha256
+from apps.core.filestore import StoredFileError, org_folder, read_encrypted, save_encrypted, sha256
 from apps.notifications import services as notify
 from apps.queries.models import Query, Status
-from apps.workflow.services import AUDITORS, WorkflowError, transition
+from apps.workflow.services import AUDITORS, DISPOSED, WorkflowError, transition
 
 from .models import Comment, Evidence, FollowUpActivity
 
@@ -83,7 +84,7 @@ def add_evidence(*, query: Query, actor, filename: str, content: bytes, ip=None)
         query=query,
         uploaded_by=actor,
         original_filename=Path(filename).name[:255],
-        stored_path=save_encrypted(content, settings.EVIDENCE_DIR),
+        stored_path=save_encrypted(content, org_folder(settings.EVIDENCE_DIR, query.organization_id)),
         sha256=sha256(content),
         size_bytes=len(content),
         content_type=CONTENT_TYPES[ext],
@@ -102,6 +103,8 @@ def add_evidence(*, query: Query, actor, filename: str, content: bytes, ip=None)
 
 def open_evidence(*, evidence: Evidence, actor, ip=None) -> bytes:
     """Decrypt and check the file. Every download is logged."""
+    if not evidence.stored_path:
+        raise StoredFileError("This file was destroyed under the retention rules.")
     content = read_encrypted(evidence.stored_path, evidence.sha256)
     record(
         actor=actor,
@@ -111,6 +114,7 @@ def open_evidence(*, evidence: Evidence, actor, ip=None) -> bytes:
         new={"evidence": str(evidence.pk), "filename": evidence.original_filename},
         ip=ip,
     )
+    breaches.after_download(actor)
     return content
 
 
@@ -119,6 +123,8 @@ def add_comment(*, query: Query, actor, body: str, ip=None) -> Comment:
     """A comment on a query by anyone in the audit chain or the CEO (owner, 2026-10-22). It changes
     nothing on the query. The auditor who holds it is notified, unless they wrote it."""
     role = actor.effective_role()
+    if query.disposed_at is not None:
+        raise WorkflowError(DISPOSED)
     if role not in ("PIA", "CIA", "IA", "SIA", "CEO"):
         raise WorkflowError("Your role cannot comment.")
     if role in AUDITORS and query.current_assignee_id != actor.pk:

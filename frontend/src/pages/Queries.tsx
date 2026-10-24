@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Button, Empty, Label, Notice, PageHeader, Panel, ReasonDialog, Ref, RiskTag, StatusBadge, Table, cx } from "../components";
-import { STATUSES, canAssign, canAssignRole, daysOverdue, fmtDate, isAuditor } from "../lib/rules";
+import { STATUSES, canAssign, canAssignRole, daysOverdue, fmtDate, isAuditor, isWorkedOn } from "../lib/rules";
 import { RISKS } from "../lib/risk";
 import { useMe, useStore } from "../storeTypes";
-import type { ExportFilters, Query, Risk, Status } from "../types";
+import type { ExportFilters, ExportFormat, Query, Risk, Status } from "../types";
 import { ExportRequestDialog } from "./Cia";
 
 export default function QueriesPage() {
@@ -12,11 +12,17 @@ export default function QueriesPage() {
   const { visibleQueries, state, userName, assign, exportQueries } = useStore();
   const [status, setStatus] = useState<Status | "">("");
   const [risk, setRisk] = useState<Risk | "">("");
-  const [assignee, setAssignee] = useState("");
+  const [params, setParams] = useSearchParams();
+  const [assignee, setAssignee] = useState(params.get("assignee") ?? "");
   const [overdueOnly, setOverdueOnly] = useState(false);
-  const [params] = useSearchParams();
   const [search, setSearch] = useState(params.get("q") ?? "");
-  useEffect(() => setSearch(params.get("q") ?? ""), [params]);
+  // A slice of the dashboard pie chart opens this list filtered to it (auditlogs-additions_final.md 10).
+  const worked = params.get("worked") ?? "";
+  useEffect(() => {
+    setSearch(params.get("q") ?? "");
+    setAssignee(params.get("assignee") ?? "");
+  }, [params]);
+  const [format, setFormat] = useState<ExportFormat>("xlsx");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkTo, setBulkTo] = useState("");
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -35,6 +41,7 @@ export default function QueriesPage() {
     ...(risk && { risk }),
     ...(assignee && { assignee }),
     ...(overdueOnly && { overdue: "1" }),
+    ...(worked && { worked }),
     ...(search.trim() && { q: search.trim() }),
   };
 
@@ -44,8 +51,9 @@ export default function QueriesPage() {
       (q) =>
         (!status || q.status === status) &&
         (!risk || q.riskRatingCurrent === risk) &&
-        (!assignee || (assignee === "none" ? !q.currentAssignee : q.currentAssignee === assignee)) &&
+        (!assignee || (assignee === "none" ? !q.currentAssignee : assignee === "any" ? !!q.currentAssignee : q.currentAssignee === assignee)) &&
         (!overdueOnly || daysOverdue(q) > 0) &&
+        (!worked || (worked === "yes") === isWorkedOn(q, state.reassignments)) &&
         (!term || q.reference.toLowerCase().includes(term) || q.title.toLowerCase().includes(term) || q.descriptionCurrent.toLowerCase().includes(term)),
     );
     // Returned items come first for auditors (design.md 6), then the most overdue.
@@ -55,7 +63,7 @@ export default function QueriesPage() {
         Number(a.status === "Closed") - Number(b.status === "Closed") ||
         a.deadline.localeCompare(b.deadline),
     );
-  }, [visibleQueries, status, risk, assignee, overdueOnly, search, isIa]);
+  }, [visibleQueries, status, risk, assignee, overdueOnly, worked, search, isIa, state.reassignments]);
 
   const unassigned = visibleQueries.filter((q) => !q.currentAssignee).length;
   const toggle = (id: string) => {
@@ -75,12 +83,18 @@ export default function QueriesPage() {
     return null;
   };
 
-  const title = isIa ? "My queries" : isCia ? "Queries" : "All queries";
+  const title = isIa ? "My queries" : isCia || me.role === "CEO" ? "Queries" : "All queries";
   const lede = isIa
     ? "The queries assigned to you. Record follow-up work and propose closure when it is resolved."
     : `${visibleQueries.length} queries in total. ${unassigned ? `${unassigned} still need an auditor.` : "Every query has an auditor."}`;
   const exportButton = isCia ? (
-    <Button kind="secondary" onClick={async () => { const r = await exportQueries(rows, filters); setExportError(r.ok ? null : r.error); }}>Export to Excel</Button>
+    <span className="flex flex-wrap items-center gap-2">
+      <select aria-label="Export format" className="field !w-auto" value={format} onChange={(e) => setFormat(e.target.value as ExportFormat)}>
+        <option value="xlsx">Excel workbook</option>
+        <option value="pdf">PDF report</option>
+      </select>
+      <Button kind="secondary" onClick={async () => { const r = await exportQueries(rows, filters, format); setExportError(r.ok ? null : r.error); }}>Export</Button>
+    </span>
   ) : me.role === "PIA" ? (
     <Button kind="secondary" onClick={() => setExportOpen(true)}>Export</Button>
   ) : undefined;
@@ -98,6 +112,15 @@ export default function QueriesPage() {
         </div>
       )}
       {exportError && <div className="mb-4"><Notice tone="error">{exportError}</Notice></div>}
+      {worked && (
+        <div className="mb-4">
+          <Notice tone="info">
+            Showing queries {worked === "yes" ? "worked on" : "not yet worked on"}
+            {assignee === "any" ? " that have an auditor" : assignee === "none" ? " without an auditor" : ""}.{" "}
+            <button type="button" className="font-medium underline" onClick={() => setParams({})}>Show all</button>
+          </Notice>
+        </div>
+      )}
       {flash && <div className="mb-4"><Notice tone="ok">{flash}</Notice></div>}
 
       <Panel>
@@ -126,6 +149,7 @@ export default function QueriesPage() {
               <select id="q-assignee" className="field" value={assignee} onChange={(e) => setAssignee(e.target.value)}>
                 <option value="">Anyone</option>
                 <option value="none">Not assigned</option>
+                <option value="any">Anyone assigned</option>
                 {auditors.map((u) => <option key={u.id} value={u.id}>{u.fullName}</option>)}
               </select>
             </div>
@@ -212,6 +236,7 @@ function Row({ q, showAssignee, selectable, selected, onToggle, assigneeName }: 
           <span className="mt-0.5 block font-medium leading-snug group-hover:text-lake">{q.title}</span>
           <span className="mt-0.5 block text-[0.8125rem] text-muted">{q.department}</span>
           <span className="block text-[0.8125rem] text-faint">Owner: {q.responsibleOfficer}</span>
+          {q.criterionTitle && <span className="block text-[0.8125rem] text-faint">Criterion: {q.criterionTitle}</span>}
         </Link>
       </td>
       <td><RiskTag risk={q.riskRatingCurrent} /></td>

@@ -104,17 +104,26 @@ def test_no_view_reads_audit_content_without_for_user():
                 ), f"{cls.__name__} bypasses for_user"
 
 
-def test_ceo_summary_has_personnel_but_no_wording_or_evidence(client_for, make_user, make_query):
-    """The CEO sees who is responsible, including the auditor (owner, 2026-10-22), but no wording."""
+def test_ceo_overview_has_the_full_record_and_personnel_but_no_evidence(client_for, make_user, make_query):
+    """The CEO sees who is responsible, including the auditor (owner, 2026-10-22), and every field of the
+    query record (auditlogs-additions_final.md 9), but not evidence files or the import's internals."""
     auditor = make_user("SIA")
-    make_query(assignee=auditor)
-    row = client_for("CEO").get(reverse("dashboard-queries")).json()[0]
+    query = make_query(assignee=auditor, recommendation="Reconcile monthly", notable_numbers="UGX 4,200,000")
+    ceo = client_for("CEO")
+    row = ceo.get(reverse("dashboard-queries")).json()[0]
     assert (row["assignee_name"], row["assignee_role"]) == (auditor.full_name, "SIA")
     assert set(row) == {
         "id",
         "reference",
         "title",
+        "description_current",
+        "management_response",
         "risk_rating_current",
+        "recommendation",
+        "audit_observation",
+        "policy_title",
+        "policy_reference",
+        "notable_numbers",
         "status",
         "deadline",
         "responsible_officer",
@@ -124,7 +133,14 @@ def test_ceo_summary_has_personnel_but_no_wording_or_evidence(client_for, make_u
         "assignee_role",
         "imported_at",
         "closed_at",
+        "disposed_at",
+        "criterion",
+        "criterion_title",
     }
+    detail = ceo.get(reverse("queries-detail", kwargs={"pk": query.pk})).json()
+    assert detail["recommendation"] == "Reconcile monthly"
+    assert detail["notable_numbers"] == "UGX 4,200,000"
+    assert ceo.get(reverse("queries-evidence", kwargs={"pk": query.pk})).status_code == 403
 
 
 def test_cia_activity_lists_only_direct_cia_changes(client_for, make_query):

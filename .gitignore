@@ -10,7 +10,7 @@ __pycache__/
 .ruff_cache/
 
 # Local databases and files (dummy data only, but never committed)
-backend/dev.sqlite3
+backend/dev.sqlite3*
 backend/media/
 backend/var/
 evidence/
@@ -19,3 +19,6 @@ backups/
 # TLS certificates and keys for the Docker stack
 deploy/certs/*
 !deploy/certs/README.txt
+
+# TypeScript build cache
+*.tsbuildinfo

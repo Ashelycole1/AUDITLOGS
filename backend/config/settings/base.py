@@ -27,6 +27,17 @@ def database_from_url(url: str | None) -> dict:
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": BASE_DIR / "dev.sqlite3",
             "ATOMIC_REQUESTS": True,
+            # The embedded-database settings of auditlogs-additions_final.md 3.1, on every connection.
+            # Production stays on PostgreSQL (DECISIONS 35).
+            "OPTIONS": {
+                "init_command": (
+                    "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; "
+                    "PRAGMA busy_timeout=5000; PRAGMA synchronous=NORMAL"
+                ),
+                # Writers take the lock when the transaction starts, so they queue instead of failing.
+                "transaction_mode": "IMMEDIATE",
+                "timeout": 5,
+            },
         }
     parsed = urlparse(url)
     if parsed.scheme not in ("postgres", "postgresql"):
@@ -59,6 +70,7 @@ INSTALLED_APPS = [
     "django_otp.plugins.otp_email",
     "axes",
     "apps.core",
+    "apps.organizations",
     "apps.accounts",
     "apps.auditlog",
     "apps.imports",
@@ -66,6 +78,8 @@ INSTALLED_APPS = [
     "apps.workflow",
     "apps.followup",
     "apps.notifications",
+    "apps.reports",
+    "apps.compliance",
 ]
 
 MIDDLEWARE = [
@@ -150,6 +164,8 @@ EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 NOTIFY_BY_EMAIL = (env("NOTIFY_BY_EMAIL", "false") or "false").strip().lower() == "true"
 # Where notification emails link to, e.g. https://auditlogs.example.ug. Blank leaves the link out.
 APP_URL = env("APP_URL", "")
+# Downloads and exports by one person in an hour that raise a breach register alert (design.md 12).
+DOWNLOAD_ALERT_PER_HOUR = int(env("DOWNLOAD_ALERT_PER_HOUR", "30") or "30")
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework.authentication.SessionAuthentication"],
@@ -159,7 +175,7 @@ REST_FRAMEWORK = {
     "DEFAULT_PARSER_CLASSES": ["rest_framework.parsers.JSONParser"],
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 50,
-    "DEFAULT_THROTTLE_RATES": {"login": "10/min", "export": "10/hour"},
+    "DEFAULT_THROTTLE_RATES": {"login": "10/min", "export": "10/hour", "signup": "5/hour"},
     "UNAUTHENTICATED_USER": None,
     "EXCEPTION_HANDLER": "apps.core.exceptions.handler",
 }

@@ -3,6 +3,7 @@ import uuid
 from django.conf import settings
 from django.db import models
 
+from apps.organizations.models import OrgOwned, OrgQuerySet
 from apps.queries.models import QueryChildQuerySet, Status
 
 
@@ -12,9 +13,11 @@ class Decision(models.TextChoices):
     REJECTED = "Rejected"
 
 
-class StatusChangeRequest(models.Model):
+class StatusChangeRequest(OrgOwned):
     """An auditor's proposal to close a query. The CIA closes or returns it; the PIA may return it or
     keep it in view (design.md 1, steps 5 and 6; owner, 2026-10-22)."""
+
+    ORG_PARENT = "query"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     query = models.ForeignKey("queries.Query", on_delete=models.PROTECT, related_name="status_requests")
@@ -47,12 +50,14 @@ class StatusChangeRequest(models.Model):
         return f"{self.query}: {self.from_status} to {self.to_status} ({self.decision})"
 
 
-class ReassignmentRequest(models.Model):
+class ReassignmentRequest(OrgOwned):
     """A PIA's request to move a query to another auditor, approved by the CIA (owner, 2026-10-22).
 
     While it waits the query is Pending Approval and the current auditor keeps it. A rejection puts
     the query back in the status it had before.
     """
+
+    ORG_PARENT = "query"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     query = models.ForeignKey("queries.Query", on_delete=models.PROTECT, related_name="reassignment_requests")
@@ -86,13 +91,21 @@ class ReassignmentRequest(models.Model):
         return f"{self.query}: {self.from_assignee} to {self.to_assignee} ({self.decision})"
 
 
-class ExportRequest(models.Model):
+class ExportFormat(models.TextChoices):
+    XLSX = "xlsx", "Excel workbook"
+    PDF = "pdf", "PDF report"
+
+
+class ExportRequest(OrgOwned):
     """A PIA's request to export queries. Only after the CIA approves can the PIA download it
     (owner, 2026-10-22; system.md 4.9). `filters` are the query-list filters the export applies."""
+
+    ORG_PARENT = "requested_by"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="+")
     filters = models.JSONField(default=dict, blank=True)
+    format = models.CharField(max_length=4, choices=ExportFormat.choices, default=ExportFormat.XLSX)
     reason = models.TextField()
     decision = models.CharField(max_length=8, choices=Decision.choices, default=Decision.PENDING)
     decided_by = models.ForeignKey(
@@ -103,6 +116,8 @@ class ExportRequest(models.Model):
     downloads = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    objects = OrgQuerySet.as_manager()
 
     class Meta:
         ordering = ["created_at"]

@@ -67,17 +67,27 @@ export const api = {
   get: <T>(path: string) => request<T>("GET", path),
   post: <T>(path: string, body?: unknown) => request<T>("POST", path, body ?? {}),
   patch: <T>(path: string, body: unknown) => request<T>("PATCH", path, body),
-  upload: <T>(path: string, file: File) => {
+  put: <T>(path: string, body: unknown) => request<T>("PUT", path, body),
+  upload: <T>(path: string, file: File, extra: Record<string, string> = {}) => {
     const form = new FormData();
     form.append("file", file);
+    for (const [k, v] of Object.entries(extra)) if (v) form.append(k, v);
     return request<T>("POST", path, form);
   },
   url: (path: string) => `${BASE}${path}`,
-  /** Fetch a file (an export) and hand it to the browser to save. Errors arrive as ApiError. */
-  download: async (path: string, filename: string) => {
+  /** Fetch a file (an export) and hand it to the browser to save. Errors arrive as ApiError.
+   * With a body it is a POST, for exports that need a reason. */
+  download: async (path: string, filename: string, body?: unknown) => {
     let res: Response;
+    const init: RequestInit = { credentials: "same-origin" };
+    if (body !== undefined) {
+      await ensureCsrf();
+      init.method = "POST";
+      init.headers = { "Content-Type": "application/json", "X-CSRFToken": cookie("csrftoken") ?? "" };
+      init.body = JSON.stringify(body);
+    }
     try {
-      res = await fetch(`${BASE}${path}`, { credentials: "same-origin" });
+      res = await fetch(`${BASE}${path}`, init);
     } catch {
       throw new ApiError("Cannot reach the server. Check the connection and try again.", 0);
     }

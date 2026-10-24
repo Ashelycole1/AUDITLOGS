@@ -99,8 +99,14 @@ def test_removing_an_entry_breaks_verification():
 
 def test_cia_can_read_and_filter_the_log(client_for):
     cia = client_for("CIA")
-    write(3)
-    record(actor=None, action="other.event", object_type="Other", object_id="1")
+    write(3, actor=cia.user)
+    record(
+        actor=None,
+        action="other.event",
+        object_type="Other",
+        object_id="1",
+        organization=cia.user.organization,
+    )
     response = cia.get(reverse("audit-log"), {"action": "test."})
     assert response.status_code == 200
     assert response.json()["count"] == 3
@@ -108,8 +114,9 @@ def test_cia_can_read_and_filter_the_log(client_for):
 
 
 def test_verify_endpoint_returns_counts_only_and_is_logged(client_for):
-    write(4)
-    response = client_for("ICT").post(reverse("audit-log-verify"))
+    ict = client_for("ICT")
+    write(4, actor=ict.user)
+    response = ict.post(reverse("audit-log-verify"))
     assert response.json() == {"ok": True, "checked": 4, "broken_at": None}
     assert AuditLog.objects.order_by("-seq").first().action == "auditlog.verify"
 

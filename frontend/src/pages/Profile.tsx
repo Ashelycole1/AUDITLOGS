@@ -33,13 +33,20 @@ const CAN: Record<Role, string[]> = {
   ],
   CEO: [
     "See where every query stands, and who is responsible",
+    "Read every query in full, without changing anything",
     "Comment on queries and on the CIA's activity",
     "See every change the CIA makes directly",
   ],
   ICT: [
-    "Create, change and disable accounts",
+    "Create, change and disable your organization's accounts, in the roles enabled for it",
     "Watch system health and backups",
     "Ask the CIA for time-limited access to audit content when something needs fixing",
+  ],
+  SYS: [
+    "Approve, suspend, reactivate and deactivate organizations",
+    "Choose each organization's dashboards and widgets",
+    "Set up or reset an organization's first administrator",
+    "See platform counts, never an organization's audit records",
   ],
 };
 
@@ -88,6 +95,7 @@ export default function ProfilePage() {
             {ROLE_NAME[me.role]}
           </p>
           {me.email && <p className="mt-1 break-all text-sm text-muted">{me.email}</p>}
+          {me.organization && <p className="mt-1 text-sm text-muted">{me.organization.name}</p>}
         </div>
         <Button kind="secondary" onClick={() => logout()}>Sign out</Button>
       </section>

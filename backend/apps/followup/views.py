@@ -2,16 +2,17 @@ from django.http import HttpResponse
 from rest_framework.generics import GenericAPIView
 
 from apps.core.requests import client_ip
-from apps.core.scoping import ScopedQuerysetMixin
+from apps.core.scoping import BreakGlassMixin, ScopedQuerysetMixin
 
 from . import services
 from .models import Evidence
 
 
-class EvidenceDownloadView(ScopedQuerysetMixin, GenericAPIView):
-    """Evidence leaves only through here, never a public URL (architecture.md 5.5). CEO never sees it."""
+class EvidenceDownloadView(BreakGlassMixin, ScopedQuerysetMixin, GenericAPIView):
+    """Evidence leaves only through here, never a public URL (architecture.md 5.5). CEO never sees it.
+    ICT may download under a break-glass grant."""
 
-    allowed_roles = ("PIA", "CIA", "IA", "SIA")
+    allowed_roles = ("PIA", "CIA", "IA", "SIA", "ICT")
     scoped_model = Evidence
 
     def get(self, request, pk=None):

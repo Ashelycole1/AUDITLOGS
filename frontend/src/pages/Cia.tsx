@@ -5,7 +5,8 @@ import { Icon } from "../icons";
 import { verifyChain } from "../lib/auditChain";
 import { ROLE_NAME, STATUSES, daysOverdue, describeFilters, fmtDate, fmtDateTime, matchesFilters } from "../lib/rules";
 import { useMe, useStore, type Outcome } from "../storeTypes";
-import type { AuditEntry, Decision, ExportFilters, ExportRequest, Query, ReassignmentRequest, StatusChangeRequest } from "../types";
+import { AccessRequests } from "./Compliance";
+import type { AuditEntry, Decision, ExportFilters, ExportFormat, ExportRequest, Query, ReassignmentRequest, StatusChangeRequest } from "../types";
 
 // CIA: the approvals inbox for closure proposals, reassignments and exports.
 // PIA: reviews of closure proposals (return or keep in view), and their own requests (owner, 2026-10-22).
@@ -17,8 +18,9 @@ export function ApprovalsPage() {
   const proposals = state.requests.filter((r) => r.decision === "Pending").sort(oldest);
   const moves = state.reassignments.filter((r) => r.decision === "Pending").sort(oldest);
   const exportsWaiting = state.exports.filter((r) => r.decision === "Pending").sort(oldest);
+  const access = state.accessRequests.filter((a) => a.status === "Pending").length;
   const decided = state.requests.filter((r) => r.decision !== "Pending").sort((a, b) => (b.decidedAt ?? "").localeCompare(a.decidedAt ?? "")).slice(0, 6);
-  const waiting = isCia ? proposals.length + moves.length + exportsWaiting.length : proposals.length;
+  const waiting = isCia ? proposals.length + moves.length + exportsWaiting.length + access : proposals.length;
 
   return (
     <>
@@ -42,6 +44,9 @@ export function ApprovalsPage() {
           </Section>
           <Section title="Exports" count={exportsWaiting.length}>
             {exportsWaiting.length ? exportsWaiting.map((x) => <ExportCard key={x.id} x={x} />) : <Empty title="No exports waiting">When the PIA asks to export queries, it appears here.</Empty>}
+          </Section>
+          <Section title="ICT access to audit content" count={access}>
+            <Panel><AccessRequests only="pending" /></Panel>
           </Section>
         </>
       ) : (
@@ -307,7 +312,7 @@ function MyExports() {
                 </p>
               </div>
               {x.decision === "Approved" && (
-                <Button kind="primary" onClick={async () => { const r = await downloadExport(x.id); setError(r.ok ? null : r.error); }}>Download Excel</Button>
+                <Button kind="primary" onClick={async () => { const r = await downloadExport(x.id); setError(r.ok ? null : r.error); }}>Download {x.format === "pdf" ? "PDF" : "Excel"}</Button>
               )}
             </li>
           ))}
@@ -321,21 +326,25 @@ function MyExports() {
 }
 
 /** The PIA's "Seek approval" step before an export (owner, 2026-10-22). */
-export function ExportRequestDialog({ open, filters, onClose, onDone }: { open: boolean; filters: ExportFilters; onClose: () => void; onDone?: () => void }) {
+export function ExportRequestDialog({ open, filters, format: fixed, onClose, onDone }: { open: boolean; filters: ExportFilters; format?: ExportFormat; onClose: () => void; onDone?: () => void }) {
   const { userName, requestExport } = useStore();
+  const [chosen, setChosen] = useState<ExportFormat>("xlsx");
+  const format = fixed ?? chosen;
   return (
     <ReasonDialog
       open={open}
       title="Seek approval to export"
-      description={`Exports need the CIA's approval. This asks for ${describeFilters(filters, userName)}, as an Excel workbook. Once approved, download it from Reviews; every download is logged.`}
+      description={`Exports need the CIA's approval. This asks for ${describeFilters(filters, userName)}, as ${format === "pdf" ? "a PDF report" : "an Excel workbook"}. Once approved, download it from Reviews; every download is logged.`}
       confirmLabel="Send to the CIA"
       onConfirm={async (reason) => {
-        const r = await requestExport(filters, reason);
+        const r = await requestExport(filters, reason, format);
         if (r.ok) onDone?.();
         return r.ok ? null : r.error;
       }}
       onClose={onClose}
-    />
+    >
+      {!fixed && <FormatChoice value={chosen} onChange={setChosen} />}
+    </ReasonDialog>
   );
 }
 
@@ -397,6 +406,46 @@ export const ACTION_LABEL: Record<string, string> = {
   "user.enable": "Enabled account",
   "user.disable": "Disabled account",
   "user.reset_mfa": "Reset MFA",
+  "query.create": "Created query",
+  "import.download_original": "Downloaded original file",
+  "export.report": "Exported report as PDF",
+  "report.create": "Created audit report",
+  "report.edit": "Edited audit report",
+  "criterion.create": "Added criterion",
+  "criterion.edit": "Edited criterion",
+  "evidence.download": "Downloaded evidence",
+  "auth.login_refused": "Sign-in refused",
+  "auth.password_set": "Set password",
+  "organization.features": "Changed features",
+  "organization.approve": "Approved organization",
+  "organization.suspend": "Suspended organization",
+  "organization.reactivate": "Reactivated organization",
+  "organization.update": "Updated organization",
+  "organization.admin_create": "Set up administrator",
+  "organization.admin_reset": "Reset administrator",
+  "user.role_change": "Changed role",
+  "user.email_change": "Changed email",
+  "user.update": "Updated account",
+  "user.enrolment_sent": "Sent sign-in link",
+  "user.password_reset_sent": "Sent password link",
+  "user.acting_cia_grant": "Granted acting CIA",
+  "user.acting_cia_end": "Ended acting CIA",
+  "user.acting_cia_expire": "Acting CIA ran out",
+  "auth.mfa_failed": "Wrong sign-in code",
+  "auth.mfa_resent": "Resent sign-in code",
+  "breakglass.read": "Read under break-glass",
+  "breakglass.end": "Ended access",
+  "breakglass.expire": "Access ran out",
+  "breach.alert": "Breach alert raised",
+  "breach.record": "Recorded breach",
+  "breach.update": "Updated breach",
+  "breach.close": "Closed breach",
+  "retention.set": "Set retention rule",
+  "disposal.flag": "Flagged for disposal",
+  "disposal.approve": "Disposed of record",
+  "disposal.reject": "Kept record",
+  "subject.search": "Searched for a person",
+  "subject.export": "Exported subject data",
 };
 
 // Field names as a reader would say them; people and queries by name and reference, not by ID.
@@ -727,13 +776,16 @@ export function ReportsPage() {
 
   return (
     <>
+      <Link to="/reports" className="inline-flex min-h-10 items-center text-sm font-medium text-lake hover:underline">Audit reports</Link>
       <PageHeader
-        title="Reports"
+        title="Status report"
         lede="Where every query stands, and which are late. Only the CIA can export, and every export is written to the audit log."
-        actions={<Button kind="primary" onClick={async () => {
-          const r = await exportQueries(visibleQueries, {});
-          setFlash(r.ok ? { tone: "ok", text: `Exported ${visibleQueries.length} queries to Excel. The export is recorded in the audit log.` } : { tone: "error", text: r.error });
-        }}>Export all queries to Excel</Button>}
+        actions={(["xlsx", "pdf"] as const).map((f) => (
+          <Button key={f} kind={f === "xlsx" ? "primary" : "secondary"} onClick={async () => {
+            const r = await exportQueries(visibleQueries, {}, f);
+            setFlash(r.ok ? { tone: "ok", text: `Exported ${visibleQueries.length} queries as ${f === "pdf" ? "a PDF report" : "an Excel workbook"}. The export is recorded in the audit log.` } : { tone: "error", text: r.error });
+          }}>Export all as {f === "pdf" ? "PDF" : "Excel"}</Button>
+        ))}
       />
       {flash && <div className="mb-4"><Notice tone={flash.tone}>{flash.text}</Notice></div>}
       <div className="grid gap-5 lg:grid-cols-[22rem_minmax(0,1fr)]">
@@ -781,136 +833,18 @@ export function ReportsPage() {
   );
 }
 
-function timeLeft(iso: string): string | null {
-  const ms = new Date(iso).getTime() - Date.now();
-  if (ms <= 0) return null;
-  const h = Math.floor(ms / 3_600_000);
-  const m = Math.ceil((ms % 3_600_000) / 60_000);
-  return h ? `${h} h ${m} min left` : `${m} min left`;
-}
-
-const RECORD_TYPES = ["Queries and follow-up", "Evidence files", "Audit log", "Import source files", "User accounts"];
-const FAILED_LOGIN_ALERT = 5;
-
-export function CompliancePage() {
-  const { state, userName, decideAccess } = useStore();
-  const [dialog, setDialog] = useState<{ id: string; approve: boolean } | null>(null);
-  const [term, setTerm] = useState("");
-  const failedLogins = state.audit.filter((e) => e.action === "auth.login_failed").length;
-  const needle = term.trim().toLowerCase();
-  const matches = needle.length >= 3
-    ? state.queries.filter((q) => [q.responsibleOfficer, q.descriptionCurrent, q.title].some((t) => t.toLowerCase().includes(needle)))
-    : [];
-  const waiting = state.accessRequests.filter((a) => a.status === "Pending").length;
-  const chainOk = useMemo(() => verifyChain(state.audit).ok, [state.audit]);
-
+/** Excel register or PDF report (auditlogs-additions_final.md 13). */
+export function FormatChoice({ value, onChange }: { value: ExportFormat; onChange: (f: ExportFormat) => void }) {
   return (
-    <>
-      <PageHeader title="Compliance" lede="ICT access to audit content, breaches, data subject requests and retention, in line with the Data Protection and Privacy Act." />
-      <div className="grid gap-5 xl:grid-cols-2">
-        <Panel title="ICT access requests" aside={waiting > 0 && <span className="text-sm font-medium text-warn">{waiting} waiting for you</span>}>
-          {state.accessRequests.length ? (
-            <ul className="divide-y divide-line">
-              {state.accessRequests.map((a) => {
-                const left = a.status === "Approved" && a.expiresAt ? timeLeft(a.expiresAt) : null;
-                return (
-                  <li key={a.id} className="flex gap-3 py-4 first:pt-0 last:pb-0">
-                    <span className="mt-1"><Check pending={a.status === "Pending"} ok={a.status === "Approved"} /></span>
-                    <div className="min-w-0 flex-1">
-                      <p className="leading-relaxed">{a.reason}</p>
-                      <p className="mt-1 text-sm text-muted">
-                        {userName(a.requestedBy)} asked on {fmtDateTime(a.createdAt)}.{" "}
-                        {a.status === "Pending" && <span className="font-medium text-warn">Waiting for your decision.</span>}
-                        {a.status === "Approved" && (left ? <span className="font-medium text-good">Access open, {left}.</span> : <span>Access ended {fmtDateTime(a.expiresAt!)}.</span>)}
-                        {a.status === "Rejected" && <span className="text-danger">Refused by {userName(a.decidedBy)}.</span>}
-                      </p>
-                      {a.status === "Pending" && (
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <Button kind="primary" onClick={() => setDialog({ id: a.id, approve: true })}>Approve for 2 hours</Button>
-                          <Button kind="danger" onClick={() => setDialog({ id: a.id, approve: false })}>Refuse</Button>
-                        </div>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : (
-            <Empty title="No access requests">If ICT needs to open audit content to fix a problem, their request appears here.</Empty>
-          )}
-        </Panel>
-
-        <Panel title="Breach register">
-          <ul className="divide-y divide-line text-sm">
-            <li className="flex items-start gap-3 pb-3">
-              <span className="mt-0.5"><Check ok={failedLogins < FAILED_LOGIN_ALERT} pending={failedLogins > 0 && failedLogins < FAILED_LOGIN_ALERT} /></span>
-              <span className="flex-1">Failed sign-ins<span className="block text-muted">An alert is raised at {FAILED_LOGIN_ALERT} or more.</span></span>
-              <span className="font-medium">{failedLogins}</span>
-            </li>
-            <li className="flex items-start gap-3 py-3">
-              <span className="mt-0.5"><Check ok /></span>
-              <span className="flex-1">Unusual download volume<span className="block text-muted">Checked against each user's normal exports.</span></span>
-              {/* Placeholder until the backend computes download volume. */}
-              <span className="text-muted">No alert</span>
-            </li>
-            <li className="flex items-start gap-3 pt-3">
-              <span className="mt-0.5"><Check ok={chainOk} /></span>
-              <span className="flex-1">Audit chain verification<span className="block text-muted">A failure writes a draft entry here.</span></span>
-              <span className={chainOk ? "text-muted" : "font-medium text-danger"}>{chainOk ? "Intact" : "Broken"}</span>
-            </li>
-          </ul>
-          <div className="mt-5"><Empty title="No breaches recorded">If one is detected, record what happened, who was affected, what was done and when the PDPO was told.</Empty></div>
-        </Panel>
-
-        <Panel title="Data subject search">
-          <Label htmlFor="ds">Name or other detail</Label>
-          <input id="ds" type="search" className="field" placeholder="At least 3 characters" value={term} onChange={(e) => setTerm(e.target.value)} />
-          <div className="mt-4" aria-live="polite">
-            {needle.length < 3 ? (
-              <p className="text-sm text-muted">Find every query that mentions a person, to answer an access or correction request.</p>
-            ) : matches.length ? (
-              <>
-                <p className="mb-2 text-sm text-muted">{matches.length} {matches.length === 1 ? "query mentions" : "queries mention"} "{term.trim()}"</p>
-                <ul className="divide-y divide-line">
-                  {matches.map((q) => (
-                    <li key={q.id} className="py-2.5"><Link to={`/queries/${q.id}`} className="group block"><Ref>{q.reference}</Ref> <span className="font-medium group-hover:underline">{q.title}</span></Link></li>
-                  ))}
-                </ul>
-              </>
-            ) : (
-              <p className="text-sm text-muted">No queries mention "{term.trim()}".</p>
-            )}
-          </div>
-        </Panel>
-
-        <Panel title="Retention rules">
-          <Notice tone="warn">Retention periods are waiting for the owner's decision. Records cannot be disposed of until they are approved.</Notice>
-          <table className="mt-4 w-full text-sm">
-            <thead>
-              <tr className="border-b-[1.5px] border-ink/70 text-left text-[0.8125rem] text-muted"><th className="pb-2 font-medium">Record type</th><th className="pb-2 text-right font-medium">Keep for</th></tr>
-            </thead>
-            <tbody>
-              {RECORD_TYPES.map((t) => (
-                <tr key={t} className="border-b border-line last:border-0">
-                  <td className="py-2.5">{t}</td>
-                  <td className="py-2.5 text-right"><span className="inline-flex items-center gap-1.5 text-warn"><Check pending />Not set</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Panel>
+    <fieldset>
+      <legend className="mb-1.5 text-sm font-medium">Format</legend>
+      <div className="inline-flex rounded-md border border-rule bg-sheet p-0.5 text-sm" role="radiogroup">
+        {(["xlsx", "pdf"] as const).map((f) => (
+          <button key={f} type="button" role="radio" aria-checked={value === f} onClick={() => onChange(f)} className={cx("min-h-9 rounded px-3", value === f ? "bg-lake font-medium text-on-accent" : "text-muted hover:text-ink")}>
+            {f === "pdf" ? "PDF report" : "Excel workbook"}
+          </button>
+        ))}
       </div>
-
-      <ReasonDialog
-        open={!!dialog}
-        title={dialog?.approve ? "Approve ICT access for 2 hours" : "Refuse ICT access"}
-        description={dialog?.approve ? "ICT can read audit content for 2 hours. Everything they open is logged." : "Tell ICT why the request is refused."}
-        confirmLabel={dialog?.approve ? "Approve for 2 hours" : "Refuse"}
-        danger={!dialog?.approve}
-        optional={dialog?.approve}
-        onConfirm={async (reason) => { const r = await decideAccess(dialog!.id, dialog!.approve, reason); return r.ok ? null : r.error; }}
-        onClose={() => setDialog(null)}
-      />
-    </>
+    </fieldset>
   );
 }

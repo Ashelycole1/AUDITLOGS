@@ -1,11 +1,16 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button, Check, Empty, Notice, PageHeader, Panel, Ref, Table, cx } from "../components";
 import { fmtDateTime } from "../lib/rules";
 import { parseRisk } from "../lib/risk";
 import { sha256 } from "../lib/sha256";
+import { api } from "../api";
 import { useStore } from "../storeTypes";
 import type { ImportRow } from "../types";
+import { DownloadOriginal } from "./QueryDetail";
+
+// Optional columns: the rest of the query record (auditlogs-additions_final.md 8.2) and the criterion.
+const OPTIONAL_COLUMNS = ["management_response", "recommendation", "audit_observation", "policy_title", "policy_reference", "notable_numbers", "criterion"];
 
 // Column mapping is configurable until the client supplies a template (design.md 4, system.md open items).
 const COLUMNS = ["reference", "title", "description", "risk_rating", "deadline", "responsible_officer", "department"] as const;
@@ -85,6 +90,8 @@ interface Preview {
   filename: string;
   hash: string;
   rows: ImportRow[];
+  reportTitle?: string;
+  criteria?: string[];
 }
 
 export function ImportPage() {
@@ -96,6 +103,13 @@ export function ImportPage() {
   const [done, setDone] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [problemsOnly, setProblemsOnly] = useState(false);
+  // The audit report the queries belong to (section 8.1). A Word report names its own.
+  const [reports, setReports] = useState<{ id: string; title: string }[]>([]);
+  const [reportId, setReportId] = useState("");
+  useEffect(() => {
+    if (mode !== "api") return;
+    api.get<{ id: string; title: string }[]>("/reports").then(setReports).catch(() => undefined);
+  }, [mode]);
 
   const load = (filename: string, text: string) => {
     setDone(null);
@@ -112,7 +126,7 @@ export function ImportPage() {
   const uploadToServer = async (f: File) => {
     setDone(null);
     setBusy(true);
-    const r = await uploadImport(f);
+    const r = await uploadImport(f, reportId || undefined);
     setBusy(false);
     if (input.current) input.current.value = "";
     if (!r.ok) {
@@ -131,7 +145,8 @@ export function ImportPage() {
     if (mode === "api") return uploadToServer(f);
     const ext = f.name.split(".").pop()?.toLowerCase();
     if (ext === "xlsx") return setError("Excel files are read on the server. This preview reads CSV only; save the sheet as CSV or load the sample.");
-    if (ext !== "csv") return setError("Upload the final queries as an Excel (.xlsx) or CSV file.");
+    if (ext === "docx") return setError("Word reports are read on the server. This preview reads CSV only; connect to the server or load the sample.");
+    if (ext !== "csv") return setError("Upload the final queries as a Word (.docx), Excel (.xlsx) or CSV file.");
     load(f.name, await f.text());
     if (input.current) input.current.value = "";
   };
@@ -171,8 +186,17 @@ export function ImportPage() {
               <path d="M11 24h18M11 30h18M11 36h12" stroke="currentColor" strokeWidth="2" strokeOpacity=".35" />
             </svg>
             <p className="mt-4 text-lg font-medium tracking-[-0.01em]">{dragging ? "Drop to check the file" : "Drop the final queries file here"}</p>
-            <p className="mt-1 text-sm text-muted">Excel or CSV. Nothing is imported until you confirm.</p>
-            <input ref={input} id="import-file" type="file" accept=".csv,.xlsx" className="sr-only" onChange={(e) => onFile(e.target.files?.[0])} />
+            <p className="mt-1 text-sm text-muted">A Word audit report (.docx), Excel or CSV. Nothing is imported until you confirm.</p>
+            <input ref={input} id="import-file" type="file" accept=".docx,.csv,.xlsx" className="sr-only" onChange={(e) => onFile(e.target.files?.[0])} />
+            {mode === "api" && (
+              <label className="mt-5 flex w-full max-w-sm flex-col gap-1 text-left text-sm">
+                <span className="font-medium">Audit report</span>
+                <select className="field" value={reportId} onChange={(e) => setReportId(e.target.value)}>
+                  <option value="">From the file (a Word report names its own)</option>
+                  {reports.map((rep) => <option key={rep.id} value={rep.id}>{rep.title}</option>)}
+                </select>
+              </label>
+            )}
             <div className="mt-5 flex flex-wrap justify-center gap-2">
               <Button kind="primary" disabled={busy} onClick={() => input.current?.click()}>{busy ? "Checking the file" : "Choose file"}</Button>
               <Button kind="secondary" disabled={busy} onClick={loadSample}>Load sample file</Button>
@@ -188,7 +212,16 @@ export function ImportPage() {
               {COLUMNS.map((c) => <li key={c} className="border border-rule bg-field px-3 py-2 sm:border-0 sm:border-l sm:first:border-l-0">{c}</li>)}
             </ol>
           </div>
-          <p className="mt-2 text-[0.8125rem] text-muted">Risk is Low, Medium, High or Critical (Extreme is read as Critical). Deadlines are written YYYY-MM-DD. The file and its fingerprint are kept with the batch.</p>
+          <p className="mt-2 text-[0.8125rem] text-muted">
+            Optional columns: {OPTIONAL_COLUMNS.join(", ")}. An "action party &amp; time" column may stand in for responsible_officer and deadline.
+          </p>
+          <p className="mt-2 text-[0.8125rem] text-muted">Risk is Low, Medium, High or Critical (Extreme is read as Critical). Deadlines are written YYYY-MM-DD or DD/MM/YYYY. The file and its fingerprint are kept with the batch, and can be downloaded unchanged later.</p>
+          <p className="mt-4 text-sm font-medium">Word audit reports</p>
+          <p className="mt-1 text-[0.8125rem] text-muted">
+            Start with a two-column table giving the report title, audit period, report date and prepared by. Write each criterion as a heading starting "Criterion 1:", with its description under it.
+            Put each query in a two-column table: Reference, Title, Query, Management Response, Risk Rating, Recommendation, Audit Observation, Policy Title, Policy Reference, Action Party &amp; Time, Department, Notable Numbers.
+            See samples/imports/sample-audit-report.docx.
+          </p>
         </Panel>
       ) : (
         <section className="sheet rounded-xl">
@@ -196,6 +229,12 @@ export function ImportPage() {
             <div className="min-w-0">
               <h2 className="truncate text-[1.0625rem] font-medium">{preview.filename}</h2>
               <p className="mt-0.5 font-mono text-xs text-faint" title={preview.hash}>sha256 {preview.hash.slice(0, 24)}</p>
+              {(preview.reportTitle || preview.criteria?.length) && (
+                <p className="mt-1 text-sm text-muted">
+                  {preview.reportTitle && <>Report: <span className="text-ink">{preview.reportTitle}</span>. </>}
+                  {preview.criteria?.length ? `${preview.criteria.length} ${preview.criteria.length === 1 ? "criterion" : "criteria"}.` : ""}
+                </p>
+              )}
             </div>
             <dl className="flex gap-6 text-sm">
               <div className="flex items-center gap-1.5"><Check ok /><dt className="sr-only">Ready</dt><dd><span className="font-medium">{preview.rows.length - blocking}</span> ready</dd></div>
@@ -218,7 +257,7 @@ export function ImportPage() {
           </div>
 
           <div className="px-5 pt-4 sm:px-6">
-            <Table head={["Line", "Reference", "Title", "Risk", "Deadline", "Department", "Problems"]}>
+            <Table head={["Line", "Reference", "Title", "Risk", "Deadline", "Department", "Criterion", "Problems"]}>
               {shown.map((r) => (
                 <tr key={r.line} className={cx("align-top", r.errors.length > 0 && "bg-danger-wash/55")}>
                   <td className="w-[4.5rem]">
@@ -232,6 +271,7 @@ export function ImportPage() {
                   <td>{r.riskRating}</td>
                   <td className="whitespace-nowrap">{r.deadline}</td>
                   <td>{r.department}</td>
+                  <td className="min-w-[10rem] text-muted">{r.criterion || "None"}</td>
                   <td className="min-w-[12rem]">
                     {r.errors.length ? (
                       <ul className="space-y-0.5 text-danger">{r.errors.map((e) => <li key={e}>{e}</li>)}</ul>
@@ -294,14 +334,14 @@ const BATCH_MARK: Record<string, { ok?: boolean; pending?: boolean }> = {
 };
 
 export function BatchesPage() {
-  const { state, userName } = useStore();
+  const { state, userName, mode } = useStore();
   const batches = [...state.batches].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   return (
     <>
       <PageHeader title="Import batches" lede="Every upload, newest first, with the file's fingerprint so the source can be checked later." />
       <Panel>
         <Table
-          head={["File", "Queries", "Status", "Imported by", "When"]}
+          head={["File", "Queries", "Status", "Imported by", "When", ""]}
           empty={!batches.length && <div className="px-5 pb-2 sm:px-6"><Empty title="No imports yet">Files the CIA confirms appear here.</Empty></div>}
         >
           {batches.map((b) => (
@@ -319,6 +359,7 @@ export function BatchesPage() {
               </td>
               <td>{userName(b.importedBy)}</td>
               <td className="whitespace-nowrap">{fmtDateTime(b.confirmedAt ?? b.createdAt)}</td>
+              <td>{mode === "api" && <DownloadOriginal batchId={b.id} filename={b.sourceFilename} />}</td>
             </tr>
           ))}
         </Table>

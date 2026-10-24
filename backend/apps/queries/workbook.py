@@ -91,8 +91,13 @@ def time_to_deadline(query, today: date) -> str:
     return "Due today" if gap == 0 else f"Due in {_days(gap)}"
 
 
-def describe_filters(filters: dict) -> str:
-    """The filters in words, matching describeFilters in the frontend (lib/rules.ts)."""
+def describe_filters(filters: dict, organization_id=None) -> str:
+    """The filters in words, matching describeFilters in the frontend (lib/rules.ts). Names are looked up
+    only inside the exporting organization."""
+    from apps.reports.models import AuditReport, Criterion
+
+    from .filters import _is_id
+
     parts = []
     if filters.get("status"):
         parts.append(f"status {filters['status']}")
@@ -102,9 +107,33 @@ def describe_filters(filters: dict) -> str:
         parts.append(filters["department"])
     if filters.get("assignee") == "none":
         parts.append("not assigned")
+    elif filters.get("assignee") == "any":
+        parts.append("allocated")
     elif filters.get("assignee"):
-        who = User.objects.filter(pk=filters["assignee"]).values_list("full_name", flat=True).first()
+        who = None
+        if _is_id(filters["assignee"]):
+            who = (
+                User.objects.filter(pk=filters["assignee"], organization_id=organization_id)
+                .values_list("full_name", flat=True)
+                .first()
+            )
         parts.append(f"auditor {who or 'unknown'}")
+    worked = str(filters.get("worked", "")).lower()
+    if worked in ("yes", "true", "1"):
+        parts.append("worked on")
+    elif worked in ("no", "false", "0"):
+        parts.append("not worked on")
+    for key, model in (("report", AuditReport), ("criterion", Criterion)):
+        if filters.get(key):
+            title = None
+            if _is_id(filters[key]):
+                title = (
+                    model.objects.in_org(organization_id)
+                    .filter(pk=filters[key])
+                    .values_list("title", flat=True)
+                    .first()
+                )
+            parts.append(f"{key} {title or 'unknown'}")
     if str(filters.get("overdue", "")).lower() in ("1", "true"):
         parts.append("overdue only")
     if filters.get("q"):
@@ -340,7 +369,8 @@ def export_workbook(queries, *, actor: User, filters: dict, request=None) -> byt
     lines = [
         ("Exported by", _person(actor)),
         ("Exported on", _stamp(now)),
-        ("Selection", describe_filters(filters)),
+        ("Organization", actor.organization.name if actor.organization_id else ""),
+        ("Selection", describe_filters(filters, actor.organization_id)),
         ("Queries", str(len(queries))),
     ]
     if request is not None:
