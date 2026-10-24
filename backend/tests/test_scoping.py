@@ -133,6 +133,7 @@ def test_ceo_overview_has_the_full_record_and_personnel_but_no_evidence(client_f
         "assignee_role",
         "imported_at",
         "closed_at",
+        "disposed_at",
         "criterion",
         "criterion_title",
     }

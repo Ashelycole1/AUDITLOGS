@@ -9,6 +9,7 @@ from django.utils import timezone
 
 from apps.accounts.models import Role, User
 from apps.auditlog.services import record
+from apps.compliance import breaches
 from apps.core.validators import MIN_REASON
 from apps.notifications import services as notify
 from apps.queries.filters import FILTER_KEYS, apply_filters
@@ -69,6 +70,7 @@ def export_now(*, actor: User, filters: dict, fmt: str = ExportFormat.XLSX, ip=N
         new={"rows": len(queries), "filters": filters, "format": fmt},
         ip=ip,
     )
+    breaches.after_download(actor)
     return render(queries, actor=actor, filters=filters, fmt=fmt), len(queries)
 
 
@@ -164,6 +166,7 @@ def download_export(*, request_id, actor: User, ip=None) -> tuple[bytes, int]:
         new={"rows": len(queries), "download": item.downloads},
         ip=ip,
     )
+    breaches.after_download(actor)
     return render(queries, actor=actor, filters=item.filters, fmt=item.format, request=item), len(queries)
 
 
@@ -183,4 +186,5 @@ def export_report(*, actor: User, report: AuditReport, ip=None) -> bytes:
         new={"rows": len(queries), "format": ExportFormat.PDF},
         ip=ip,
     )
+    breaches.after_download(actor)
     return render_pdf(queries, actor=actor, filters=filters, report=report)

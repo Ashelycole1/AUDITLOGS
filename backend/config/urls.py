@@ -13,6 +13,14 @@ from apps.accounts.views import (
     UserViewSet,
 )
 from apps.auditlog.views import AuditLogListView, VerifyChainView
+from apps.compliance.views import (
+    AccessGrantViewSet,
+    BreachViewSet,
+    DisposalViewSet,
+    RetentionRuleViewSet,
+    SubjectExportView,
+    SubjectSearchView,
+)
 from apps.core.views import HealthView
 from apps.followup.views import EvidenceDownloadView
 from apps.imports.views import ImportBatchViewSet
@@ -39,6 +47,10 @@ router.register("reassignment-requests", ReassignmentRequestViewSet, basename="r
 router.register("export-requests", ExportRequestViewSet, basename="export-requests")
 router.register("notifications", NotificationViewSet, basename="notifications")
 router.register("reports", ReportViewSet, basename="reports")
+router.register("retention-rules", RetentionRuleViewSet, basename="retention-rules")
+router.register("disposals", DisposalViewSet, basename="disposals")
+router.register("breaches", BreachViewSet, basename="breaches")
+router.register("access-requests", AccessGrantViewSet, basename="access-requests")
 router.register("platform/organizations", OrganizationViewSet, basename="platform-organizations")
 
 api = [
@@ -65,6 +77,8 @@ api = [
         "dashboard/registered-numbers", RegisteredNumbersView.as_view(), name="dashboard-registered-numbers"
     ),
     path("dashboard/system-stats", SystemStatsView.as_view(), name="dashboard-system-stats"),
+    path("subject-search", SubjectSearchView.as_view(), name="subject-search"),
+    path("subject-export", SubjectExportView.as_view(), name="subject-export"),
     path("evidence/<uuid:pk>/download", EvidenceDownloadView.as_view(), name="evidence-download"),
     *router.urls,
 ]

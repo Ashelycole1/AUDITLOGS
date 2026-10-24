@@ -12,7 +12,7 @@ from apps.notifications import services as notify
 from apps.organizations.models import CrossOrganizationError
 from apps.reports.models import Criterion
 from apps.workflow.models import Decision, ReassignmentRequest
-from apps.workflow.services import REASSIGNABLE, WorkflowError, transition
+from apps.workflow.services import DISPOSED, REASSIGNABLE, WorkflowError, transition
 
 from .models import Assignment, Query, QueryRevision, Status
 
@@ -59,6 +59,8 @@ def _has_reason(reason: str) -> bool:
 @transaction.atomic
 def edit_query(*, query: Query, actor: User, changes: dict, reason: str, ip=None) -> Query:
     query = Query.objects.select_for_update().get(pk=query.pk)
+    if query.disposed_at is not None:
+        raise WorkflowError(DISPOSED)
     changed = {f: v for f, v in changes.items() if f in EDITABLE_FIELDS and not _same(getattr(query, f), v)}
     if not changed:
         return query

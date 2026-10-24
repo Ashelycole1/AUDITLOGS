@@ -24,6 +24,26 @@ SCOPED_MODEL_LABELS = [
 ]
 
 
+class BreakGlassMixin:
+    """For views ICT may read under a break-glass grant: ICT's role is allowed in the view's roles only
+    for reads, and RoleRequired checks the grant. Each request that gets past the checks is logged."""
+
+    break_glass = True
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        if request.user.effective_role() == "ICT":
+            from apps.compliance.grants import log_read
+            from apps.core.requests import client_ip
+
+            log_read(
+                actor=request.user,
+                path=request.get_full_path(),
+                object_id=kwargs.get("pk", "list"),
+                ip=client_ip(request._request),
+            )
+
+
 class ScopedQuerysetMixin:
     """Use instead of `queryset = ...` for every model in SCOPED_MODELS."""
 

@@ -22,9 +22,17 @@ log = logging.getLogger(__name__)
 
 
 def chief_auditors(organization) -> list[User]:
-    """The CIAs of this one organization: a request never reaches another organization's people."""
+    """The CIAs of this one organization, and anyone acting as CIA now (design.md 8). A request never
+    reaches another organization's people."""
+    from django.db.models import Q
+    from django.utils import timezone
+
     org_id = getattr(organization, "pk", organization)
-    return list(User.objects.filter(organization_id=org_id, role=Role.CIA, is_active=True))
+    return list(
+        User.objects.filter(organization_id=org_id, is_active=True).filter(
+            Q(role=Role.CIA) | Q(acting_cia_until__gt=timezone.now())
+        )
+    )
 
 
 def send(

@@ -54,7 +54,11 @@ class QueryQuerySet(OrgQuerySet):
             return own
         if role in ("IA", "SIA"):
             return own.filter(current_assignee=user)
-        # ICT has no rights over findings without an approved, logged, time-limited grant.
+        if role == "ICT":
+            # No rights over findings without an approved, logged, time-limited grant (design.md 12).
+            from apps.compliance.models import has_active_grant
+
+            return own if has_active_grant(user) else self.none()
         return self.none()
 
     def update(self, **kwargs):
@@ -107,6 +111,8 @@ class Query(OrgOwned):
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="+"
     )
     closed_at = models.DateTimeField(null=True, blank=True)
+    # Set when an approved disposal erased the content (apps.compliance.disposal). The stub stays Closed.
+    disposed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

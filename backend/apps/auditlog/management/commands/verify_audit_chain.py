@@ -17,6 +17,9 @@ class Command(BaseCommand):
             new={"result": outcome},
         )
         if not result.ok:
-            # Alerting the CIA and ICT and drafting a breach register entry come with the compliance app.
+            # design.md 10: alert the CIA and ICT and draft a breach register entry.
+            from apps.compliance import breaches
+
+            breaches.chain_failed()
             raise CommandError(f"Audit chain broken at entry {result.broken_at}.")
         self.stdout.write(self.style.SUCCESS(f"Audit chain intact: {result.checked} entries checked."))

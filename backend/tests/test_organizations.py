@@ -77,10 +77,14 @@ def test_lists_and_counts_hold_only_the_own_organization(
     name, method, allowed, secret_data, client_for, make_user, make_org
 ):
     other = make_org("Other organisation")
+    # The data subject search is tried with the very term that would find the secret records.
+    target = reverse(name) + (f"?q={SECRET}" if name == "subject-search" else "")
     for role in sorted(allowed - {"SYS"}):
-        response = call(client_for(make_user(role, organization=other)), method, reverse(name))
+        response = call(client_for(make_user(role, organization=other)), method, target)
         assert response.status_code == 200, (role, response.content[:200])
         body = response.content.decode("utf-8", errors="replace")
+        # The search echoes the term it was given; nothing else may carry it.
+        body = body.replace(f'"term":"{SECRET}"', "")
         assert SECRET not in body, (role, name)
         assert str(secret_data.pk) not in body, (role, name)
 

@@ -29,6 +29,8 @@ class MfaSerializer(serializers.Serializer):
 
 class UserSerializer(serializers.ModelSerializer):
     role_name = serializers.CharField(source="get_role_display", read_only=True)
+    # False until the person has chosen a password from their enrolment link.
+    has_password = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -40,9 +42,18 @@ class UserSerializer(serializers.ModelSerializer):
             "role_name",
             "is_active",
             "acting_cia_until",
+            "has_password",
             "created_at",
         ]
         read_only_fields = fields
+
+    def get_has_password(self, user) -> bool:
+        return user.has_usable_password()
+
+
+class ActingCiaSerializer(serializers.Serializer):
+    until = serializers.DateTimeField()
+    reason = serializers.CharField(validators=[validate_reason])
 
 
 class MeSerializer(UserSerializer):

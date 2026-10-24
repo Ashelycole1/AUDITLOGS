@@ -53,6 +53,9 @@ class WorkflowError(RuleError):
     status_code = 409
 
 
+DISPOSED = "This query was disposed of under the retention rules. Only its stub is kept."
+
+
 def _has_reason(reason: str) -> bool:
     return len((reason or "").strip()) >= MIN_REASON
 
@@ -71,6 +74,8 @@ def transition(
     query = Query.objects.select_for_update().get(pk=query.pk)
     from_status = query.status
     role = actor.effective_role()
+    if query.disposed_at is not None:
+        raise WorkflowError(DISPOSED)
     if from_status == to_status:
         raise WorkflowError(f"The query is already {to_status}.")
 

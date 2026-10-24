@@ -10,6 +10,9 @@ On top of the role (auditlogs-additions_final.md 5 and 7):
   System Administrator has switched on for it;
 - a view may name a `required_feature`, refused unless it is on for the person's organization;
 - the session carries the organization it was signed in to, and must still match the account.
+
+Break-glass (design.md 12): a view marked `break_glass = True` lets ICT read, never write, and only
+while ICT holds an approved, unexpired grant. Without one ICT is refused like any other role.
 """
 
 from collections.abc import Iterable, Mapping
@@ -68,6 +71,11 @@ class RoleRequired(BasePermission):
         role = user.effective_role()
         if role not in roles_for(view, request.method):
             return False
+        if role == "ICT" and getattr(view, "break_glass", False):
+            from apps.compliance.models import has_active_grant
+
+            if request.method not in ("GET", "HEAD", "OPTIONS") or not has_active_grant(user):
+                return False
         if user.organization_id is None:
             return True
         if not role_enabled(user.organization, role):

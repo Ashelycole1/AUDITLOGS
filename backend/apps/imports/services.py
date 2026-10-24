@@ -12,7 +12,8 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.auditlog.services import record
-from apps.core.filestore import org_folder, read_encrypted, save_encrypted, sha256
+from apps.compliance import breaches
+from apps.core.filestore import StoredFileError, org_folder, read_encrypted, save_encrypted, sha256
 from apps.queries.models import Query, Status
 from apps.reports.models import AuditReport, Criterion
 
@@ -244,6 +245,8 @@ def cancel(*, actor, batch_id, reason: str = "", ip=None) -> ImportBatch:
 def open_original(*, batch: ImportBatch, actor, ip=None) -> bytes:
     """The file exactly as it was uploaded: decrypted and checked against the SHA-256 taken on arrival,
     so a changed file is refused (auditlogs-additions_final.md 12). Every download is logged."""
+    if not batch.source_file_path:
+        raise StoredFileError("The original file was destroyed under the retention rules.")
     content = read_encrypted(batch.source_file_path, batch.source_sha256)
     record(
         actor=actor,
@@ -253,4 +256,5 @@ def open_original(*, batch: ImportBatch, actor, ip=None) -> bytes:
         new={"filename": batch.source_filename, "sha256": batch.source_sha256},
         ip=ip,
     )
+    breaches.after_download(actor)
     return content

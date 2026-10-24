@@ -28,12 +28,18 @@ def set_password_link(user: User) -> str:
     return f"{base}{path}?uid={uid}&token={token}"
 
 
-def send_set_password(user: User) -> str:
-    """Email the link after commit. A mail failure is logged and never undoes the change."""
+def send_set_password(user: User, *, reset: bool = False) -> str:
+    """Email the link after commit. A mail failure is logged and never undoes the change. With reset,
+    the person already has a password and the link replaces it (ICT sends it when one is forgotten)."""
     link = set_password_link(user)
     hours = settings.PASSWORD_RESET_TIMEOUT // 3600
+    opening = (
+        "ICT has sent you a link to choose a new AuditLogs password."
+        if reset
+        else "An AuditLogs account has been set up for you."
+    )
     text = (
-        "An AuditLogs account has been set up for you.\n\n"
+        f"{opening}\n\n"
         f"Choose your password here: {link}\n\n"
         f"The link works once and expires in {hours} hours. If you did not expect this, ignore this email."
     )

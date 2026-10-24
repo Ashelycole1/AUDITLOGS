@@ -25,6 +25,7 @@ from apps.organizations.models import OrgStatus
 from . import passwords, services
 from .models import AUDITORS, Role, User, can_assign
 from .serializers import (
+    ActingCiaSerializer,
     LoginSerializer,
     MeSerializer,
     MfaSerializer,
@@ -149,6 +150,10 @@ class LoginView(APIView):
                 organization=target.organization_id if target else None,
             )
             if locked:
+                if target is not None:
+                    from apps.compliance import breaches
+
+                    breaches.account_locked(User.objects.get(pk=target.pk))
                 return Response(
                     {"detail": locked_message(), "code": "locked"}, status=status.HTTP_403_FORBIDDEN
                 )
@@ -385,10 +390,55 @@ class UserViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.Gen
     def create(self, request):
         data = UserCreateSerializer(data=request.data, context={"organization": request.user.organization})
         data.is_valid(raise_exception=True)
-        user = services.create_user(
-            actor=request.user, organization=request.user.organization, ip=self._ip(), **data.validated_data
+        with transaction.atomic():
+            user = services.create_user(
+                actor=request.user,
+                organization=request.user.organization,
+                ip=self._ip(),
+                **data.validated_data,
+            )
+            # The new person chooses their own password from a one-time emailed link.
+            link = passwords.send_set_password(user)
+        return Response(self._with_link(user, link), status=status.HTTP_201_CREATED)
+
+    def _with_link(self, user: User, link: str) -> dict:
+        out = {**UserSerializer(user).data, "sent_to": masked(user.email)}
+        if settings.ENVIRONMENT != "prod":
+            # Outside production the link is also shown, because staging has no mail server.
+            out["set_password_link"] = link
+        return out
+
+    @action(detail=True, methods=["post"], url_path="send-enrolment")
+    def send_enrolment(self, request, pk=None):
+        """A fresh one-time link: the first sign-in, or a forgotten password."""
+        user = self.get_object()
+        reason = self._reasoned(request, user, "send a link to")
+        link = services.send_enrolment(actor=request.user, user=user, reason=reason, ip=self._ip())
+        return Response(self._with_link(user, link))
+
+    @action(detail=True, methods=["post"], url_path="acting-cia")
+    def acting_cia(self, request, pk=None):
+        user = self.get_object()
+        data = ActingCiaSerializer(data=request.data)
+        data.is_valid(raise_exception=True)
+        user = services.grant_acting_cia(
+            actor=request.user,
+            user=user,
+            until=data.validated_data["until"],
+            reason=data.validated_data["reason"],
+            ip=self._ip(),
         )
-        return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
+        return Response(UserSerializer(user).data)
+
+    @action(detail=True, methods=["post"], url_path="end-acting-cia")
+    def end_acting_cia(self, request, pk=None):
+        user = self.get_object()
+        data = ReasonSerializer(data=request.data)
+        data.is_valid(raise_exception=True)
+        user = services.end_acting_cia(
+            actor=request.user, user=user, reason=data.validated_data["reason"], ip=self._ip()
+        )
+        return Response(UserSerializer(user).data)
 
     def partial_update(self, request, pk=None):
         user = self.get_object()

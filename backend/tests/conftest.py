@@ -252,6 +252,46 @@ def make_report(make_user):
 
 
 @pytest.fixture
+def make_disposal(make_query):
+    from django.utils import timezone
+
+    from apps.compliance.models import DisposalRecord
+
+    def _make():
+        query = make_query()
+        return DisposalRecord.objects.create(
+            organization=query.organization,
+            record_type="closed_query",
+            object_id=query.pk,
+            label=query.reference,
+            since=timezone.now(),
+            retention_months=12,
+        )
+
+    return _make
+
+
+@pytest.fixture
+def make_breach(org):
+    from apps.compliance.models import BreachRecord
+
+    def _make():
+        return BreachRecord.objects.create(organization=org, description="Matrix test breach")
+
+    return _make
+
+
+@pytest.fixture
+def make_grant(make_user):
+    from apps.compliance.models import AccessGrant
+
+    def _make():
+        return AccessGrant.objects.create(requested_by=make_user("ICT"), reason="Matrix test grant")
+
+    return _make
+
+
+@pytest.fixture
 def url_for(
     make_user,
     make_batch,
@@ -263,6 +303,9 @@ def url_for(
     make_notification,
     make_report,
     make_org,
+    make_disposal,
+    make_breach,
+    make_grant,
 ):
     def _url(name: str, target: str | None) -> str:
         if target is None:
@@ -284,6 +327,9 @@ def url_for(
             "notification": make_notification,
             "report": make_report,
             "organization": lambda: make_org("Matrix organisation", status="Pending"),
+            "disposal": make_disposal,
+            "breach": make_breach,
+            "grant": make_grant,
         }[target]()
         return reverse(name, kwargs={"pk": obj.pk})
 

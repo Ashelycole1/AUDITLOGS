@@ -8,7 +8,7 @@ from rest_framework.response import Response
 from apps.accounts.models import User
 from apps.auditlog.models import AuditLog
 from apps.core.requests import client_ip
-from apps.core.scoping import ScopedQuerysetMixin
+from apps.core.scoping import BreakGlassMixin, ScopedQuerysetMixin
 from apps.core.validators import ReasonSerializer, validate_reason
 from apps.followup import services as followup
 from apps.followup.models import Comment, Evidence, FollowUpActivity
@@ -76,6 +76,7 @@ class QueryListSerializer(serializers.ModelSerializer):
             "batch_filename",
             "imported_at",
             "closed_at",
+            "disposed_at",
             "description_current",
             "risk_rating_original",
             "criterion",
@@ -184,6 +185,7 @@ class CeoQuerySerializer(serializers.ModelSerializer):
             "assignee_role",
             "imported_at",
             "closed_at",
+            "disposed_at",
             "criterion",
             "criterion_title",
         ]
@@ -303,6 +305,8 @@ class DirectStatusSerializer(ReasonSerializer):
 READ = ("PIA", "CIA", "IA", "SIA")
 # The CEO reads every query of the organization but changes nothing (auditlogs-additions_final.md 9).
 OVERVIEW = (*READ, "CEO")
+# ICT reads only under an approved break-glass grant (design.md 12), checked by RoleRequired.
+GLASS = (*READ, "ICT")
 # Follow-up, evidence and comments can be added by anyone in the audit chain who can see the query
 # (owner, 2026-10-22); an IA or SIA only on their own. The CEO comments too.
 WORKERS = ("PIA", "CIA", "IA", "SIA")
@@ -310,7 +314,11 @@ ASSIGNERS = ("PIA", "CIA")
 
 
 class QueryViewSet(
-    ScopedQuerysetMixin, mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet
+    BreakGlassMixin,
+    ScopedQuerysetMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
 ):
     """Queries and their follow-up (design.md 6). Every lookup goes through Query.objects.for_user,
     so an IA reaches only their own assigned queries and anyone else's is a 404.
@@ -319,14 +327,16 @@ class QueryViewSet(
 
     allowed_roles = READ
     action_roles = {
-        "list": OVERVIEW,
-        "retrieve": OVERVIEW,
+        "list": (*OVERVIEW, "ICT"),
+        "retrieve": (*OVERVIEW, "ICT"),
+        "revisions": GLASS,
+        "history": GLASS,
         "partial_update": ("CIA",),
         "assign": ASSIGNERS,
         "bulk_assign": ASSIGNERS,
-        "activities": {"GET": READ, "POST": WORKERS},
-        "evidence": {"GET": READ, "POST": WORKERS},
-        "comments": {"GET": (*READ, "CEO"), "POST": (*WORKERS, "CEO")},
+        "activities": {"GET": GLASS, "POST": WORKERS},
+        "evidence": {"GET": GLASS, "POST": WORKERS},
+        "comments": {"GET": (*GLASS, "CEO"), "POST": (*WORKERS, "CEO")},
         "propose_status": ("IA", "SIA"),
         "change_status": ("CIA",),
         "export": ("CIA",),
@@ -516,6 +526,8 @@ CIA_ACTIVITY_ACTIONS = ("status.direct", "query.edit", "query.reassign", "reassi
 class CiaActivitySerializer(serializers.ModelSerializer):
     actor_name = serializers.CharField(source="actor.full_name", default=None, read_only=True)
     reference = serializers.SerializerMethodField()
+    # A PIA covering for the CIA (design.md 8): their CIA actions show here, marked as acting.
+    acting = serializers.SerializerMethodField()
 
     class Meta:
         model = AuditLog
@@ -530,8 +542,12 @@ class CiaActivitySerializer(serializers.ModelSerializer):
             "old_value",
             "new_value",
             "reason",
+            "acting",
         ]
         read_only_fields = fields
+
+    def get_acting(self, obj) -> bool:
+        return obj.actor is not None and obj.actor.role != "CIA"
 
     def get_reference(self, obj) -> str:
         return self.context["references"].get(obj.object_id, "")

@@ -79,6 +79,7 @@ INSTALLED_APPS = [
     "apps.followup",
     "apps.notifications",
     "apps.reports",
+    "apps.compliance",
 ]
 
 MIDDLEWARE = [
@@ -163,6 +164,8 @@ EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 NOTIFY_BY_EMAIL = (env("NOTIFY_BY_EMAIL", "false") or "false").strip().lower() == "true"
 # Where notification emails link to, e.g. https://auditlogs.example.ug. Blank leaves the link out.
 APP_URL = env("APP_URL", "")
+# Downloads and exports by one person in an hour that raise a breach register alert (design.md 12).
+DOWNLOAD_ALERT_PER_HOUR = int(env("DOWNLOAD_ALERT_PER_HOUR", "30") or "30")
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework.authentication.SessionAuthentication"],
