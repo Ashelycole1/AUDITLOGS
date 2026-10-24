@@ -109,8 +109,6 @@ Updated at the end of every session and whenever work is paused (see `agent_work
 
 ### Not done
 - Postgres has run only in CI so far, not on a local machine (Docker isn't installed here).
-- Acting-CIA grant endpoint and one-time enrolment links are not built.
-- Pre-commit hooks and dummy query fixtures are not set up.
 
 - 2026-10-17, **staging backend live** at https://auditlogs-api.onrender.com (Blueprint; `auditlogs-api` srv-db9h0k3bc2fs73dolj60 and `auditlogs-staging-db` in Frankfurt; the database expires 2026-11-16).
   - Migrations ran on Postgres 16, including the append-only audit triggers, and the 7 demo accounts were created.
@@ -180,8 +178,18 @@ Updated at the end of every session and whenever work is paused (see `agent_work
   - **Checked end to end** in headless Chrome against a throwaway database at 1366px and 360px: ICT sends a sign-in link (shown on screen), makes the PIA acting CIA, asks for 3 hours of access; the CIA approves it from Approvals; ICT then reads queries with the read-only notice and no change controls; the CIA records, updates and closes a breach, searches for a person, sets a 12-month rule, and the check flags and disposes an aged closed query, leaving the stub; the acting PIA gets the CIA's pages. No page errors and no sideways overflow.
   - Note: every API read ICT makes under a grant is logged, so one page view counts several reads.
 
+- 2026-10-25, **pre-commit hooks and dummy queries** (the two Phase 1 items left over):
+  - `.pre-commit-config.yaml`: merge-conflict, YAML/JSON, large-file and private-key checks, end-of-file and trailing-space fixers, ruff and black (same versions as `requirements-dev.txt`), a NUL-byte check on source files (after the blank `store.tsx`), and the frontend typecheck. All pass on the whole repository. Not installed into `.git/hooks`; set up with `uv tool install pre-commit` and `pre-commit install`.
+  - `seed_dev_queries`: imports 16 dummy queries (`DEMO/2026/...`) as the demo CIA and takes them through the real services to every status (Imported, Assigned, In Progress, Proposed, Closed, Returned, Kept in View), with some overdue. Needs `seed_dev_users`; refuses production; a second run changes nothing. **1161 backend tests pass**, ruff and black clean.
+
+- 2026-10-25, **queries per person and the organization's profile** (DECISIONS 37):
+  - Dashboard: new "Queries per person" donut, with counts per person only. The server adds `allocated_to` to the status summary.
+  - System Administrator: address, website and logo for each organization (migration `organizations 0003`). Logos are redrawn as a PNG of at most 512 pixels. The organization's people see the logo and name in the top bar and the details on their profile.
+  - **1205 backend tests**, ruff and black clean, frontend builds. Checked end to end in headless Chrome against a throwaway database, at 1366px and 360px in light and dark: SYS renames the demo organization and uploads a logo; the CIA and IA see the logo, the new name and address, and the per-person pie. No page errors and no sideways overflow.
+  - Note: `PROGRESS.md` cites DECISIONS 36 for Phase 4, but that entry is missing from `DECISIONS.md`.
+
 ### In flight
-- Nothing. Phase 4 is ready for the owner to push.
+- Nothing. Not committed yet: the pre-commit hooks, `seed_dev_queries`, and the per-person pie and organization profile.
 - Owner to sign in on staging with a demo account (password only).
 
 ### Next (proposed)
