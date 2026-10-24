@@ -17,6 +17,11 @@ export interface OrgInfo {
   id: string;
   name: string;
   country: string;
+  /** Details the System Administrator keeps for the organization, shown to its own people. */
+  address?: string;
+  website?: string;
+  /** Where the browser loads the logo from (same origin, signed in); null when there is none. */
+  logoUrl?: string | null;
   status: OrgStatus;
   features: FeatureKey[];
   roles: OrgRole[];
@@ -297,4 +302,14 @@ export interface StatusSummary {
   allocated: number;
   unallocated: number;
   slices: { key: "worked_on" | "allocated_not_worked" | "unallocated"; label: string; count: number; percent: number; meaning: string }[];
+  /** Who holds the allocated queries: a count per person, never anything of the queries themselves. */
+  allocatedTo?: Allocation[];
+}
+
+export interface Allocation {
+  id: string;
+  fullName: string;
+  role: Role;
+  count: number;
+  workedOn: number;
 }

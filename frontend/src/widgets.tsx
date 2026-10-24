@@ -6,9 +6,9 @@ import { Link } from "react-router-dom";
 import { api } from "./api";
 import { ChartCard, GOOD, SERIES } from "./charts";
 import { cx } from "./components";
-import { fmtBytes, fmtDateTime, ROLE_NAME, statusSummary } from "./lib/rules";
+import { fmtBytes, fmtDateTime, isWorkedOn, ROLE_NAME, statusSummary } from "./lib/rules";
 import { useStore } from "./storeTypes";
-import type { OrgRole, StatusSummary } from "./types";
+import type { Allocation, OrgRole, Query, StatusSummary, User } from "./types";
 
 // Worked on is good, allocated is the plain series, not allocated is the neutral remainder. Checked with the
 // dataviz validator in both themes (CVD and normal-vision separation pass; the grey is the intended "none").
@@ -45,6 +45,13 @@ const toSummary = (r: Raw): StatusSummary => ({
   allocated: Number(r.allocated),
   unallocated: Number(r.unallocated),
   slices: r.slices as StatusSummary["slices"],
+  allocatedTo: ((r.allocated_to as Raw[]) ?? []).map((p) => ({
+    id: String(p.id),
+    fullName: String(p.full_name),
+    role: p.role as Allocation["role"],
+    count: Number(p.count),
+    workedOn: Number(p.worked_on),
+  })),
 });
 
 export function StatusPieCard({ className, summary, subtitle = "Every query imported into the organization" }: { className?: string; summary?: StatusSummary; subtitle?: string }) {
@@ -67,7 +74,11 @@ export function StatusPieCard({ className, summary, subtitle = "Every query impo
         <p className="text-sm text-muted" role="status">Loading</p>
       ) : (
         <div className="flex flex-wrap items-center gap-6">
-          <Donut summary={s} />
+          <Donut
+            total={s.total}
+            slices={s.slices.map((x) => ({ key: x.key, label: x.label, count: x.count, color: SLICE_COLOR[x.key] }))}
+            center={{ value: s.total ? `${Math.round((100 * s.workedOn) / s.total)}%` : "0%", label: "worked on" }}
+          />
           <div className="min-w-[14rem] flex-1">
             <p className="text-sm text-muted">Total imported</p>
             <p className="text-[2rem] font-medium leading-none tracking-[-0.04em] tabular-nums">{s.total}</p>
@@ -108,24 +119,26 @@ export function StatusPieCard({ className, summary, subtitle = "Every query impo
   );
 }
 
-/** A donut of the three slices, with a 2px gap between them and a hover tooltip per slice. */
-function Donut({ summary }: { summary: StatusSummary }) {
+interface DonutSlice { key: string; label: string; count: number; color: string }
+
+/** A donut with a 2px gap between slices and the hovered slice's count in the middle. */
+function Donut({ total, slices, center }: { total: number; slices: DonutSlice[]; center: { value: string; label: string } }) {
   const [hover, setHover] = useState<string | null>(null);
   const size = 168;
   const r = 66;
   const stroke = 22;
   const c = 2 * Math.PI * r;
-  const live = summary.slices.filter((x) => x.count > 0);
+  const live = slices.filter((x) => x.count > 0);
   const gap = live.length > 1 ? 2 : 0;
   let offset = 0;
-  const shown = summary.slices.find((x) => x.key === hover);
+  const shown = slices.find((x) => x.key === hover);
   return (
     <div className="relative shrink-0" style={{ width: size, height: size }}>
-      <svg viewBox={`0 0 ${size} ${size}`} className="size-full -rotate-90" role="img" aria-label={summary.slices.map((x) => `${x.label}: ${x.count}`).join(", ")}>
+      <svg viewBox={`0 0 ${size} ${size}`} className="size-full -rotate-90" role="img" aria-label={slices.map((x) => `${x.label}: ${x.count}`).join(", ")}>
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--color-meter-track)" strokeWidth={stroke} />
-        {summary.total > 0 &&
+        {total > 0 &&
           live.map((x) => {
-            const len = (x.count / summary.total) * c;
+            const len = (x.count / total) * c;
             const dash = Math.max(0, len - gap);
             const el = (
               <circle
@@ -134,7 +147,7 @@ function Donut({ summary }: { summary: StatusSummary }) {
                 cy={size / 2}
                 r={r}
                 fill="none"
-                stroke={SLICE_COLOR[x.key]}
+                stroke={x.color}
                 strokeWidth={hover === x.key ? stroke + 4 : stroke}
                 strokeDasharray={`${dash} ${c - dash}`}
                 strokeDashoffset={-offset}
@@ -148,20 +161,106 @@ function Donut({ summary }: { summary: StatusSummary }) {
           })}
       </svg>
       <div className="pointer-events-none absolute inset-0 grid place-items-center text-center">
-        {shown ? (
-          <span>
-            <span className="block text-xl font-medium tabular-nums">{shown.count}</span>
-            <span className="block max-w-[6.5rem] text-[0.6875rem] leading-tight text-muted">{shown.label}</span>
-          </span>
-        ) : (
-          <span>
-            <span className="block text-xl font-medium tabular-nums">{summary.total ? `${Math.round((100 * summary.workedOn) / summary.total)}%` : "0%"}</span>
-            <span className="block text-[0.6875rem] text-muted">worked on</span>
-          </span>
-        )}
+        <span>
+          <span className="block text-xl font-medium tabular-nums">{shown ? shown.count : center.value}</span>
+          <span className="block max-w-[6.5rem] text-[0.6875rem] leading-tight text-muted">{shown ? shown.label : center.label}</span>
+        </span>
       </div>
     </div>
   );
+}
+
+// Three people get a colour each, in this fixed order; everyone after them shares the grey slice. More
+// hues could not all be told apart once any slice can sit beside any other (checked with the validator).
+const PERSON_COLORS = [1, 2, 3].map((n) => `var(--color-cat-${n})`);
+const OTHERS = "var(--color-cat-other)";
+
+/** Who the allocated queries are with: a count per person and nothing else (owner, 2026-10-25). The
+ *  queries themselves stay private to the people allowed to open them; only roles that can already
+ *  open the query list get a link to it. */
+export function AllocationPieCard({ className }: { className?: string }) {
+  const { mode, has, me, state } = useStore();
+  const on = has("component.status_pie");
+  const fromApi = useApi("/dashboard/status-summary", mode === "api" && on, toSummary);
+  if (!on) return null;
+  const people: Allocation[] | null = mode === "api" ? (fromApi?.allocatedTo ?? null) : demoAllocation(state.queries, state.users);
+  const canOpen = me?.role === "PIA" || me?.role === "CIA" || me?.role === "CEO";
+  const total = people?.reduce((n, p) => n + p.count, 0) ?? 0;
+  const share = (n: number) => (total ? `${Math.round((1000 * n) / total) / 10}%` : "0%");
+
+  // Those who hold the most get their own slice. Colours go by name, so a person keeps theirs as counts move.
+  const named = people?.slice(0, PERSON_COLORS.length) ?? [];
+  const rest = people?.slice(named.length) ?? [];
+  const colorOf = new Map([...named].sort((a, b) => a.fullName.localeCompare(b.fullName)).map((p, i) => [p.id, PERSON_COLORS[i]]));
+  const color = (id: string) => colorOf.get(id) ?? OTHERS;
+  const slices: DonutSlice[] = [
+    ...named.map((p) => ({ key: p.id, label: p.fullName, count: p.count, color: color(p.id) })),
+    ...(rest.length ? [{ key: "others", label: rest.length === 1 ? rest[0].fullName : `Everyone else (${rest.length})`, count: rest.reduce((n, p) => n + p.count, 0), color: OTHERS }] : []),
+  ];
+
+  return (
+    <ChartCard
+      className={className}
+      title="Queries per person"
+      subtitle="How many allocated queries each person holds. Counts only; the queries stay private."
+      table={people ? { head: ["Person", "Role", "Queries", "Worked on", "Share"], rows: [...people.map((p) => [p.fullName, ROLE_NAME[p.role], p.count, p.workedOn, share(p.count)]), ["Total allocated", "", total, people.reduce((n, p) => n + p.workedOn, 0), "100%"]] } : undefined}
+    >
+      {!people ? (
+        <p className="text-sm text-muted" role="status">Loading</p>
+      ) : !people.length ? (
+        <p className="text-sm text-muted">No query has been allocated yet.</p>
+      ) : (
+        <div className="flex flex-wrap items-center gap-6">
+          <Donut total={total} slices={slices} center={{ value: String(people.length), label: people.length === 1 ? "person" : "people" }} />
+          <div className="min-w-[14rem] flex-1">
+            <p className="text-sm text-muted">Allocated queries</p>
+            <p className="text-[2rem] font-medium leading-none tracking-[-0.04em] tabular-nums">{total}</p>
+            {/* Every person is listed with their count, including those who share the grey slice. */}
+            <ul className="mt-4 max-h-[17rem] space-y-2 overflow-y-auto text-sm" aria-label="Key">
+              {people.map((person) => {
+                const body = (
+                  <>
+                    <span className="mt-1 size-2.5 shrink-0 rounded-[3px]" style={{ background: color(person.id) }} aria-hidden />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate">{person.fullName}</span>
+                      <span className="block text-xs text-faint">{ROLE_NAME[person.role]}, {person.workedOn} worked on</span>
+                    </span>
+                    <span className="text-right tabular-nums">
+                      <span className="font-medium">{person.count}</span>
+                      <span className="block text-xs text-muted">{share(person.count)}</span>
+                    </span>
+                  </>
+                );
+                return (
+                  <li key={person.id}>
+                    {canOpen ? (
+                      <Link to={`/queries?assignee=${person.id}`} className="-mx-2 flex items-start gap-2.5 rounded-md px-2 py-1 hover:bg-subtle">{body}</Link>
+                    ) : (
+                      <div className="flex items-start gap-2.5">{body}</div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        </div>
+      )}
+    </ChartCard>
+  );
+}
+
+/** The demo works the same counts out in the browser, from every query of the demo organization. */
+function demoAllocation(queries: Query[], users: User[]): Allocation[] {
+  const by = new Map<string, Allocation>();
+  for (const q of queries) {
+    if (!q.currentAssignee) continue;
+    const u = users.find((x) => x.id === q.currentAssignee);
+    const row = by.get(q.currentAssignee) ?? { id: q.currentAssignee, fullName: u?.fullName ?? "Unknown", role: u?.role ?? "IA", count: 0, workedOn: 0 };
+    row.count += 1;
+    if (isWorkedOn(q)) row.workedOn += 1;
+    by.set(q.currentAssignee, row);
+  }
+  return [...by.values()].sort((a, b) => b.count - a.count || a.fullName.localeCompare(b.fullName));
 }
 
 interface Numbers {

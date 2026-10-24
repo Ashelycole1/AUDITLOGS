@@ -82,6 +82,13 @@
 
   /* Chart marks (validated: lilac, green, rose on the card surface). */
   --color-series: #7345e2;
+  /* People in the allocation pie, in this fixed order, then a grey for everyone else. Validated on #fbfbf9
+     with every pair checked (a slice can sit beside any other). Aqua and the grey are below 3:1, so the
+     key names every person with their count and the table view lists them. */
+  --color-cat-1: #2a78d6;
+  --color-cat-2: #eb6834;
+  --color-cat-3: #1baf7a;
+  --color-cat-other: #c6bfae;
   --color-mark-good: #4a9d54;
   --color-mark-critical: #e0294f;
   --color-grid: #ebe9e2;
@@ -187,6 +194,10 @@
   --color-land-shadow: #00000080;
 
   --color-series: #8f72f0;
+  --color-cat-1: #3987e5;
+  --color-cat-2: #d95926;
+  --color-cat-3: #199e70;
+  --color-cat-other: #bdb5a5;
   --color-mark-good: #56a862;
   --color-mark-critical: #ec4f75;
   --color-grid: #2a2422;

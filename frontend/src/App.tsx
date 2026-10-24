@@ -3,7 +3,7 @@ import { BrowserRouter, Navigate, NavLink, Outlet, Route, Routes, useLocation, u
 import { Avatar, cx, ThemeToggle, Wordmark } from "./components";
 import { Icon, type IconName } from "./icons";
 import { useStore } from "./storeTypes";
-import type { Role, User } from "./types";
+import type { OrgInfo, Role, User } from "./types";
 import { ROLE_NAME } from "./lib/rules";
 import Login from "./pages/Login";
 import DashboardPage from "./pages/Dashboard";
@@ -138,7 +138,10 @@ function Shell() {
     <div className="min-h-dvh">
       <header className="sticky top-0 z-30 border-b border-line bg-paper/90 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-[1320px] items-center gap-6 px-4 sm:px-6 lg:px-8">
-          <NavLink to="/" aria-label="AuditLogs home" className="shrink-0"><Wordmark /></NavLink>
+          <div className="flex min-w-0 shrink items-center gap-3">
+            <NavLink to="/" aria-label="AuditLogs home" className="shrink-0"><Wordmark compact={!!me.organization?.logoUrl} /></NavLink>
+            {me.organization && <OrgBrand org={me.organization} />}
+          </div>
           <nav aria-label="Main" className="hidden items-center gap-5 lg:flex xl:gap-6">{links(false)}</nav>
 
           <div className="ml-auto flex items-center gap-3">
@@ -201,6 +204,19 @@ function Shell() {
         <Outlet />
       </main>
     </div>
+  );
+}
+
+// The organization's own logo and name, as the System Administrator set them (owner, 2026-10-25). The name
+// gives way on narrow screens; the logo stays.
+function OrgBrand({ org }: { org: OrgInfo }) {
+  const [broken, setBroken] = useState(false);
+  const logo = org.logoUrl && !broken;
+  return (
+    <NavLink to="/profile" title={org.name} className="flex min-w-0 items-center gap-2.5 border-l border-line pl-3 text-sm text-muted hover:text-ink">
+      {logo && <img src={org.logoUrl!} alt={`${org.name} logo`} className="h-7 max-w-[4.5rem] shrink-0 object-contain sm:h-8 sm:max-w-[6rem]" onError={() => setBroken(true)} />}
+      <span className={cx("max-w-[14rem] truncate", logo ? "hidden 2xl:block" : "hidden sm:block")}>{org.name}</span>
+    </NavLink>
   );
 }
 
