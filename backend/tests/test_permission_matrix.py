@@ -123,6 +123,11 @@ MATRIX = [
     ("platform-organizations-features", "get", "organization", {"SYS"}),
     ("platform-organizations-features", "put", "organization", {"SYS"}),
     ("platform-organizations-admin", "post", "organization", {"SYS"}),
+    ("platform-organizations-logo", "get", "organization", {"SYS"}),
+    ("platform-organizations-logo", "post", "organization", {"SYS"}),
+    ("platform-organizations-logo", "delete", "organization", {"SYS"}),
+    # Each organization's people see their own organization's logo; only the platform changes it.
+    ("organization-logo", "get", None, ORG),
     ("platform-stats", "get", None, {"SYS"}),
     ("platform-audit-log", "get", None, {"SYS"}),
     ("platform-audit-log-verify", "post", None, {"SYS"}),

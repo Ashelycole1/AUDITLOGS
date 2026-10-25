@@ -148,6 +148,20 @@ export default function ProfilePage() {
           </Panel>
         )}
 
+        {me.organization && (
+          <Panel title="Your organization" subtitle="Kept by the platform administrator. Ask them to change it.">
+            <div className="flex flex-col items-start gap-4 sm:flex-row">
+              {me.organization.logoUrl && <img src={me.organization.logoUrl} alt={`${me.organization.name} logo`} className="h-14 max-w-[8rem] shrink-0 object-contain" />}
+              <dl className="grid min-w-0 flex-1 grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+                <dt className="text-muted">Name</dt><dd className="font-medium">{me.organization.name}</dd>
+                <dt className="text-muted">Country</dt><dd>{me.organization.country}</dd>
+                {me.organization.address && <><dt className="text-muted">Address</dt><dd className="whitespace-pre-line">{me.organization.address}</dd></>}
+                {me.organization.website && <><dt className="text-muted">Website</dt><dd className="break-all"><a className="text-lake hover:underline" href={me.organization.website} target="_blank" rel="noreferrer noopener">{me.organization.website.replace(/^https?:\/\//, "")}</a></dd></>}
+              </dl>
+            </div>
+          </Panel>
+        )}
+
         <Panel title="Account and security">
           <ul className="space-y-2 text-sm text-muted">
             <li>Signing in takes your password and, in production, a one-time code sent to your work email.</li>

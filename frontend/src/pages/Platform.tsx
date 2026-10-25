@@ -18,6 +18,9 @@ interface Org {
   contactPerson: string;
   email: string;
   phone: string;
+  address: string;
+  website: string;
+  logoUrl: string | null;
   status: OrgStatus;
   emailVerifiedAt: string | null;
   approvedAt: string | null;
@@ -36,6 +39,9 @@ const toOrg = (o: Raw): Org => ({
   contactPerson: String(o.contact_person),
   email: String(o.email),
   phone: String(o.phone ?? ""),
+  address: String(o.address ?? ""),
+  website: String(o.website ?? ""),
+  logoUrl: (o.logo_url as string | null) ?? null,
   status: o.status as OrgStatus,
   emailVerifiedAt: (o.email_verified_at as string) ?? null,
   approvedAt: (o.approved_at as string) ?? null,
@@ -73,6 +79,15 @@ const STATUS_TONE: Record<OrgStatus, string> = {
   Deactivated: "bg-chip text-muted ring-chip-ring",
   Rejected: "bg-chip text-muted ring-chip-ring",
 };
+
+/** The organization's logo, or its initial on a plain tile when it has none. */
+function OrgLogo({ org, className }: { org: Org; className?: string }) {
+  return org.logoUrl ? (
+    <img src={org.logoUrl} alt="" className={cx("shrink-0 rounded-md border border-line bg-sheet object-contain p-0.5", className)} />
+  ) : (
+    <span aria-hidden className={cx("grid shrink-0 place-items-center rounded-md bg-chip text-sm font-medium text-muted", className)}>{org.name.slice(0, 1).toUpperCase()}</span>
+  );
+}
 
 function OrgStatusBadge({ status }: { status: OrgStatus }) {
   return <span className={cx("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset", STATUS_TONE[status])}>{status}</span>;
@@ -208,7 +223,12 @@ export function PlatformHome() {
         <Table head={["Organization", "Status", "Users", "Queries", "Since"]} empty={orgs && !shown.length && <div className="px-5 pb-2 sm:px-6"><Empty title="No organizations">None match this status.</Empty></div>}>
           {shown.map((o) => (
             <tr key={o.id}>
-              <td className="min-w-[14rem]"><Link to={`/platform/organizations/${o.id}`} className="font-medium hover:text-lake hover:underline">{o.name}</Link><span className="block text-[0.8125rem] text-muted">{o.country}</span></td>
+              <td className="min-w-[14rem]">
+                <span className="flex items-center gap-3">
+                  <OrgLogo org={o} className="size-9" />
+                  <span className="min-w-0"><Link to={`/platform/organizations/${o.id}`} className="font-medium hover:text-lake hover:underline">{o.name}</Link><span className="block text-[0.8125rem] text-muted">{o.country}</span></span>
+                </span>
+              </td>
               <td><OrgStatusBadge status={o.status} /></td>
               <td className="tabular-nums">{o.activeUsers} <span className="text-faint">of {o.users}</span></td>
               <td className="tabular-nums">{o.queries}</td>
@@ -249,7 +269,11 @@ export function OrganizationPage() {
   const [wanted, setWanted] = useState<Record<FeatureKey, boolean> | null>(null);
   const [savingFeatures, setSavingFeatures] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [details, setDetails] = useState({ name: "", country: "", contact_person: "", email: "", phone: "" });
+  const [details, setDetails] = useState({ name: "", country: "", contact_person: "", email: "", phone: "", address: "", website: "" });
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [logoProblem, setLogoProblem] = useState<string | null>(null);
+  const [logoAction, setLogoAction] = useState<"upload" | "remove" | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [admin, setAdmin] = useState({ full_name: "", email: "" });
   const [adminOpen, setAdminOpen] = useState(false);
@@ -260,7 +284,7 @@ export function OrganizationPage() {
     setOrg(o);
     // A pending organization has no package yet; approval applies the default one unless changed here.
     setWanted(o.status === "Pending" ? fullPackage() : o.features);
-    setDetails({ name: o.name, country: o.country, contact_person: o.contactPerson, email: o.email, phone: o.phone });
+    setDetails({ name: o.name, country: o.country, contact_person: o.contactPerson, email: o.email, phone: o.phone, address: o.address, website: o.website });
   };
   const load = () => api.get<Raw>(`/platform/organizations/${id}`).then((r) => show(toOrg(r))).catch((e) => setError(message(e)));
   useEffect(() => { if (mode === "api") load(); }, [id, mode]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -281,6 +305,19 @@ export function OrganizationPage() {
   };
 
   const toggle = (key: FeatureKey) => setWanted({ ...wanted, [key]: !wanted[key] });
+  const pickLogo = (file: File | null) => {
+    setLogoProblem(null);
+    setLogoFile(null);
+    setLogoPreview(null);
+    if (!file) return;
+    if (!/^image\/(png|jpeg|webp|gif)$/.test(file.type)) return setLogoProblem("Choose a PNG, JPEG, WebP or GIF picture.");
+    if (file.size > 2 * 1024 * 1024) return setLogoProblem("The picture is larger than 2 MB.");
+    setLogoFile(file);
+    // A data: preview, which the page's content policy allows; the server redraws the real one.
+    const reader = new FileReader();
+    reader.onload = () => setLogoPreview(String(reader.result));
+    reader.readAsDataURL(file);
+  };
   const applyPreset = (p: string) => {
     setPreset(p);
     const all = fullPackage();
@@ -360,10 +397,14 @@ export function OrganizationPage() {
           <Panel title="Details" aside={<Button kind="quiet" onClick={() => setEditing((v) => !v)}>{editing ? "Close" : "Edit"}</Button>}>
             {editing ? (
               <form onSubmit={(e) => { e.preventDefault(); setDetailsOpen(true); }} className="grid gap-3">
-                {(["name", "country", "contact_person", "email", "phone"] as const).map((k) => (
+                {(["name", "country", "contact_person", "email", "phone", "address", "website"] as const).map((k) => (
                   <div key={k}>
                     <Label htmlFor={`d-${k}`}>{k.replace("_", " ").replace(/^./, (c) => c.toUpperCase())}</Label>
-                    <input id={`d-${k}`} className="field" type={k === "email" ? "email" : "text"} value={details[k]} onChange={(e) => setDetails({ ...details, [k]: e.target.value })} />
+                    {k === "address" ? (
+                      <textarea id={`d-${k}`} className="field" rows={3} value={details[k]} onChange={(e) => setDetails({ ...details, [k]: e.target.value })} />
+                    ) : (
+                      <input id={`d-${k}`} className="field" type={k === "email" ? "email" : k === "website" ? "url" : "text"} placeholder={k === "website" ? "https://" : undefined} value={details[k]} onChange={(e) => setDetails({ ...details, [k]: e.target.value })} />
+                    )}
                   </div>
                 ))}
                 <div><Button kind="primary" type="submit">Save details</Button></div>
@@ -374,10 +415,35 @@ export function OrganizationPage() {
                 <dt className="text-muted">Contact</dt><dd>{org.contactPerson}</dd>
                 <dt className="text-muted">Email</dt><dd className="break-all">{org.email}{org.emailVerifiedAt ? <span className="block text-good">Confirmed {fmtDate(org.emailVerifiedAt)}</span> : <span className="block text-warn">Not confirmed</span>}</dd>
                 <dt className="text-muted">Phone</dt><dd>{org.phone || <span className="text-faint">Not given</span>}</dd>
+                <dt className="text-muted">Address</dt><dd className="whitespace-pre-line">{org.address || <span className="text-faint">Not given</span>}</dd>
+                <dt className="text-muted">Website</dt><dd className="break-all">{org.website ? <a className="text-lake hover:underline" href={org.website} target="_blank" rel="noreferrer noopener">{org.website.replace(/^https?:\/\//, "")}</a> : <span className="text-faint">Not given</span>}</dd>
                 <dt className="text-muted">Signed up</dt><dd>{fmtDateTime(org.createdAt)}</dd>
                 {org.approvedAt && <><dt className="text-muted">Approved</dt><dd>{fmtDateTime(org.approvedAt)}</dd></>}
               </dl>
             )}
+          </Panel>
+
+          <Panel title="Logo" subtitle="Shown with the name to the organization's people, in the top bar and on their profile">
+            <div className="grid gap-4">
+              <div className="grid h-24 w-full place-items-center rounded-lg border border-line bg-subtle p-3">
+                {logoPreview ? (
+                  <img src={logoPreview} alt="New logo" className="max-h-[4.5rem] max-w-full object-contain" />
+                ) : org.logoUrl ? (
+                  <img src={org.logoUrl} alt={`${org.name} logo`} className="max-h-[4.5rem] max-w-full object-contain" />
+                ) : (
+                  <span className="text-xs text-faint">No logo</span>
+                )}
+              </div>
+              <div className="grid min-w-0 gap-2">
+                <input aria-label="Logo picture" type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="w-full min-w-0 text-sm file:mr-3 file:rounded-[5px] file:border file:border-rule file:bg-sheet file:px-3 file:py-1.5 file:text-sm" onChange={(e) => pickLogo(e.target.files?.[0] ?? null)} />
+                <p className="text-[0.8125rem] text-faint">PNG, JPEG, WebP or GIF, up to 2 MB. It is resized to fit 512 pixels.</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button kind="secondary" disabled={!logoFile} onClick={() => setLogoAction("upload")}>Use this logo</Button>
+                  {org.logoUrl && !logoFile && <Button kind="quiet" onClick={() => setLogoAction("remove")}>Remove</Button>}
+                </div>
+              </div>
+            </div>
+            {logoProblem && <div className="mt-3"><Notice tone="error">{logoProblem}</Notice></div>}
           </Panel>
 
           <Panel title="Administrators" subtitle="The organization's ICT administrators manage its people">
@@ -450,6 +516,25 @@ export function OrganizationPage() {
           return err;
         }}
         onClose={() => setDetailsOpen(false)}
+      />
+      <ReasonDialog
+        open={logoAction !== null}
+        title={logoAction === "remove" ? `Remove ${org.name}'s logo` : `New logo for ${org.name}`}
+        description="The change is recorded with your name and reason. The organization's people see it at their next page load."
+        confirmLabel={logoAction === "remove" ? "Remove" : "Use this logo"}
+        danger={logoAction === "remove"}
+        onConfirm={async (reason) => {
+          const err = await run(
+            () =>
+              logoAction === "remove"
+                ? api.del<Raw>(`/platform/organizations/${id}/logo`, { reason })
+                : api.upload<Raw>(`/platform/organizations/${id}/logo`, logoFile!, { reason }),
+            logoAction === "remove" ? "Logo removed." : "Logo saved.",
+          );
+          if (!err) pickLogo(null);
+          return err;
+        }}
+        onClose={() => setLogoAction(null)}
       />
       <ReasonDialog
         open={adminOpen}

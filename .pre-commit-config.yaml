@@ -1,0 +1,51 @@
+# Checks run before each commit (agent_workflow.md, Phase 1). The same checks run in CI.
+# Set up once:  uv tool install pre-commit  &&  pre-commit install
+# Run by hand:  pre-commit run --all-files
+# Versions match backend/requirements-dev.txt, so the hooks and CI agree on formatting.
+exclude: ^(samples/|frontend/public/fonts/)|/migrations/
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-merge-conflict
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-json
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+      # No secrets in the repo (DECISIONS: generated or from .env only).
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.13.3
+    hooks:
+      - id: ruff-check
+        files: ^backend/
+
+  - repo: https://github.com/psf/black-pre-commit-mirror
+    rev: 25.12.0
+    hooks:
+      - id: black
+        files: ^backend/
+        args: [--config, backend/pyproject.toml]
+
+  - repo: local
+    hooks:
+      # An interrupted save once left frontend/src/store.tsx as nothing but NUL bytes (2026-10-25).
+      # Such a file looks binary, so name the source types instead of relying on "text".
+      - id: no-nul-bytes
+        name: no NUL bytes in source files
+        language: pygrep
+        entry: '\x00'
+        types: [file]
+        files: \.(py|tsx?|jsx?|css|html|md|json|ya?ml|toml|txt|sql)$
+      - id: frontend-typecheck
+        name: frontend typecheck
+        language: system
+        entry: npm --prefix frontend run typecheck
+        files: ^frontend/(src/|tsconfig)
+        pass_filenames: false

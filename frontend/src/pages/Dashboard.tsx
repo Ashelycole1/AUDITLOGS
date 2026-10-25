@@ -8,7 +8,7 @@ import { STATUSES, daysOverdue, dueWithin, fmtDate, fmtDateTime, isAuditor } fro
 import { useMe, useStore } from "../storeTypes";
 import type { Query, Risk, Status } from "../types";
 import { ACTION_LABEL } from "./Cia";
-import { RegisteredNumbersCard, StatusPieCard, SystemStatsCard } from "../widgets";
+import { AllocationPieCard, RegisteredNumbersCard, StatusPieCard, SystemStatsCard } from "../widgets";
 
 const DAY = 86_400_000;
 const OPEN_STATUSES: Status[] = ["Imported", "Assigned", "In Progress", "Proposed for Closure", "Pending Approval", "Kept in View", "Returned"];
@@ -170,6 +170,7 @@ export default function DashboardPage() {
           organization and ignore the filters above (auditlogs-additions_final.md 10). */}
       <div className="mt-4 grid gap-4 lg:grid-cols-2 xl:grid-cols-3 empty:hidden">
         <StatusPieCard className="lg:col-span-2 xl:col-span-1" />
+        <AllocationPieCard className="lg:col-span-2 xl:col-span-1" />
         <RegisteredNumbersCard />
         <SystemStatsCard />
       </div>

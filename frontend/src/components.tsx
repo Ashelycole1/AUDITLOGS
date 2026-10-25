@@ -374,13 +374,14 @@ export function Table({ head, children, empty }: { head: ReactNode[]; children: 
   );
 }
 
-export function Wordmark({ onSpine }: { onSpine?: boolean }) {
+/** The product mark. `compact` keeps only the icon on phones, where an organization logo sits beside it. */
+export function Wordmark({ onSpine, compact }: { onSpine?: boolean; compact?: boolean }) {
   return (
     <p className={cx("flex items-center gap-2 text-[1.125rem] font-medium tracking-[-0.03em]", onSpine ? "text-on-ink" : "text-ink")}>
       <span className={cx("grid size-7 place-items-center rounded-[6px]", onSpine ? "bg-on-ink text-ink" : "bg-ink text-on-ink")}>
         <Icon name="chain" className="size-4" />
       </span>
-      AuditLogs
+      <span className={compact ? "hidden sm:inline" : undefined}>AuditLogs</span>
     </p>
   );
 }

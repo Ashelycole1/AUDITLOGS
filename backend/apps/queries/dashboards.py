@@ -18,17 +18,19 @@ from apps.organizations import features
 from apps.reports.models import AuditReport, Criterion
 
 from .models import Query, Status
-from .stats import breakdown, by_field
+from .stats import breakdown, by_assignee, by_field
 
 
 class StatusSummaryView(APIView):
-    """The query status pie chart: total, worked on, not worked on and allocated, with a key."""
+    """The query status pie chart: total, worked on, not worked on and allocated, with a key, and who the
+    allocated queries are with (counts per person only)."""
 
     allowed_roles = ORG_ROLES
     required_feature = features.STATUS_PIE
 
     def get(self, request):
-        return Response(breakdown(Query.objects.in_org(request.user.organization_id)))
+        queries = Query.objects.in_org(request.user.organization_id)
+        return Response({**breakdown(queries), "allocated_to": by_assignee(queries)})
 
 
 class RegisteredNumbersView(APIView):

@@ -384,6 +384,23 @@ def test_status_pie_adds_up(client_for, make_query, make_user):
     assert cia.get(reverse("queries-list"), {"worked": "no", "assignee": "any"}).json()["count"] == 1
 
 
+def test_status_pie_counts_queries_per_person_without_their_details(client_for, make_query, make_user):
+    ia, sia = make_user("IA"), make_user("SIA")
+    make_query()
+    make_query(assignee=ia, status="Assigned", title="Secret payroll finding")
+    make_query(assignee=ia, status="In Progress")
+    make_query(assignee=sia, status="Closed")
+    # Every role sees who holds how many, the IA included, even for queries it cannot open.
+    body = client_for("IA").get(reverse("dashboard-status-summary")).json()
+    assert body["allocated_to"] == [
+        {"id": str(ia.pk), "full_name": ia.full_name, "role": "IA", "count": 2, "worked_on": 1},
+        {"id": str(sia.pk), "full_name": sia.full_name, "role": "SIA", "count": 1, "worked_on": 1},
+    ]
+    assert sum(p["count"] for p in body["allocated_to"]) == body["allocated"]
+    # Counts only: nothing of a query itself.
+    assert "Secret" not in str(body) and "reference" not in str(body)
+
+
 def test_assignee_name_and_history(client_for, make_query, make_user):
     from apps.queries.models import Assignment
 

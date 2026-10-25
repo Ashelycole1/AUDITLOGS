@@ -13,9 +13,11 @@ from apps.accounts import passwords
 from apps.accounts.models import Role, User
 from apps.auditlog.services import record
 from apps.core.exceptions import RuleError
+from apps.core.filestore import sha256
 from apps.core.validators import MIN_REASON
 
 from . import features as catalogue
+from . import logos
 from .models import Organization, OrganizationFeature, OrgStatus
 
 log = logging.getLogger(__name__)
@@ -49,6 +51,8 @@ def snapshot(org: Organization) -> dict:
         "contact_person": org.contact_person,
         "email": org.email,
         "phone": org.phone,
+        "address": org.address,
+        "website": org.website,
         "status": org.status,
     }
 
@@ -207,6 +211,34 @@ def update_details(*, org: Organization, actor, changes: dict, reason: str = "",
         object_id=org.pk,
         old={k: before[k] for k in after if before[k] != after[k]},
         new={k: after[k] for k in after if before[k] != after[k]},
+        reason=reason,
+        ip=ip,
+        organization=org,
+    )
+    return org
+
+
+@transaction.atomic
+def set_logo(*, org: Organization, actor, content: bytes | None, reason: str = "", ip=None) -> Organization:
+    """Put up a new logo, or take it down with None. The log keeps the picture's fingerprint, not the
+    picture."""
+    _check_reason(reason, "change the logo")
+    org = Organization.objects.select_for_update().get(pk=org.pk)
+    png = logos.normalise(content) if content is not None else None
+    if png is None and org.logo is None:
+        raise OrganizationError("This organization has no logo to remove.")
+    old = {"logo_sha256": org.logo_sha256 or None}
+    org.logo = png
+    org.logo_sha256 = sha256(png) if png else ""
+    org.logo_updated_at = timezone.now() if png else None
+    org.save(update_fields=["logo", "logo_sha256", "logo_updated_at", "updated_at"])
+    record(
+        actor=actor,
+        action="organization.logo" if png else "organization.logo_remove",
+        object_type="Organization",
+        object_id=org.pk,
+        old=old,
+        new={"logo_sha256": org.logo_sha256 or None, "bytes": len(png) if png else 0},
         reason=reason,
         ip=ip,
         organization=org,

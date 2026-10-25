@@ -79,5 +79,26 @@ def breakdown(queries) -> dict:
     }
 
 
+def by_assignee(queries) -> list[dict]:
+    """How many queries each person holds, for the allocation pie (owner, 2026-10-25). Counts and names
+    only: no reference, title or any other detail of the queries themselves, which stay private."""
+    rows = (
+        queries.filter(current_assignee__isnull=False)
+        .values("current_assignee", "current_assignee__full_name", "current_assignee__role")
+        .annotate(count=Count("pk"), worked_on=Count("pk", filter=worked_on_q()))
+        .order_by("-count", "current_assignee__full_name")
+    )
+    return [
+        {
+            "id": str(r["current_assignee"]),
+            "full_name": r["current_assignee__full_name"],
+            "role": r["current_assignee__role"],
+            "count": r["count"],
+            "worked_on": r["worked_on"],
+        }
+        for r in rows
+    ]
+
+
 def by_field(queries, field: str) -> dict[str, int]:
     return {row[field]: row["n"] for row in queries.values(field).annotate(n=Count("pk")).order_by(field)}
