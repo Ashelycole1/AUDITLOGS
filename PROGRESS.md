@@ -183,13 +183,13 @@ Updated at the end of every session and whenever work is paused (see `agent_work
   - `seed_dev_queries`: imports 16 dummy queries (`DEMO/2026/...`) as the demo CIA and takes them through the real services to every status (Imported, Assigned, In Progress, Proposed, Closed, Returned, Kept in View), with some overdue. Needs `seed_dev_users`; refuses production; a second run changes nothing. **1161 backend tests pass**, ruff and black clean.
 
 - 2026-10-25, **queries per person and the organization's profile** (DECISIONS 37):
-  - Dashboard: new "Queries per person" donut, with counts per person only. The server adds `allocated_to` to the status summary.
+  - Dashboard: the one status pie now opens, on tapping a slice, the list of who holds those queries (counts only). A first version had a second pie; the owner asked for one. The server adds `allocated_to` to the status summary.
   - System Administrator: address, website and logo for each organization (migration `organizations 0003`). Logos are redrawn as a PNG of at most 512 pixels. The organization's people see the logo and name in the top bar and the details on their profile.
   - **1205 backend tests**, ruff and black clean, frontend builds. Checked end to end in headless Chrome against a throwaway database, at 1366px and 360px in light and dark: SYS renames the demo organization and uploads a logo; the CIA and IA see the logo, the new name and address, and the per-person pie. No page errors and no sideways overflow.
   - Note: `PROGRESS.md` cites DECISIONS 36 for Phase 4, but that entry is missing from `DECISIONS.md`.
 
 ### In flight
-- Nothing. Not committed yet: the pre-commit hooks, `seed_dev_queries`, and the per-person pie and organization profile.
+- Nothing. Not committed yet: the change to one pie (checked in headless Chrome at 1366px and 360px: tapping the key, tapping the ring and pressing Enter all open the list; the CIA gets links, the IA does not).
 - Owner to sign in on staging with a demo account (password only).
 
 ### Next (proposed)
