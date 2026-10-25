@@ -1,4 +1,4 @@
-import type { AccessRequest, ExportFilters, Query, ReassignmentRequest, Role, Status, StatusSummary, User } from "../types";
+import type { AccessRequest, Allocation, ExportFilters, Query, ReassignmentRequest, Role, Status, StatusSummary, User } from "../types";
 
 export const ROLE_NAME: Record<Role, string> = {
   PIA: "Principal Internal Auditor",
@@ -95,7 +95,7 @@ export function isWorkedOn(q: Query, reassignments: ReassignmentRequest[] = []):
 }
 
 /** The pie chart's counts worked out in the browser (demo mode). The API sends the same shape. */
-export function statusSummary(qs: Query[], reassignments: ReassignmentRequest[] = []): StatusSummary {
+export function statusSummary(qs: Query[], reassignments: ReassignmentRequest[] = [], users?: User[]): StatusSummary {
   const total = qs.length;
   const worked = qs.filter((q) => isWorkedOn(q, reassignments));
   const allocated = qs.filter((q) => q.currentAssignee).length;
@@ -113,7 +113,22 @@ export function statusSummary(qs: Query[], reassignments: ReassignmentRequest[] 
       { key: "allocated_not_worked", label: "Allocated, not yet worked on", count: allocatedIdle, percent: pct(allocatedIdle), meaning: "Has an auditor who has not started yet." },
       { key: "unallocated", label: "Not allocated", count: unallocated, percent: pct(unallocated), meaning: "Imported but not yet given to an auditor." },
     ],
+    ...(users && { allocatedTo: allocationOf(qs, users, reassignments) }),
   };
+}
+
+/** Who holds the queries: a count per person, most first, as the server's `allocated_to`. */
+export function allocationOf(qs: Query[], users: User[], reassignments: ReassignmentRequest[] = []): Allocation[] {
+  const by = new Map<string, Allocation>();
+  for (const q of qs) {
+    if (!q.currentAssignee) continue;
+    const u = users.find((x) => x.id === q.currentAssignee);
+    const row = by.get(q.currentAssignee) ?? { id: q.currentAssignee, fullName: u?.fullName ?? "Unknown", role: u?.role ?? "IA", count: 0, workedOn: 0 };
+    row.count += 1;
+    if (isWorkedOn(q, reassignments)) row.workedOn += 1;
+    by.set(q.currentAssignee, row);
+  }
+  return [...by.values()].sort((a, b) => b.count - a.count || a.fullName.localeCompare(b.fullName));
 }
 
 /** The query-list filters, as the server applies them to the list and to exports. */

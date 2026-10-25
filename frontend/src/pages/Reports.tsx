@@ -269,7 +269,7 @@ function ReportSummary({ id }: { id: string }) {
   mine.forEach((q) => counts.set(q.status, (counts.get(q.status) ?? 0) + 1));
   return (
     <div className="space-y-5">
-      <StatusPieCard summary={statusSummary(mine, state.reassignments)} subtitle="The queries in this report" />
+      <StatusPieCard summary={statusSummary(mine, state.reassignments, state.users)} subtitle="The queries in this report" />
       <Panel title="By status" subtitle={`${mine.length} ${mine.length === 1 ? "query" : "queries"} in this report`}>
         <ul className="divide-y divide-line text-sm">
           {[...counts.entries()].map(([s, n]) => (
